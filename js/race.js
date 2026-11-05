@@ -5,6 +5,7 @@ import { readInput } from './input.js';
 import { DS } from './track.js';
 import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
+import { raceModifiers } from './team.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
@@ -12,6 +13,8 @@ export function createRace(track, scene, laps, opts = {}) {
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
   player.up = carUpgrades();
+  const mod = raceModifiers();
+  for (const k in mod) player.up[k] = (player.up[k] ?? 1) + mod[k];
   const ai = cars.filter(c => !c.player).sort((a, b) => b.skill * b.perf - a.skill * a.perf);
   const gridPos = Math.min(19, Math.max(0, (opts.grid ?? 10) - 1));
   ai.splice(gridPos, 0, player);

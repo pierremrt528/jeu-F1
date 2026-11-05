@@ -8,6 +8,8 @@ import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
 import { garage, openGarage, awardPoints } from './garage.js';
+import { team, racePrize, repFactor, consumeBoost } from './team.js';
+import { buildQuestions, runPress, teamLine } from './press.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -122,7 +124,7 @@ function loop(now) {
 
 // ---------- écrans ----------
 function show(id) {
-  for (const s of ['menu', 'hud', 'pause', 'results', 'garage']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['menu', 'hud', 'pause', 'results', 'garage', 'press']) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
@@ -135,9 +137,19 @@ function showResults() {
   const me = rows.find(r => r.player);
   if (!R.awarded) {
     const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
-    R.awarded = awardPoints(me.pos, me.grid, R.laps, fastest);
+    const mult = repFactor();
+    R.awarded = awardPoints(me.pos, me.grid, R.laps, fastest, mult);
+    R.awarded.mult = mult;
+    R.prize = racePrize(me.pos, R.laps);
+    consumeBoost();
+    // contexte pour la presse
+    const mate = rows.find(r => !r.player && r.team === me.team);
+    R.pressCtx = { pos: me.pos, grid: me.grid, gained: me.grid - me.pos, circuit: def.name, winner: rows[0].name,
+      rival: me.pos > 1 && Math.random() < 0.6 ? rows[me.pos - 2].name : null, mate: mate?.name, mateAhead: mate && mate.pos < me.pos, fastest };
+    R.pressDone = false;
   }
-  $('rdGain').innerHTML = `Points de R&D : <b>+${R.awarded.total}</b> <small>(${R.awarded.parts.map(p => `${p[0]} : ${p[1]}`).join(' · ')})</small> · total ${garage.pts}`;
+  $('rdGain').innerHTML = `Points de R&D : <b>+${R.awarded.total}</b> <small>(${R.awarded.parts.map(p => `${p[0]} : ${p[1]}`).join(' · ')}${R.awarded.mult !== 1 ? ` · réputation ×${R.awarded.mult.toFixed(2)}` : ''})</small> · Prime : <b>+${R.prize.toFixed(2)} M€</b>`;
+  $('pressBtn').classList.toggle('hidden', R.pressDone);
   $('resultTitle').textContent = me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`;
   show('results');
 }
@@ -148,7 +160,13 @@ function refreshMenu() {
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
   $('menuPts').textContent = garage.pts + ' pts R&D';
+  $('teamState').innerHTML = teamLine() + (team.boostTxt ? `<span class="boost">Prochaine course : ${team.boostTxt}</span>` : '');
 }
+$('pressBtn').onclick = () => {
+  if (!R || R.pressDone) return;
+  show('press');
+  runPress($('press'), buildQuestions(R.pressCtx), () => { R.pressDone = true; $('pressBtn').classList.add('hidden'); show('results'); });
+};
 let garageFrom = 'menu';
 function showGarage(from) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }); }
 $('garageBtn').onclick = () => showGarage('menu');

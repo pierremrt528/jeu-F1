@@ -1,6 +1,7 @@
 // Garage : arbres de développement (moteur, aéro, châssis, fiabilité), points de R&D gagnés en course,
 // effets sur la voiture du joueur, sauvegarde locale et écran du garage.
 import { NO_UP } from './car.js';
+import { team, saveTeam } from './team.js';
 
 // fx : bonus additionnels (0.02 = +2 %). rel : fiabilité (utilisée à l'étape « dégâts »).
 // req : toutes les pièces requises ; reqAny : au moins une.
@@ -65,8 +66,8 @@ export function carUpgrades() {
 
 // Points de R&D d'une course : place, places gagnées, meilleur tour, longueur de course
 const BASE = [40, 32, 27, 23, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7, 6, 5, 5, 4, 4, 3];
-export function awardPoints(pos, grid, laps, fastest) {
-  const f = laps <= 1 ? 0.5 : laps >= 5 ? 1.4 : 1;
+export function awardPoints(pos, grid, laps, fastest, mult = 1) {
+  const f = (laps <= 1 ? 0.5 : laps >= 5 ? 1.4 : 1) * mult;
   const parts = [[`P${pos}`, Math.round(BASE[pos - 1] * f)]];
   if (grid > pos) parts.push([`${grid - pos} place${grid - pos > 1 ? 's' : ''} gagnée${grid - pos > 1 ? 's' : ''}`, 2 * (grid - pos)]);
   if (fastest) parts.push(['meilleur tour', 5]);
@@ -94,6 +95,10 @@ function render() {
   const t = TREES[tab];
   const $ = s => root.querySelector(s);
   $('#gPts').textContent = garage.pts;
+  const bb = $('#gBuyPts');
+  bb.innerHTML = `Acheter 10 pts <small>1 M€ · budget ${team.budget.toFixed(1)} M€</small>`;
+  bb.disabled = team.budget < 1;
+  bb.onclick = () => { if (team.budget < 1) return; team.budget = Math.round((team.budget - 1) * 100) / 100; saveTeam(); garage.pts += 10; save(); render(); };
   $('#gTabs').innerHTML = TREES.map((tr, k) => {
     const n = tr.nodes.filter(x => owned(x.id)).length;
     return `<button data-tab="${k}" class="${k === tab ? 'sel' : ''}" style="--c:${tr.color}">${tr.name}<small>${n}/${tr.nodes.length}</small></button>`;

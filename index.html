@@ -29,6 +29,7 @@
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
       <button id="garageBtn" class="garageBtn">🔧 Garage <small id="menuPts"></small></button>
     </div>
+    <div id="teamState" class="pstate"></div>
     <button id="startBtn" class="main">Départ</button>
     <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause</p>
   </div>
@@ -71,13 +72,20 @@
     <h2 id="resultTitle">Classement</h2>
     <div class="scroll"><table id="resultsTable"></table></div>
     <div id="rdGain"></div>
-    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="resGarageBtn">🔧 Garage</button><button id="menuBtn">Menu</button></div>
+    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="pressBtn" class="main">🎤 Presse</button><button id="resGarageBtn">🔧 Garage</button><button id="menuBtn">Menu</button></div>
+  </div>
+</div>
+
+<div id="press" class="screen hidden">
+  <div class="card wide press">
+    <div class="phead"><h2>Conférence de presse</h2><div id="pressState" class="pstate"></div></div>
+    <div id="pressBody"></div>
   </div>
 </div>
 
 <div id="garage" class="screen hidden">
   <div class="card wide garage">
-    <div class="ghead"><h2>Garage</h2><span class="pts"><b id="gPts">0</b> pts R&amp;D</span><button id="garageClose">Fermer</button></div>
+    <div class="ghead"><h2>Garage</h2><span class="pts"><b id="gPts">0</b> pts R&amp;D</span><button id="gBuyPts" class="buypts"></button><button id="garageClose">Fermer</button></div>
     <div id="gTabs" class="gtabs"></div>
     <div class="gbody">
       <div id="gTree" class="gtree"></div>

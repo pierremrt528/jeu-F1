@@ -151,3 +151,27 @@ body.tilt #ctl .left { display: none; }
   .gdetail { padding: 8px; font-size: 12px; } .gdetail .main { padding: 8px; font-size: 14px; }
   #menu .garageBtn { padding: 8px 12px; }
 }
+
+/* presse et état de l'écurie */
+.pstate { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #9aa3ae; }
+.pstate b { color: #fff; } .pstate .boost { color: #8fd19e; width: 100%; }
+.press { max-width: 640px; }
+.phead { display: flex; flex-direction: column; gap: 4px; }
+.pq { display: flex; gap: 12px; align-items: flex-start; margin-top: 6px; }
+.pq i { flex: none; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; color: #111; }
+.pq small { color: #9aa3ae; font-size: 12px; } .pq p { font-size: 16px; font-weight: 600; margin-top: 2px; }
+.pans { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.pans button { text-align: left; padding: 10px 12px; font-size: 14px; line-height: 1.3; }
+.pans button.off { opacity: .35; } .pans button.chosen { border-color: #ffd84d; background: #343a46; }
+.pans button:disabled { color: #fff; }
+.pfx { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pfx span { font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+.pfx .up { background: rgba(61,220,132,.2); color: #8fd19e; } .pfx .down { background: rgba(255,80,80,.18); color: #ff9a9a; }
+.pend { margin-top: 10px; color: #c3cad3; } .pend b { color: #8fd19e; }
+.buypts { padding: 6px 10px; font-size: 12px; display: flex; flex-direction: column; line-height: 1.2; }
+.buypts small { color: #9aa3ae; font-size: 10px; } .buypts:disabled { opacity: .5; }
+.btns #pressBtn { font-size: 16px; padding: 10px; }
+@media (max-height: 480px) and (orientation: landscape) {
+  #menu #teamState { grid-area: help; } #menu .help { display: none; }
+  .pans { gap: 6px; } .pans button { padding: 7px 10px; font-size: 13px; } .pq p { font-size: 14px; }
+}
