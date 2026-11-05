@@ -24,6 +24,7 @@
       <button id="nextC" aria-label="Circuit suivant">▶</button>
     </div>
     <div class="opts">
+      <div class="row"><label>Mode</label><div class="modes"><button data-mode="free">Course libre</button><button data-mode="season">Saison</button></div></div>
       <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
@@ -73,6 +74,38 @@
     <div class="scroll"><table id="resultsTable"></table></div>
     <div id="rdGain"></div>
     <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="pressBtn" class="main">🎤 Presse</button><button id="resGarageBtn">🔧 Garage</button><button id="menuBtn">Menu</button></div>
+  </div>
+</div>
+
+<div id="season" class="screen hidden">
+  <div class="card wide season">
+    <div class="ghead"><h2 id="szTitle">Championnat</h2><button id="szMenu">Menu</button></div>
+    <div id="szState" class="pstate"></div>
+    <div class="szbody">
+      <div id="szCal" class="szcal"></div>
+      <div class="szside">
+        <div id="szNext" class="sznext"></div>
+        <div id="szActions" class="szact"></div>
+        <div class="szact row2"><button id="szStand">🏁 Classements</button><button id="szGarage">🔧 Garage</button></div>
+        <button id="szQuit" class="linkish">Abandonner la saison</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="quali" class="screen hidden">
+  <div class="card wide">
+    <h2 id="qTitle">Qualifications</h2>
+    <div class="scroll"><table id="qTable"></table></div>
+    <div class="btns"><button id="qRace" class="main">Valider la grille</button><button id="qRetry">Refaire le tour</button></div>
+  </div>
+</div>
+
+<div id="standings" class="screen hidden">
+  <div class="card wide">
+    <div class="ghead"><h2>Classements</h2><button id="stBack">Retour</button></div>
+    <div class="gtabs"><button data-st="drivers" style="--c:#e10600">Pilotes</button><button data-st="teams" style="--c:#e10600">Écuries</button></div>
+    <div id="stBody" class="scroll"></div>
   </div>
 </div>
 

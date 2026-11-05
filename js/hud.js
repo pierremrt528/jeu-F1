@@ -39,14 +39,14 @@ export function updateHud(R, fps) {
   $('lights').className = R.phase === 'lights' ? 'n' + R.lightsOn : (R.t - R.goAt < 1 ? 'go' : 'off');
   if (frame % 6) return;
   $('pos').innerHTML = `P${pos}<small>/${n}</small>`;
-  $('lap').textContent = `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`;
+  $('lap').textContent = R.solo ? (p.lap < 1 ? 'Tour de lancement' : 'Tour chrono') : `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`;
   $('cur').textContent = R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0);
   $('best').textContent = 'Meilleur ' + fmt(p.bestLap);
   $('fps').textContent = fps || '';
   // tour des écarts : 2 devant, 2 derrière
   const k0 = Math.max(0, Math.min(n - 5, pos - 3));
   let h = '';
-  for (let k = k0; k < k0 + 5; k++) {
+  for (let k = k0; k < Math.min(n, k0 + 5); k++) {
     const c = R.order[k];
     let gap = '';
     if (c !== p) {

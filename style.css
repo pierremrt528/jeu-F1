@@ -175,3 +175,26 @@ body.tilt #ctl .left { display: none; }
   #menu #teamState { grid-area: help; } #menu .help { display: none; }
   .pans { gap: 6px; } .pans button { padding: 7px 10px; font-size: 13px; } .pq p { font-size: 14px; }
 }
+
+/* saison */
+.row .modes button { width: auto; padding: 8px 10px; }
+.circ.dim { opacity: .35; pointer-events: none; }
+.season { max-width: 860px; height: 100%; max-height: 640px; }
+.szbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+.szcal { overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.cal { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.04); font-size: 14px; }
+.cal span { color: #9aa3ae; font-weight: 800; } .cal small { display: block; color: #7c8590; font-size: 11px; }
+.cal em { font-style: normal; text-align: right; font-size: 13px; } .cal em small { display: inline; }
+.cal .pod { color: #ffd84d; } .cal.next { background: rgba(225,6,0,.22); border: 1px solid #e10600; } .cal.past { opacity: .8; }
+.szside { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
+.sznext { background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px; font-size: 13px; color: #c3cad3; }
+.sznext h3 { color: #fff; font-size: 18px; font-style: italic; } .sznext p { margin-top: 3px; }
+.szact { display: flex; flex-direction: column; gap: 6px; } .szact .main { margin: 0; font-size: 16px; padding: 12px; }
+.szact.row2 { flex-direction: row; } .szact.row2 button { flex: 1; }
+.linkish { background: none; border: none; color: #7c8590; font-size: 12px; text-decoration: underline; padding: 4px; }
+.stand td:last-child { font-weight: 800; color: #fff; }
+@media (orientation: portrait) { .szbody { display: flex; flex-direction: column; overflow: auto; } .season { max-height: none; } .szcal { overflow: visible; order: 2; } .szside { overflow: visible; order: 1; flex-shrink: 0; } .szcal { flex-shrink: 0; } .szside > * { flex-shrink: 0; } }
+@media (max-height: 480px) and (orientation: landscape) {
+  .season { padding: 10px 12px; gap: 6px; } .cal { padding: 3px 8px; font-size: 13px; } .cal small { display: none; }
+  .sznext { padding: 8px; } .sznext h3 { font-size: 16px; } .szact .main { padding: 9px; font-size: 14px; }
+}

@@ -9,16 +9,27 @@ import { raceModifiers } from './team.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
-  for (const team of TEAMS) for (const d of team.drivers) cars.push(new Car(team, d, team.perf));
+  for (const team of TEAMS) for (const d of team.drivers) {
+    if (opts.solo && !d.player) continue;  // qualifications : la voiture du joueur seule
+    cars.push(new Car(team, d, team.perf + (opts.perfBonus?.[team.name] || 0)));
+  }
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
   player.up = carUpgrades();
   const mod = raceModifiers();
   for (const k in mod) player.up[k] = (player.up[k] ?? 1) + mod[k];
-  const ai = cars.filter(c => !c.player).sort((a, b) => b.skill * b.perf - a.skill * a.perf);
+  let ai = cars.filter(c => !c.player).sort((a, b) => b.skill * b.perf - a.skill * a.perf);
   const gridPos = Math.min(19, Math.max(0, (opts.grid ?? 10) - 1));
   ai.splice(gridPos, 0, player);
+  if (opts.gridOrder) ai = opts.gridOrder.map(n => cars.find(c => c.name === n)).filter(Boolean);
   const { N } = track;
+  if (opts.solo) {
+    // tour lancé : on part 300 m avant la ligne, déjà en mouvement
+    const i = (N - 150) % N;
+    Object.assign(player, { idx: i, heading: track.H[i], x: track.X[i], z: track.Z[i], y: track.Y[i], lat: 0, v: 45, grid: 1 });
+    placeMesh(player); scene.add(player.mesh);
+    return { track, cars, player, laps: 1, order: [player], t: 0, phase: 'race', raceStart: 0, lightsOn: 0, goAt: -10, solo: true, autopilot: !!opts.autopilot, done: false };
+  }
   ai.forEach((c, k) => {
     const i = (N - 5 - k * 4) % N, s = k % 2 ? 1 : -1;
     c.idx = i; c.heading = track.H[i];
@@ -78,7 +89,7 @@ export function updateRace(R, dt) {
         c.lastLap = lt; if (!c.bestLap || lt < c.bestLap) c.bestLap = lt;
       }
       c.lapStart = R.t;
-      if (c.lap > R.laps && !c.finished) { c.finished = true; c.finishTime = R.t - R.raceStart; }
+      if (c.lap > R.laps && !c.finished) { c.finished = true; c.finishTime = R.solo ? c.lastLap : R.t - R.raceStart; }
     } else if (prev < N * 0.25 && c.idx > N * 0.75) c.lap--;
   }
 
