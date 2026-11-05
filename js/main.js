@@ -7,7 +7,8 @@ import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
-import { garage, openGarage, awardPoints } from './garage.js';
+import { garage, openGarage, tickDevelopment, resetGarage } from './garage.js';
+import { openSetup, growMate, career } from './career.js';
 import { team, racePrize, repFactor, consumeBoost } from './team.js';
 import { buildQuestions, runPress, teamLine } from './press.js';
 import { TEAMS } from './data.js';
@@ -131,7 +132,7 @@ function loop(now) {
 
 // ---------- écrans ----------
 function show(id) {
-  for (const s of ['menu', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['menu', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup']) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
@@ -144,20 +145,21 @@ function showResults() {
   const me = rows.find(r => r.player);
   if (!R.awarded) {
     const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
-    const mult = repFactor();
-    R.awarded = awardPoints(me.pos, me.grid, R.laps, fastest, mult);
-    R.awarded.mult = mult;
-    R.prize = racePrize(me.pos, R.laps);
+    R.mult = repFactor();
+    R.prize = racePrize(me.pos, R.laps, R.mult);
+    R.parts = tickDevelopment();
     consumeBoost();
     // contexte pour la presse
     const mate = rows.find(r => !r.player && r.team === me.team);
     R.pressCtx = { pos: me.pos, grid: me.grid, gained: me.grid - me.pos, circuit: def.name, winner: rows[0].name,
       rival: me.pos > 1 && Math.random() < 0.6 ? rows[me.pos - 2].name : null, mate: mate?.name, mateAhead: mate && mate.pos < me.pos, fastest };
     R.pressDone = false;
-    if (R.season) SZ.recordRace(rows);
+    if (R.season) { SZ.recordRace(rows); R.grow = growMate(); }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Rejouer';
-  $('rdGain').innerHTML = `Points de R&D : <b>+${R.awarded.total}</b> <small>(${R.awarded.parts.map(p => `${p[0]} : ${p[1]}`).join(' · ')}${R.awarded.mult !== 1 ? ` · réputation ×${R.awarded.mult.toFixed(2)}` : ''})</small> · Prime : <b>+${R.prize.toFixed(2)} M€</b>`;
+  $('rdGain').innerHTML = `Prime : <b>+${R.prize.toFixed(1)} M€</b> <small>(réputation ×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+    (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
+    (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
   $('pressBtn').classList.toggle('hidden', R.pressDone);
   $('resultTitle').textContent = me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`;
   show('results');
@@ -168,7 +170,7 @@ function refreshMenu() {
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
-  $('menuPts').textContent = garage.pts + ' pts R&D';
+  $('menuPts').textContent = team.budget.toFixed(1) + ' M€';
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('sel', b.dataset.mode === settings.mode));
   const S = SZ.season;
   $('startBtn').textContent = settings.mode === 'season' ? (S ? (S.done ? 'Saison terminée →' : `Saison ${S.year} · manche ${S.round + 1}/10 →`) : 'Commencer une saison') : 'Départ';
@@ -181,6 +183,10 @@ $('pressBtn').onclick = () => {
   runPress($('press'), buildQuestions(R.pressCtx), () => { R.pressDone = true; $('pressBtn').classList.add('hidden'); show('results'); });
 };
 // ---------- saison ----------
+function setupSeason() {
+  show('setup');
+  openSetup($('setup'), () => { resetGarage(); SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); openSeason(); }, () => { refreshMenu(); show('menu'); });
+}
 function openSeason() {
   const S = SZ.season;
   if (!S) return show('menu');
@@ -194,7 +200,7 @@ function openSeason() {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
     $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne.</p>`;
     $('szActions').innerHTML = `<button class="main" id="szNew">Nouvelle saison</button>`;
-    $('szNew').onclick = () => { SZ.newSeason(); openSeason(); };
+    $('szNew').onclick = () => setupSeason();
   } else {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
@@ -251,7 +257,7 @@ $('startBtn').onclick = async () => {
   if (def.id !== settings.circuit) { clearTimeout(loadTimer); loadCircuit(settings.circuit); }
   await enableTilt(settings.tilt);
   try { await document.documentElement.requestFullscreen?.(); await screen.orientation?.lock?.('landscape'); } catch {}
-  if (settings.mode === 'season') { if (!SZ.season) SZ.newSeason(2027); openSeason(); return; }
+  if (settings.mode === 'season') { SZ.season ? openSeason() : setupSeason(); return; }
   startRace({});
 };
 $('camBtn').onclick = toggleCam;

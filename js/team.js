@@ -34,11 +34,11 @@ export function raceModifiers() {
 }
 export function consumeBoost() { team.boost = {}; team.boostTxt = ''; saveTeam(); }
 
-// Gains financiers d'une course (M€) et multiplicateur de R&D selon la réputation
-const PRIZE = [1.2, 0.9, 0.75, 0.6, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25];
-export function racePrize(pos, laps) {
-  const f = laps <= 1 ? 0.5 : laps >= 5 ? 1.4 : 1;
-  const p = Math.round(((PRIZE[pos - 1] || 0.15) * f) * 100) / 100;
+// Gains financiers d'une course (M€), multipliés selon la réputation
+const PRIZE = [5, 4, 3.4, 2.8, 2.4, 2.1, 1.8, 1.6, 1.4, 1.2];
+export function racePrize(pos, laps, mult = 1) {
+  const f = (laps <= 1 ? 0.6 : laps >= 5 ? 1.3 : 1) * mult;
+  const p = Math.round(((PRIZE[pos - 1] || 0.8) * f) * 10) / 10;
   team.budget = Math.round((team.budget + p) * 100) / 100;
   // le moral suit les résultats
   team.moral = clamp(team.moral + (pos <= 3 ? 6 : pos <= 10 ? 2 : -3), 0, 100);

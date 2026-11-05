@@ -13,7 +13,7 @@ const Q = [
   { when: c => c.pos === 1, res: true, q: c => `Victoire à ${c.circuit} ! Qu'est-ce qui a fait la différence aujourd'hui ?`, a: [
     ["Toute l'équipe a fait un travail énorme, cette victoire est la leur.", { moral: 10, rep: 4 }],
     ["J'étais simplement le plus rapide. Les autres devront s'habituer.", { moral: 5, rep: -4, perf: { acc: 0.015 } }],
-    ['Nos partenaires nous ont donné les moyens de gagner, merci à eux.', { budget: 0.6, rep: 2 }],
+    ['Nos partenaires nous ont donné les moyens de gagner, merci à eux.', { budget: 1.8, rep: 2 }],
   ] },
   { when: c => c.pos > 1 && c.pos <= 3, res: true, q: c => `Un podium à ${c.circuit}. Frustré de ne pas avoir gagné face à ${c.winner} ?`, a: [
     ['Un podium, ça se savoure. On progresse course après course.', { moral: 6, rep: 3 }],
@@ -38,7 +38,7 @@ const Q = [
   { when: c => c.gained <= -4, q: c => `Vous avez perdu ${-c.gained} places en course. Que s'est-il passé ?`, a: [
     ["J'ai eu du mal à trouver le bon rythme, on doit comprendre pourquoi.", { moral: -2, rep: 2, perf: { mu: 0.008 } }],
     ['On a été gênés en piste, certains pilotes conduisent dangereusement.', { moral: 2, rep: -4 }],
-    ["Le moteur manquait de puissance, j'attends des réponses de l'usine.", { moral: -4, budget: 0.4 }],
+    ["Le moteur manquait de puissance, j'attends des réponses de l'usine.", { moral: -4, budget: 1.2 }],
   ] },
   { when: c => !!c.rival, q: c => `Vous avez fini juste derrière ${c.rival}. Est-ce votre grand rival cette saison ?`, a: [
     [c => `${c.rival} est un excellent pilote, j'ai beaucoup de respect pour lui.`, { rep: 5, moral: 1 }],
@@ -52,22 +52,22 @@ const Q = [
   ] },
   { when: c => c.fastest, q: c => 'Vous signez le meilleur tour en course. La voiture semble avoir un gros potentiel ?', a: [
     ['Oui, et les nouvelles pièces vont encore nous aider.', { moral: 5, rep: 3 }],
-    ["Le potentiel est là, mais il faut plus d'investissements.", { budget: 0.7, rep: -1 }],
+    ["Le potentiel est là, mais il faut plus d'investissements.", { budget: 2.1, rep: -1 }],
     ['Un meilleur tour ne rapporte pas de trophée. On veut gagner.', { moral: 3, perf: { acc: 0.01 } }],
   ] },
   { q: c => 'Des rumeurs vous envoient dans une autre écurie la saison prochaine. Info ou intox ?', a: [
     ["Intox. Je suis bien ici et je veux gagner avec cette équipe.", { moral: 8, rep: 2 }],
-    ['Je ne ferme aucune porte. Le meilleur projet gagnera.', { moral: -8, budget: 0.8, rep: 2 }],
+    ['Je ne ferme aucune porte. Le meilleur projet gagnera.', { moral: -8, budget: 2.4, rep: 2 }],
     ['Pas de commentaire.', { moral: -2 }],
   ] },
   { q: c => 'Un nouveau sponsor serait prêt à rejoindre l\'écurie. Êtes-vous prêt à faire plus d\'événements pour lui ?', a: [
-    ['Bien sûr, nos partenaires sont essentiels.', { budget: 1.0, moral: -4 }],
+    ['Bien sûr, nos partenaires sont essentiels.', { budget: 3, moral: -4 }],
     ['Je préfère rester concentré sur le pilotage.', { moral: 4, perf: { mu: 0.006 } }],
-    ['Seulement si ça finance les nouvelles pièces au garage.', { budget: 0.5, rep: 1 }],
+    ['Seulement si ça finance les nouvelles pièces au garage.', { budget: 1.5, rep: 1 }],
   ] },
   { q: c => 'On dit que votre budget est plus serré que celui des grandes écuries. Est-ce un handicap ?', a: [
     ["L'argent ne fait pas tout. On travaille plus intelligemment.", { moral: 5, rep: 4 }],
-    ["Oui, et on a besoin de nouveaux partenaires. L'appel est lancé !", { budget: 0.8, rep: -3 }],
+    ["Oui, et on a besoin de nouveaux partenaires. L'appel est lancé !", { budget: 2.4, rep: -3 }],
     ["On va prouver sur la piste qu'on mérite plus.", { moral: 3, perf: { vtop: 0.005 } }],
   ] },
   { q: c => `Quel regard portez-vous sur le circuit de ${c.circuit} ?`, a: [
@@ -78,7 +78,7 @@ const Q = [
   { q: c => 'Les ingénieurs ont-ils une évolution prévue pour la prochaine course ?', a: [
     ["Oui, un nouvel aileron arrive. On a hâte de l'essayer.", { moral: 4, perf: { kd: 0.03 } }],
     ['Je ne peux rien dire, mais on travaille jour et nuit.', { moral: 3, rep: 1 }],
-    ['Pas encore, il faut plus de moyens pour développer la voiture.', { budget: 0.5, moral: -3 }],
+    ['Pas encore, il faut plus de moyens pour développer la voiture.', { budget: 1.5, moral: -3 }],
   ] },
   { q: c => 'Les commissaires ont été critiqués ce week-end. Votre avis ?', a: [
     ['Ils font un métier difficile, je leur fais confiance.', { rep: 5 }],

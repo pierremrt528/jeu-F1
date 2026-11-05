@@ -198,3 +198,23 @@ body.tilt #ctl .left { display: none; }
   .season { padding: 10px 12px; gap: 6px; } .cal { padding: 3px 8px; font-size: 13px; } .cal small { display: none; }
   .sznext { padding: 8px; } .sznext h3 { font-size: 16px; } .szact .main { padding: 9px; font-size: 14px; }
 }
+
+/* montage de l'écurie */
+.setup { max-width: 860px; height: 100%; max-height: 640px; }
+.setup .pts b { color: #ffd84d; }
+.clist { flex: 1; min-height: 0; overflow: auto; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); align-content: start; }
+.clist.tiers { grid-template-columns: repeat(3, 1fr); }
+.copt { display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: left; padding: 10px; font-size: 14px; border: 2px solid transparent; }
+.copt b { font-size: 16px; } .copt small { color: #9aa3ae; font-size: 12px; line-height: 1.3; }
+.copt em { font-style: normal; font-weight: 800; color: #ffd84d; margin-top: 4px; }
+.copt.pick { border-color: #e10600; background: #3a1f22; } .copt:disabled { opacity: .35; }
+.copt.eng { border-left: 6px solid var(--c); }
+.cstat { display: grid; grid-template-columns: 58px 1fr 20px; align-items: center; gap: 6px; font-size: 11px; color: #c3cad3; }
+.cstat i { display: block; width: auto; margin: 0; height: 5px; background: rgba(255,255,255,.1); border-radius: 3px; overflow: hidden; } .cstat em { display: block; height: 100%; background: #3ddc84; margin: 0; }
+.cstat b { font-size: 11px; text-align: right; }
+.node.wip { border-color: var(--c); border-style: dashed; } .node.wip small { color: #8fd19e; }
+@media (orientation: portrait) { .clist.tiers { grid-template-columns: 1fr; } .setup { max-height: none; } }
+@media (max-height: 480px) and (orientation: landscape) {
+  .setup { padding: 10px 12px; gap: 6px; } .copt { padding: 6px 8px; gap: 1px; } .copt b { font-size: 14px; } .clist { grid-template-columns: repeat(4, 1fr); }
+  .clist.tiers { grid-template-columns: repeat(3, 1fr); } .clist.engs { grid-template-columns: repeat(4, 1fr); }
+}

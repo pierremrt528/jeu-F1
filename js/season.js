@@ -7,7 +7,7 @@ import { DS } from './track.js';
 export const CALENDAR = ['valmont', 'sahrane', 'portazur', 'kerlan', 'sierra', 'veldmar', 'solenza', 'neokyara', 'varenne', 'brekka'];
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const KEY = 'gpm-season';
-const DRIVERS = TEAMS.flatMap(t => t.drivers.map(d => ({ name: d.name, team: t.name, color: t.color, player: !!d.player })));
+const DRIVERS = () => TEAMS.flatMap(t => t.drivers.map(d => ({ name: d.name, team: t.name, color: t.color, player: !!d.player })));
 
 export let season = load();
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
@@ -15,7 +15,7 @@ export function saveSeason() { try { localStorage.setItem(KEY, JSON.stringify(se
 
 export function newSeason(year) {
   season = { year: year || (season ? season.year + 1 : 2027), round: 0, pts: {}, results: [], dev: {}, grid: null, quali: null, done: false };
-  for (const d of DRIVERS) season.pts[d.name] = 0;
+  for (const d of DRIVERS()) season.pts[d.name] = 0;
   saveSeason();
   return season;
 }
@@ -68,7 +68,7 @@ export function recordRace(rows) {
 }
 
 export function driverStandings() {
-  return DRIVERS.map(d => ({ ...d, pts: season.pts[d.name] || 0 }))
+  return DRIVERS().map(d => ({ ...d, pts: season.pts[d.name] || 0 }))
     .sort((a, b) => b.pts - a.pts || bestFinish(a.name) - bestFinish(b.name));
 }
 export function teamStandings() {
