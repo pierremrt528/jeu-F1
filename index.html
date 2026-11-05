@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#111418">
+<meta name="theme-color" content="#0d1014">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Grand Prix Manager</title>
@@ -16,19 +16,60 @@
 <canvas id="game"></canvas>
 
 <div id="menu" class="screen">
-  <h1>Grand Prix<br><span>Manager</span></h1>
-  <p class="sub">Circuit de Valmont · 3 tours · 6 monoplaces</p>
-  <button id="startBtn">Démarrer la course</button>
-  <p class="help">◀ ▶ pour tourner · GAZ / FREIN à droite</p>
+  <div class="card">
+    <h1>Grand Prix<br><span>Manager</span></h1>
+    <p class="sub" id="circuitName"></p>
+    <div class="opts">
+      <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
+      <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
+      <div class="row"><label>Caméra</label><button id="camSel"></button></div>
+    </div>
+    <button id="startBtn" class="main">Départ</button>
+    <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause</p>
+  </div>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="tl">
+    <div id="pos" class="big"></div>
+    <div id="lap"></div>
+    <div id="cur" class="mono"></div>
+    <div id="best" class="mono dim"></div>
+    <div id="tower"></div>
+  </div>
+  <div class="tr">
+    <button id="pauseBtn" class="mini">II</button>
+    <button id="camBtn" class="mini"></button>
+    <canvas id="minimap"></canvas>
+    <div id="fps" class="dim"></div>
+  </div>
+  <div id="lights" class="off"><i></i><i></i><i></i><i></i><i></i></div>
+  <div id="slip">ASPIRATION</div>
+  <div id="dash"><div id="gear">N</div><div><span id="spd">0</span><small> km/h</small><div class="bar"><div id="rpm"></div></div></div></div>
+  <div id="ctl">
+    <div class="left"><div class="pad" data-ctl="left">◀</div><div class="pad" data-ctl="right">▶</div></div>
+    <div class="right"><div class="pad brake" data-ctl="brake">FREIN</div><div class="pad gas" data-ctl="gas">GAZ</div></div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="card">
+    <h2>Pause</h2>
+    <button id="resumeBtn" class="main">Reprendre</button>
+    <button id="restartBtn">Recommencer</button>
+    <button id="quitBtn">Menu</button>
+  </div>
 </div>
 
 <div id="results" class="screen hidden">
-  <h2>Classement final</h2>
-  <table id="resultsTable"></table>
-  <button id="againBtn">Rejouer</button>
+  <div class="card wide">
+    <h2 id="resultTitle">Classement</h2>
+    <div class="scroll"><table id="resultsTable"></table></div>
+    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="menuBtn">Menu</button></div>
+  </div>
 </div>
 
-<script src="game.js"></script>
+<script type="module" src="js/main.js"></script>
 <script>
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>

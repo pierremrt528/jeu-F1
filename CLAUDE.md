@@ -1,28 +1,34 @@
 # Grand Prix Manager — vision du jeu
 
-Jeu mobile (PWA) qui mélange **course de monoplaces** vue du dessus et **gestion d'écurie**.
+Jeu mobile (PWA) de **course de monoplaces en 3D** doublé d'une **gestion d'écurie** : on pilote en vue cockpit (1re personne) ou arrière (3e personne) sur une saison de 10 circuits, et entre les courses on développe la voiture au garage et on répond à la presse.
 Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. Langue du jeu : français.
 
 ## Règles du projet
-- **Univers 100 % fictif** : écuries, pilotes, circuits et logos inventés. Aucun nom, logo ou marque réels (F1, FIA, écuries, pilotes).
-- **Mobile d'abord** : portrait, commandes tactiles, multi-touch. Tester à 390×844.
-- **Simple** : HTML/CSS/JS vanilla + Canvas 2D, aucune étape de build, aucune dépendance. Pas de framework tant que ce n'est pas nécessaire.
-- Petits changements ciblés ; ne pas réécrire ce qui marche.
-- Après chaque modif des fichiers du jeu : incrémenter `VERSION` dans `sw.js` (sinon le téléphone garde l'ancienne version en cache).
-- Déploiement : GitHub Pages depuis la branche `main`, racine du dépôt.
+- **Jeu original, univers 100 % fictif** : écuries, pilotes, circuits, logos et livrées inventés. Aucun nom, logo, tracé ou marque réels (F1, FIA, écuries, pilotes, circuits existants), et pas de reproduction d'un jeu existant.
+- **Mobile d'abord** : course en paysage (tester à 844×390), menus utilisables aussi en portrait (390×844). Commandes tactiles multi-touch, inclinaison du téléphone en option, clavier sur ordinateur.
+- **Performance** : viser 60 i/s sur un téléphone milieu de gamme. Low-poly, une géométrie par voiture, décor instancié, pas d'ombres temps réel, brouillard pour limiter la distance d'affichage, résolution adaptative.
+- **Simple** : JS vanilla en modules ES + Three.js (copie locale dans `lib/`, pas de CDN, pas d'étape de build, pas d'autre dépendance).
+- Code modulaire et léger ; petits changements ciblés ; ne pas réécrire ce qui marche.
+- Après chaque modif des fichiers du jeu : incrémenter `VERSION` dans `sw.js` et ajouter les nouveaux fichiers à sa liste `FILES`.
+- Déploiement : GitHub Pages depuis la branche `main`, racine du dépôt. Déployer à la fin de chaque étape.
 
 ## Structure
-- `index.html` : écrans (menu, résultats) + canvas.
-- `game.js` : tout le jeu. Sections : données (équipes, circuit) → construction du circuit (spline Catmull-Rom ré-échantillonnée tous les 10 unités) → entrées (boutons tactiles dessinés sur le canvas + flèches clavier) → course (physique, IA, collisions, tours) → rendu (caméra qui suit le joueur, orientée vers le haut) → HUD + mini-carte → écrans.
-- `style.css`, `manifest.json`, `sw.js` (cache hors-ligne, réseau d'abord), icônes.
-- Tester en local : `python3 -m http.server` puis ouvrir `localhost:8000`.
+- `index.html` : écrans (menu, HUD, commandes tactiles, pause, résultats) + canvas WebGL.
+- `js/main.js` : rendu Three.js, caméras (arrière / cockpit), boucle, écrans, réglages (localStorage `gpm-settings`).
+- `js/data.js` : écuries (10 × 2 pilotes) et circuits (points de contrôle `[x, z, altitude]` en mètres, largeur, thème de décor).
+- `js/track.js` : spline Catmull-Rom ré-échantillonnée tous les 2 m, courbure, trajectoire, profil de vitesse IA, maillages (route, vibreurs, talus, murs, tribunes, feux, arbres).
+- `js/car.js` : modèle 3D de monoplace et physique arcade (adhérence + appui aéro, freinage, sous-virage, pente, murs).
+- `js/ai.js` : pilotes IA (poursuite pure, profil de vitesse × niveau, dépassements).
+- `js/race.js` : grille, feux, aspiration, collisions, tours, classement, résultats.
+- `js/input.js`, `js/hud.js` : commandes et HUD (position, tour, chronos, vitesse, rapport, mini-carte).
+- `lib/three.module.min.js` (r170, licence MIT), `style.css`, `manifest.json`, `sw.js`, icônes.
+- Tester en local : `python3 -m http.server` puis `localhost:8000`. Paramètres de test : `?demo` (pilote auto), `?vitesse=5`, `?tours=1`, `?fps`, `?grille=1`.
 
 ## Feuille de route
-1. ✅ **Prototype de course** : 1 circuit (Valmont), joueur + 5 IA, 3 tours, classement final.
-2. **Stratégie pneus et arrêts au stand** : gommes tendre/médium/dure, usure qui fait baisser l'adhérence, voie des stands, choix de stratégie avant la course, ordres depuis le muret (pousser / économiser).
-3. **Gestion d'écurie** : choix de son écurie, budget, salaires, sponsors.
-4. **Développement de la voiture** : points de R&D sur moteur, aéro, châssis, fiabilité → modifient vmax, adhérence en virage, usure.
-5. **Pilotes** : stats (vitesse, régularité, gestion des pneus), contrats, recrutement.
-6. **Saison** : calendrier de plusieurs circuits fictifs, points, classements pilotes et constructeurs, qualifications.
-7. **Sauvegarde locale** (localStorage) de la carrière.
-8. Finitions : sons, météo/pluie, dégâts, voiture de sécurité, meilleurs graphismes.
+1. ✅ **Moteur 3D de course** : 1 circuit (Valmont), physique arcade (adhérence, freinage, aspiration), 19 IA, caméras cockpit / arrière commutables, HUD, qualité adaptative.
+2. **10 circuits générés à partir de données** (tracé + relief + décor) : urbains (murs, immeubles), campagne, montagne avec fort dénivelé, très sinueux, rapides en lignes droites, plats. Choix du circuit au menu.
+3. **Garage** : arbres de développement (moteur, aéro, châssis, fiabilité) avec des points gagnés en course ; les améliorations modifient vitesse de pointe, adhérence, freinage, usure.
+4. **Presse** : questions de journalistes entre les courses, réponses à choix avec bonus/malus (moral, budget, réputation, performance).
+5. **Saison / carrière** : calendrier des 10 circuits, qualifications, points, classements pilotes et écuries, sauvegarde locale (localStorage).
+6. **Météo, pneus, arrêts au stand, dégâts** : gommes et usure, pluie, voie des stands, ordres depuis le muret, casse.
+7. Finitions : sons, voiture de sécurité, meilleurs graphismes.
