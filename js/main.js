@@ -1,7 +1,9 @@
 // Point d'entrée : rendu Three.js, caméras, boucle de jeu, écrans.
 import * as THREE from '../lib/three.module.min.js';
 import { CIRCUITS } from './data.js';
-import { buildTrack, buildTrackMeshes } from './track.js';
+import { buildTrack } from './track.js';
+import { buildTrackMeshes, buildEnvironment } from './scenery.js';
+import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
@@ -17,10 +19,10 @@ const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: devicePixelRatio < 2, powerPreference: 'high-performance' });
 let pixelRatio = Math.min(devicePixelRatio, 1.5);
 renderer.setPixelRatio(pixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+setAniso(renderer.capabilities.getMaxAnisotropy());
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1400);
-scene.add(new THREE.HemisphereLight(0xdfefff, 0x4a6b3a, 1.6));
-const sun = new THREE.DirectionalLight(0xfff4e0, 2.2); sun.position.set(0.5, 1, 0.3); scene.add(sun);
+const camera = new THREE.PerspectiveCamera(65, 1, 0.15, 3000);
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -33,8 +35,7 @@ addEventListener('resize', resize); resize();
 // ---------- circuit ----------
 const def = CIRCUITS[0];
 const track = buildTrack(def);
-scene.background = new THREE.Color(def.theme.sky);
-scene.fog = new THREE.Fog(def.theme.sky, def.theme.fog[0], def.theme.fog[1]);
+const { sky } = buildEnvironment(scene, renderer, track);
 const { lights } = buildTrackMeshes(track, scene);
 initHud(track);
 
@@ -55,8 +56,8 @@ function updateCamera(dt) {
   const p = R.player;
   if (settings.cam === 'cockpit') {
     p.mesh.updateMatrixWorld();
-    camera.position.copy(tmp.set(0, 1.15, 0.5).applyMatrix4(p.mesh.matrixWorld));
-    camera.lookAt(tmp.set(0, 0.9, 14).applyMatrix4(p.mesh.matrixWorld));
+    camera.position.copy(tmp.set(0, 1.3, -0.2).applyMatrix4(p.mesh.matrixWorld));
+    camera.lookAt(tmp.set(0, 0.2, 10).applyMatrix4(p.mesh.matrixWorld));
     return;
   }
   const k = 1 - Math.exp(-dt * 7);
@@ -80,7 +81,7 @@ const timeScale = +params.get('vitesse') || 1;
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!R) { renderer.render(scene, camera); return; }
+  if (!R) { sky.position.copy(camera.position); renderer.render(scene, camera); return; }
   if (!paused) {
     let t = dt * timeScale;
     while (t > 0) { const s = Math.min(t, 1 / 60); updateRace(R, s); t -= s; }
@@ -88,15 +89,18 @@ function loop(now) {
     if (R.done && R.t - R.endT > 2.5) showResults();
   }
   updateCamera(dt);
+  sky.position.copy(camera.position);
   renderer.render(scene, camera);
   // fps + qualité adaptative
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 1) {
     fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0;
-    if (!paused && fps < 45 && pixelRatio > 0.75) { if (++slowT >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); resize(); slowT = 0; } }
+    if (!paused && fps < 45 && pixelRatio > 0.75) { if (++slowT >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+setAniso(renderer.capabilities.getMaxAnisotropy()); resize(); slowT = 0; } }
     else slowT = 0;
   }
-  if (!paused) updateHud(R, params.has('fps') ? fps : 0);
+  if (!paused) updateHud(R, params.has('fps') ? fps + ' i/s · ' + renderer.info.render.calls + ' appels · ' + Math.round(renderer.info.render.triangles / 1000) + 'k tri' : 0);
 }
 
 // ---------- écrans ----------

@@ -24,8 +24,7 @@ export const CIRCUITS = [
     type: 'Campagne vallonnée',
     width: 14,
     theme: {
-      sky: 0x9ccbef, fog: [220, 900], grass: 0x4f8f3a, grassFar: 0x447c33, ground: 0x467f35,
-      trees: 900, hills: 26, treeColor: 0x2f6a2a,
+      horizon: 0xc6d9e6, zenith: 0x3b78c9, sun: [0.5, 0.45, 0.55], fog: [250, 1500], trees: 1100,
     },
     points: [
       [0, 0, 0], [300, 0, 0], [600, 0, 0], [850, 10, 1], [950, 80, 2], [940, 200, 4],

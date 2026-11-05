@@ -16,16 +16,19 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 - `index.html` : écrans (menu, HUD, commandes tactiles, pause, résultats) + canvas WebGL.
 - `js/main.js` : rendu Three.js, caméras (arrière / cockpit), boucle, écrans, réglages (localStorage `gpm-settings`).
 - `js/data.js` : écuries (10 × 2 pilotes) et circuits (points de contrôle `[x, z, altitude]` en mètres, largeur, thème de décor).
-- `js/track.js` : spline Catmull-Rom ré-échantillonnée tous les 2 m, courbure, trajectoire, profil de vitesse IA, maillages (route, vibreurs, talus, murs, tribunes, feux, arbres).
-- `js/car.js` : modèle 3D de monoplace et physique arcade (adhérence + appui aéro, freinage, sous-virage, pente, murs).
+- `js/track.js` : spline Catmull-Rom ré-échantillonnée tous les 2 m, courbure, trajectoire, profil de vitesse IA.
+- `js/scenery.js` : maillages du circuit et environnement (asphalte, vibreurs, herbe/gravier, murs publicitaires, grillages, tribunes, stands, feux, arbres, montagnes, ciel, soleil, carte d'environnement pour les reflets).
+- `js/textures.js` : textures générées en canvas au lancement (aucune image à télécharger). Marques publicitaires inventées.
+- `js/carmodel.js` : modèle 3D de monoplace (design original, 3 appels de rendu par voiture).
+- `js/car.js` : physique arcade (adhérence + appui aéro, freinage, sous-virage, pente, murs).
 - `js/ai.js` : pilotes IA (poursuite pure, profil de vitesse × niveau, dépassements).
 - `js/race.js` : grille, feux, aspiration, collisions, tours, classement, résultats.
 - `js/input.js`, `js/hud.js` : commandes et HUD (position, tour, chronos, vitesse, rapport, mini-carte).
 - `lib/three.module.min.js` (r170, licence MIT), `style.css`, `manifest.json`, `sw.js`, icônes.
-- Tester en local : `python3 -m http.server` puis `localhost:8000`. Paramètres de test : `?demo` (pilote auto), `?vitesse=5`, `?tours=1`, `?fps`, `?grille=1`.
+- Tester en local : `python3 -m http.server` puis `localhost:8000`. Paramètres de test : `?demo` (pilote auto), `?vitesse=5`, `?tours=1`, `?fps` (i/s, appels de rendu, triangles), `?grille=1`.
 
 ## Feuille de route
-1. ✅ **Moteur 3D de course** : 1 circuit (Valmont), physique arcade (adhérence, freinage, aspiration), 19 IA, caméras cockpit / arrière commutables, HUD, qualité adaptative.
+1. ✅ **Moteur 3D de course** : 1 circuit (Valmont), physique arcade (adhérence, freinage, aspiration), 19 IA, caméras cockpit / arrière commutables, HUD, qualité adaptative. Passe graphique réaliste (textures, reflets, ciel, tribunes, décor).
 2. **10 circuits générés à partir de données** (tracé + relief + décor) : urbains (murs, immeubles), campagne, montagne avec fort dénivelé, très sinueux, rapides en lignes droites, plats. Choix du circuit au menu.
 3. **Garage** : arbres de développement (moteur, aéro, châssis, fiabilité) avec des points gagnés en course ; les améliorations modifient vitesse de pointe, adhérence, freinage, usure.
 4. **Presse** : questions de journalistes entre les courses, réponses à choix avec bonus/malus (moral, budget, réputation, performance).

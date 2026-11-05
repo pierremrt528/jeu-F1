@@ -42,7 +42,7 @@ export function updateHud(R, fps) {
   $('lap').textContent = `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`;
   $('cur').textContent = R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0);
   $('best').textContent = 'Meilleur ' + fmt(p.bestLap);
-  $('fps').textContent = fps ? fps + ' i/s' : '';
+  $('fps').textContent = fps || '';
   // tour des écarts : 2 devant, 2 derrière
   const k0 = Math.max(0, Math.min(n - 5, pos - 3));
   let h = '';

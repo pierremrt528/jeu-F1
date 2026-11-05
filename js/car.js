@@ -1,6 +1,7 @@
-// Monoplace : modèle 3D low-poly (une seule géométrie par voiture) et physique arcade.
+// Monoplace : état et physique arcade (le modèle 3D est dans carmodel.js).
 import * as THREE from '../lib/three.module.min.js';
 import { locate, RUNOFF } from './track.js';
+import { buildCarMesh } from './carmodel.js';
 
 // Unités : mètres, secondes. vtop ≈ 335 km/h.
 export const SPEC = {
@@ -18,7 +19,7 @@ export class Car {
     this.lap = 0; this.lapStart = 0; this.lastLap = 0; this.bestLap = 0; this.finished = false; this.finishTime = 0;
     this.slipstream = 0; this.offTrack = false;
     this.lane = 0; this.laneBias = 0; this.passSide = 0; this.passTimer = 0;
-    this.mesh = buildCarMesh(team.color, team.accent, driver.player ? 0xffffff : team.accent);
+    this.mesh = buildCarMesh(team.color, team.accent, driver.player ? 0xffc21a : (driver.helmet || team.accent));
   }
   get gear() {
     if (this.v < -0.5) return 'R';
@@ -108,49 +109,3 @@ export function placeMesh(car) {
   m.rotation.set(car.pitch, car.heading, 0);
 }
 
-// --------- modèle 3D : pièces fusionnées en une géométrie à couleurs par sommet ---------
-function buildCarMesh(color, accent, helmet) {
-  const parts = [];
-  const add = (geo, hex, x, y, z, rx = 0, rz = 0) => {
-    geo.rotateX(rx); geo.rotateZ(rz); geo.translate(x, y, z);
-    parts.push([geo.index ? geo.toNonIndexed() : geo, hex]);
-  };
-  const B = (w, h, l) => new THREE.BoxGeometry(w, h, l);
-  const dark = 0x15171a, carbon = 0x2b2e33;
-  add(B(1.4, 0.02, 4.6), 0x050505, 0, 0.03, 0);            // ombre
-  add(B(0.75, 0.5, 3.0), color, 0, 0.42, 0.1);             // monocoque
-  add(B(0.45, 0.3, 1.5), color, 0, 0.36, 2.25, 0.08);      // nez
-  add(B(1.9, 0.07, 0.55), accent, 0, 0.16, 2.95);          // aileron avant
-  add(B(0.06, 0.25, 0.6), accent, 0.94, 0.25, 2.95);
-  add(B(0.06, 0.25, 0.6), accent, -0.94, 0.25, 2.95);
-  add(B(1.55, 0.42, 1.7), color, 0, 0.36, -0.35);          // pontons
-  add(B(0.55, 0.55, 1.8), color, 0, 0.75, -1.05, -0.1);    // capot moteur
-  add(B(1.1, 0.08, 0.4), accent, 0, 1.0, -2.35);           // aileron arrière
-  add(B(1.1, 0.06, 0.3), accent, 0, 0.82, -2.3);
-  add(B(0.06, 0.6, 0.6), carbon, 0.56, 0.75, -2.3);
-  add(B(0.06, 0.6, 0.6), carbon, -0.56, 0.75, -2.3);
-  add(B(0.32, 0.3, 0.34), helmet, 0, 0.82, 0.25);          // casque
-  add(B(0.05, 0.05, 0.5), carbon, 0, 0.98, 0.75);          // halo
-  add(B(0.6, 0.06, 0.08), carbon, 0, 0.98, 0.2);
-  const wheel = (x, z, r, wd) => add(new THREE.CylinderGeometry(r, r, wd, 12), dark, x, r, z, 0, Math.PI / 2);
-  wheel(0.88, 1.75, 0.34, 0.36); wheel(-0.88, 1.75, 0.34, 0.36);
-  wheel(0.85, -1.55, 0.37, 0.44); wheel(-0.85, -1.55, 0.37, 0.44);
-
-  let n = 0; for (const [g] of parts) n += g.attributes.position.count;
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  const c = new THREE.Color(); let o = 0;
-  for (const [g, hex] of parts) {
-    pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
-    c.setHex(hex);
-    for (let k = 0; k < g.attributes.position.count; k++) { col[(o + k) * 3] = c.r; col[(o + k) * 3 + 1] = c.g; col[(o + k) * 3 + 2] = c.b; }
-    o += g.attributes.position.count;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mesh = new THREE.Mesh(geo, CAR_MAT || (CAR_MAT = new THREE.MeshLambertMaterial({ vertexColors: true })));
-  mesh.rotation.order = 'YXZ';
-  return mesh;
-}
-let CAR_MAT = null;

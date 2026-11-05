@@ -50,14 +50,14 @@ tr.me td { background: rgba(225,6,0,.22); }
 .mini { padding: 6px 10px; font-size: 14px; background: rgba(20,24,30,.7); }
 .tr .mini { min-width: 64px; }
 #minimap { width: 110px; height: 110px; background: rgba(0,0,0,.3); border-radius: 10px; }
-#lights { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 8px 10px; background: #111; border-radius: 10px; }
+#lights { position: absolute; top: 26%; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 8px 10px; background: #111; border-radius: 10px; }
 #lights i { width: 26px; height: 26px; border-radius: 50%; background: #3a0000; }
 #lights.off { display: none; }
 #lights.n1 i:nth-child(-n+1), #lights.n2 i:nth-child(-n+2), #lights.n3 i:nth-child(-n+3), #lights.n4 i:nth-child(-n+4), #lights.n5 i { background: #ff1a1a; box-shadow: 0 0 12px #f00; }
 #lights.go i { background: #1a1a1a; }
 #slip { position: absolute; top: 34%; left: 50%; transform: translateX(-50%); font-size: 13px; letter-spacing: 2px; color: #7fe3ff; opacity: 0; transition: opacity .2s; }
 #slip.show { opacity: 1; }
-#dash { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+#dash { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
   background: rgba(0,0,0,.45); border-radius: 12px; padding: 6px 14px; }
 #gear { font-size: 40px; font-weight: 900; width: 32px; text-align: center; color: #ffd84d; }
 #spd { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; display: inline-block; min-width: 54px; text-align: right; }
@@ -79,7 +79,7 @@ body.tilt #ctl .left { display: none; }
 /* portrait : HUD compact */
 @media (orientation: portrait) {
   .pad { width: 74px; height: 74px; } .pad.gas { height: 104px; }
-  #dash { bottom: calc(140px + env(safe-area-inset-bottom)); }
+  #dash { top: auto; bottom: calc(140px + env(safe-area-inset-bottom)); }
   #tower { display: none; }
 }
 @media (max-height: 420px) {
