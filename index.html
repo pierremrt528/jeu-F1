@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Grand Prix Manager</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="screen">
+  <h1>Grand Prix<br><span>Manager</span></h1>
+  <p class="sub">Circuit de Valmont · 3 tours · 6 monoplaces</p>
+  <button id="startBtn">Démarrer la course</button>
+  <p class="help">◀ ▶ pour tourner · GAZ / FREIN à droite</p>
+</div>
+
+<div id="results" class="screen hidden">
+  <h2>Classement final</h2>
+  <table id="resultsTable"></table>
+  <button id="againBtn">Rejouer</button>
+</div>
+
+<script src="game.js"></script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
