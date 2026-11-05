@@ -133,3 +133,30 @@ export const sunGlow = () => make(128, 128, (c, w, h) => {
   g.addColorStop(0, 'rgba(255,255,240,1)'); g.addColorStop(0.12, 'rgba(255,250,225,.95)'); g.addColorStop(0.3, 'rgba(255,240,200,.3)'); g.addColorStop(1, 'rgba(255,240,200,0)');
   c.fillStyle = g; c.fillRect(0, 0, w, h);
 }, false);
+
+export const sand = () => make(256, 256, (c, w, h) => {
+  const r = mulberry(13);
+  c.fillStyle = '#d9b98c'; c.fillRect(0, 0, w, h);
+  noise(c, w, h, 24000, ['#d0ae80', '#e2c498', '#c9a676', '#e8cda4', '#bf9c6c'], 1, r);
+  for (let i = 0; i < 40; i++) { c.fillStyle = 'rgba(150,110,60,.08)'; c.fillRect(0, r() * h, w, 2 + r() * 3); }
+});
+
+export const concrete = () => make(256, 256, (c, w, h) => {
+  const r = mulberry(17);
+  c.fillStyle = '#9a9a96'; c.fillRect(0, 0, w, h);
+  noise(c, w, h, 22000, ['#8f8f8b', '#a5a5a1', '#949490', '#adada9', '#878783'], 1, r);
+  c.fillStyle = 'rgba(60,60,60,.35)'; c.fillRect(0, 0, w, 2); c.fillRect(0, 0, 2, h); c.fillRect(0, h / 2, w, 1); c.fillRect(w / 2, 0, 1, h);
+});
+
+// Façade d'immeuble (teintée par couleur de sommet) : 3 × 3 fenêtres par tuile de 10 m
+export const facade = () => make(128, 128, (c, w, h) => {
+  const r = mulberry(19);
+  c.fillStyle = '#e4e4e4'; c.fillRect(0, 0, w, h);
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const g = c.createLinearGradient(0, y * 42 + 8, 0, y * 42 + 36);
+    const lit = r() < 0.15;
+    g.addColorStop(0, lit ? '#f3e2a8' : '#5d7a99'); g.addColorStop(1, lit ? '#c9b47a' : '#24364a');
+    c.fillStyle = g; c.fillRect(x * 42 + 7, y * 42 + 8, 30, 28);
+    c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(x * 42 + 7, y * 42 + 8, 30, 3);
+  }
+});

@@ -1,7 +1,7 @@
 // Maillages du circuit et de l'environnement : piste texturée, vibreurs, herbe/gravier, murs publicitaires,
 // grillages, tribunes avec public, stands, portique de départ, arbres, montagnes, ciel et soleil.
 import * as THREE from '../lib/three.module.min.js';
-import { RUNOFF, mulberry } from './track.js';
+import { mulberry } from './track.js';
 import * as TX from './textures.js';
 
 // Petit constructeur de géométrie (triangles non indexés, uv + couleur par sommet)
@@ -37,7 +37,7 @@ export function merge(list) {
 }
 const box = (w, h, d, x, y, z, rx = 0) => { const g = new THREE.BoxGeometry(w, h, d); g.rotateX(rx); g.translate(x, y, z); return g; };
 
-export function buildEnvironment(scene, renderer, track) {
+export function buildEnvironment(scene, renderer, track, world = scene) {
   const th = track.def.theme;
   const horizon = new THREE.Color(th.horizon || 0xc9dcea), zenith = new THREE.Color(th.zenith || 0x3f7fd0);
   scene.fog = new THREE.Fog(horizon, th.fog[0], th.fog[1]);
@@ -61,11 +61,11 @@ export function buildEnvironment(scene, renderer, track) {
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: TX.sunGlow(), fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending }));
   sunSprite.scale.set(700, 700, 1); sunSprite.position.copy(sunDir).multiplyScalar(2400); sunSprite.renderOrder = -1;
   sky.add(sunSprite);
-  scene.add(sky);
+  world.add(sky);
 
   // éclairage
-  scene.add(new THREE.HemisphereLight(0xd8e9ff, 0x6a7448, 1.25));
-  const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.copy(sunDir); scene.add(sun);
+  world.add(new THREE.HemisphereLight(0xd8e9ff, 0x6a7448, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.copy(sunDir); world.add(sun);
 
   // reflets des carrosseries : carte d'environnement tirée du ciel
   const envScene = new THREE.Scene();
@@ -88,7 +88,9 @@ export function buildTrackMeshes(track, scene) {
   const group = new THREE.Group();
   const L = (o) => new THREE.MeshLambertMaterial(o);
   const pt = (j, off, dy) => [X[j] - tz[j] * off, Y[j] + dy, Z[j] + tx[j] * off];
-  const wall = w / 2 + RUNOFF;
+  const wall = w / 2 + track.runoff;
+  const surf = th.surface || 'grass', isGrass = surf === 'grass';
+  const surfTex = () => surf === 'sand' ? TX.sand() : surf === 'concrete' ? TX.concrete() : TX.grass();
   // courbure large pour savoir de quel côté est l'extérieur des virages
   const Cw = new Float32Array(N);
   for (let i = 0; i < N; i++) { let s = 0; for (let k = -15; k <= 15; k++) s += C[(i + k + N) % N]; Cw[i] = s / 31; }
@@ -98,7 +100,7 @@ export function buildTrackMeshes(track, scene) {
     const j = (i + 1) % N, v0 = i * DSm, v1 = (i + 1) * DSm;
     road.quad(pt(i, -w / 2, 0.02), pt(i, w / 2, 0.02), pt(j, -w / 2, 0.02), pt(j, w / 2, 0.02), [0, v0 / 16], [1, v0 / 16], [0, v1 / 16], [1, v1 / 16]);
     const kerb = Math.abs(C[i]) > 1 / 220;
-    const stripe = Math.floor(v0 / 12) % 2 ? 1 : 0.86;
+    const stripe = isGrass ? (Math.floor(v0 / 12) % 2 ? 1 : 0.86) : 1;
     for (const s of [-1, 1]) {
       const A = (o, dy) => pt(i, s * o, dy), B = (o, dy) => pt(j, s * o, dy);
       // gauche/droite : on garde l'ordre intérieur→extérieur pour des normales vers le haut
@@ -107,7 +109,7 @@ export function buildTrackMeshes(track, scene) {
         : geo.quad(A(o2, y2), A(o1, y1), B(o2, y2), B(o1, y1), [u2, va], [u1, va], [u2, vb], [u1, vb], k);
       let edge = w / 2;
       if (kerb) { q(kerbs, w / 2 - 0.1, w / 2 + 1.4, 0.035, 0.09, 0, 1, v0 / 3, v1 / 3, 1); edge = w / 2 + 1.4; }
-      const outside = Math.abs(Cw[i]) > 1 / 170 && s === (Cw[i] > 0 ? 1 : -1);
+      const outside = surf !== 'concrete' && Math.abs(Cw[i]) > 1 / 170 && s === (Cw[i] > 0 ? 1 : -1);
       // dégagement : gravier à l'extérieur des virages, herbe ailleurs
       const zone = outside ? gravel : grass;
       const uvw = (k, o) => { const p = pt(k, s * o, 0); return [p[0] / 7, p[2] / 7]; };
@@ -117,8 +119,8 @@ export function buildTrackMeshes(track, scene) {
       // talus jusqu'au sol
       const fall = (k) => [X[k] - tz[k] * s * 75, track.ground, Z[k] + tx[k] * s * 75];
       const fu = (k) => [fall(k)[0] / 7, fall(k)[2] / 7];
-      if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, wall + 3), fu(i), uvw(j, wall + 3), fu(j), 0.8);
-      else grass.quad(fall(i), qb, fall(j), qd, fu(i), uvw(i, wall + 3), fu(j), uvw(j, wall + 3), 0.8);
+      if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, wall + 3), fu(i), uvw(j, wall + 3), fu(j), isGrass ? 0.8 : 0.92);
+      else grass.quad(fall(i), qb, fall(j), qd, fu(i), uvw(i, wall + 3), fu(j), uvw(j, wall + 3), isGrass ? 0.8 : 0.92);
       // mur publicitaire puis grillage
       walls.quad(A(wall, 0), A(wall, 1.15), B(wall, 0), B(wall, 1.15), [v0 / 48, 0], [v0 / 48, 1], [v1 / 48, 0], [v1 / 48, 1]);
       fences.quad(A(wall + 0.1, 1.15), A(wall + 0.1, 4.2), B(wall + 0.1, 1.15), B(wall + 0.1, 4.2), [v0 / 3, 0], [v0 / 3, 1], [v1 / 3, 0], [v1 / 3, 1]);
@@ -126,7 +128,7 @@ export function buildTrackMeshes(track, scene) {
   }
   group.add(road.mesh(L({ map: TX.asphalt() })));
   group.add(kerbs.mesh(L({ map: TX.kerb(), polygonOffset: true, polygonOffsetFactor: -1 })));
-  group.add(grass.mesh(L({ map: TX.grass(), vertexColors: true })));
+  group.add(grass.mesh(L({ map: surfTex(), vertexColors: true })));
   group.add(gravel.mesh(L({ map: TX.gravel(), vertexColors: true })));
   const adMat = L({ map: TX.adBoards(), side: THREE.DoubleSide });
   group.add(walls.mesh(adMat));
@@ -137,10 +139,21 @@ export function buildTrackMeshes(track, scene) {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (let i = 0; i < N; i++) { minX = Math.min(minX, X[i]); maxX = Math.max(maxX, X[i]); minZ = Math.min(minZ, Z[i]); maxZ = Math.max(maxZ, Z[i]); }
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, size = Math.max(maxX - minX, maxZ - minZ) + 3000;
-  const gTex = TX.grass(); gTex.repeat.set(size / 7, size / 7);
-  const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), L({ map: gTex, color: 0xb8c8a8 }));
+  const gTex = surfTex(); gTex.repeat.set(size / 7, size / 7);
+  const groundMesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), L({ map: gTex, color: isGrass ? 0xb8c8a8 : 0xd0d0d0 }));
   groundMesh.rotation.x = -Math.PI / 2; groundMesh.position.set(cx, track.ground - 0.05, cz);
   group.add(groundMesh);
+  // mer au sud du circuit
+  const seaZ = minZ - 140;
+  if (th.sea) {
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(size, size / 2), new THREE.MeshStandardMaterial({ color: 0x1f5f8a, roughness: 0.12, metalness: 0.2 }));
+    sea.rotation.x = -Math.PI / 2; sea.position.set(cx, track.ground + 0.1, seaZ - size / 4);
+    group.add(sea);
+    const beach = new THREE.Mesh(new THREE.PlaneGeometry(size, 50), L({ map: (() => { const t = TX.sand(); t.repeat.set(size / 7, 7); return t; })() }));
+    beach.rotation.x = -Math.PI / 2; beach.position.set(cx, track.ground + 0.05, seaZ + 20);
+    group.add(beach);
+  }
+  const inSea = (z) => th.sea && z < seaZ + 45;
 
   // Ligne de départ en damier et grille
   {
@@ -245,32 +258,78 @@ export function buildTrackMeshes(track, scene) {
       for (let k = 0; k < 1800; k++) { c.fillStyle = ['#2f5a22', '#4d8036', '#5d9440', '#264b1c', '#6aa24a'][(rnd() * 5) | 0]; c.beginPath(); c.arc(rnd() * 128, rnd() * 128, 1 + rnd() * 3, 0, 7); c.fill(); }
       const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
     })();
-    const nT = th.trees;
+    // Immeubles (circuits urbains) : une seule géométrie fusionnée, UV à l'échelle réelle
+    const blocked = [];
+    if (th.city) {
+      const parts = [], cols = [], cc = new THREE.Color();
+      const pal = [0xd8d2c4, 0xb9c2cc, 0x9aa8b8, 0xe6e0d4, 0x8f9aa6, 0xc7b299, 0xa7b7c4, 0xd9c7b0];
+      let n = 0, tries = 0;
+      while (n < th.city.count && tries++ < th.city.count * 40) {
+        const x = minX - 250 + rnd() * (maxX - minX + 500), z = minZ - 250 + rnd() * (maxZ - minZ + 500);
+        if (inSea(z)) continue;
+        const bw = 14 + rnd() * 24, bd = 12 + rnd() * 20;
+        const [d, i] = nearest(x, z);
+        if (d < wall + 6 + Math.max(bw, bd) * 0.62) continue;
+        if (Math.min(i, N - i) < 110 && d < 80) continue; // stands et tribunes
+        const far = Math.min(1, d / 220);
+        const hgt = th.city.hmin + (th.city.hmax - th.city.hmin) * Math.pow(rnd(), 1.6) * (0.4 + 0.6 * far);
+        const g = new THREE.BoxGeometry(bw, hgt, bd);
+        const uv = g.attributes.uv;
+        const dims = [[bd, hgt], [bd, hgt], [0, 0], [0, 0], [bw, hgt], [bw, hgt]];
+        for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) {
+          const id = f * 4 + k;
+          if (f === 2 || f === 3) uv.setXY(id, 0.01, 0.99); else uv.setXY(id, uv.getX(id) * dims[f][0] / 10, uv.getY(id) * dims[f][1] / 10);
+        }
+        g.rotateY(track.H[i]); g.translate(x, Math.min(Y[i], track.ground + 2) + hgt / 2 - 1, z);
+        parts.push(g); cc.setHex(pal[(rnd() * pal.length) | 0]);
+        for (let k = 0; k < 36; k++) cols.push(cc.r, cc.g, cc.b);
+        blocked.push([x, z, Math.max(bw, bd) * 0.7]);
+        n++;
+      }
+      if (parts.length) {
+        const geo = merge(parts);
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+        group.add(new THREE.Mesh(geo, L({ map: TX.facade(), vertexColors: true })));
+      }
+    }
+
+    // Arbres : feuillus, conifères ou palmiers selon le thème
+    const nT = th.trees || 0, kind = th.treeKind || 'mix', hue = th.treeHue || [0.24, 0.32];
     const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), L({ map: leafTex }), nT);
     const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), L({ map: leafTex, color: 0x9fb89a }), nT);
+    const palmGeo = new THREE.ConeGeometry(1, 1, 8, 1, true); palmGeo.rotateX(Math.PI);
+    const palm = new THREE.InstancedMesh(palmGeo, L({ map: leafTex, color: 0xc8e0a0, side: THREE.DoubleSide }), nT);
     const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.4, 1, 5), L({ color: 0x5b4330 }), nT * 2);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color();
-    let nc = 0, np = 0, nt = 0, tries = 0;
-    while (nc + np < nT && tries++ < nT * 30) {
+    const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
+    let nc = 0, np = 0, nl = 0, nt = 0, tries = 0;
+    while (nc + np + nl < nT && tries++ < nT * 30) {
       const x = minX - 400 + rnd() * (maxX - minX + 800), z = minZ - 400 + rnd() * (maxZ - minZ + 800);
+      if (inSea(z)) continue;
       const [d, i] = nearest(x, z);
       if (d < wall + 7) continue;
       if (Math.min(i, N - i) < 120 && d < 70) continue;
+      if (blocked.some(b => (b[0] - x) ** 2 + (b[1] - z) ** 2 < b[2] * b[2])) continue;
       const t = Math.min(1, Math.max(0, (d - (wall + 3)) / (75 - (wall + 3))));
       const y = d < 300 ? Y[i] + (track.ground - Y[i]) * t : track.ground;
       const sc = 0.75 + rnd() * 0.7;
       e.set(0, rnd() * 6.28, 0); q.setFromEuler(e);
-      col.setHSL(0.24 + rnd() * 0.08, 0.35 + rnd() * 0.25, 0.42 + rnd() * 0.25);
-      if (rnd() < 0.62) {
-        m.compose(new THREE.Vector3(x, y + 6.5 * sc, z), q, new THREE.Vector3(4.2 * sc, 4.6 * sc, 4.2 * sc)); crown.setMatrixAt(nc, m); crown.setColorAt(nc++, col);
-        m.compose(new THREE.Vector3(x, y + 1.6 * sc, z), q, new THREE.Vector3(sc, 3.2 * sc, sc)); trunk.setMatrixAt(nt++, m);
+      col.setHSL(hue[0] + rnd() * (hue[1] - hue[0]), 0.35 + rnd() * 0.3, 0.4 + rnd() * 0.25);
+      const r = rnd();
+      const k = kind === 'pine' ? (r < 0.85 ? 'p' : 'c') : kind === 'palm' ? 'l' : kind === 'palmmix' ? (r < 0.55 ? 'l' : 'c') : (r < 0.62 ? 'c' : 'p');
+      if (k === 'c') {
+        m.compose(V3(x, y + 6.5 * sc, z), q, V3(4.2 * sc, 4.6 * sc, 4.2 * sc)); crown.setMatrixAt(nc, m); crown.setColorAt(nc++, col);
+        m.compose(V3(x, y + 1.6 * sc, z), q, V3(sc, 3.2 * sc, sc)); trunk.setMatrixAt(nt++, m);
+      } else if (k === 'p') {
+        m.compose(V3(x, y + 8 * sc, z), q, V3(3.2 * sc, 13 * sc, 3.2 * sc)); pine.setMatrixAt(np, m); pine.setColorAt(np++, col);
+        m.compose(V3(x, y + 1 * sc, z), q, V3(sc, 2 * sc, sc)); trunk.setMatrixAt(nt++, m);
       } else {
-        m.compose(new THREE.Vector3(x, y + 8 * sc, z), q, new THREE.Vector3(3.2 * sc, 13 * sc, 3.2 * sc)); pine.setMatrixAt(np, m); pine.setColorAt(np++, col);
-        m.compose(new THREE.Vector3(x, y + 1 * sc, z), q, new THREE.Vector3(sc, 2 * sc, sc)); trunk.setMatrixAt(nt++, m);
+        m.compose(V3(x, y + 10.5 * sc, z), q, V3(4.5 * sc, 2.2 * sc, 4.5 * sc)); palm.setMatrixAt(nl, m); palm.setColorAt(nl++, col);
+        m.compose(V3(x, y + 5 * sc, z), q, V3(0.7 * sc, 10.5 * sc, 0.7 * sc)); trunk.setMatrixAt(nt++, m);
       }
     }
-    crown.count = nc; pine.count = np; trunk.count = nt;
-    group.add(crown, pine, trunk);
+    crown.count = nc; pine.count = np; palm.count = nl; trunk.count = nt;
+    for (const im of [crown, pine, palm, trunk]) if (im.count) group.add(im);
 
     // Montagnes à l'horizon (non affectées par le brouillard, couleurs déjà « brumeuses »)
     const ridge = (R, hMin, hMax, cBase, cTop, seed) => {
@@ -291,8 +350,9 @@ export function buildTrackMeshes(track, scene) {
       mesh.renderOrder = -1; return mesh;
     };
     const RR = Math.min(2350, size / 2 + 600);
-    group.add(ridge(RR, 160, 520, 0x9db3c2, 0xb9cad6, 21));
-    group.add(ridge(RR - 450, 60, 260, 0x6f8a78, 0x8ea596, 33));
+    const mt = th.mountains || {};
+    if (mt.far) group.add(ridge(RR, ...mt.far, 21));
+    if (mt.near) group.add(ridge(RR - 450, ...mt.near, 33));
   }
 
   scene.add(group);

@@ -18,6 +18,11 @@ h1 span { color: #e10600; }
 h2 { font-size: 24px; font-weight: 900; font-style: italic; }
 .sub { color: #9aa3ae; font-size: 14px; }
 .help { color: #7c8590; font-size: 12px; text-align: center; margin-top: 4px; }
+.circ { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.circ > div { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; background: rgba(255,255,255,.05); border-radius: 12px; padding: 6px; }
+.circ canvas { width: 150px; height: 96px; }
+.circ b { font-size: 16px; } .circ small { color: #9aa3ae; font-size: 12px; }
+.circ button { padding: 14px 12px; font-size: 18px; }
 .opts { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .row label { color: #c3cad3; font-size: 15px; }
@@ -86,5 +91,15 @@ body.tilt #ctl .left { display: none; }
   .pad { width: 76px; height: 76px; } .pad.gas { height: 100px; }
   #tower { font-size: 11px; }
   .card { padding: 14px; gap: 6px; } h1 { font-size: 28px; }
+  .circ canvas { width: 110px; height: 70px; }
+  #menu .card { max-width: 560px; }
   .scroll { max-height: 48vh; }
+}
+/* menu en paysage sur téléphone : deux colonnes pour que « Départ » reste visible */
+@media (max-height: 480px) and (orientation: landscape) {
+  #menu .card { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 6px; max-width: 720px;
+    grid-template-areas: "title opts" "circ opts" "circ start" "help help"; align-items: center; }
+  #menu h1 { grid-area: title; font-size: 24px; } #menu h1 br { display: none; } #menu h1 span { margin-left: 6px; }
+  #menu .circ { grid-area: circ; } #menu .opts { grid-area: opts; margin: 0; } #menu #startBtn { grid-area: start; margin: 0; }
+  #menu .help { grid-area: help; margin: 0; }
 }

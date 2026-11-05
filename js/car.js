@@ -1,6 +1,6 @@
 // Monoplace : état et physique arcade (le modèle 3D est dans carmodel.js).
 import * as THREE from '../lib/three.module.min.js';
-import { locate, RUNOFF } from './track.js';
+import { locate } from './track.js';
 import { buildCarMesh } from './carmodel.js';
 
 // Unités : mètres, secondes. vtop ≈ 335 km/h.
@@ -87,7 +87,7 @@ export function stepCar(car, track, dt) {
   car.pitch = -Math.atan((track.Y[(i + 1) % track.N] - track.Y[i]) / 2) * fwd;
 
   // murs
-  const lim = half + RUNOFF - 1.0;
+  const lim = half + track.runoff - 1.0;
   if (Math.abs(car.lat) > lim) {
     const s = Math.sign(car.lat), over = Math.abs(car.lat) - lim;
     car.x -= rx * s * over; car.z -= rz * s * over; car.lat = s * lim;

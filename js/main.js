@@ -10,7 +10,8 @@ import { initHud, updateHud, fmt } from './hud.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const settings = Object.assign({ cam: 'chase', tilt: false, laps: 3 }, load());
+const settings = Object.assign({ cam: 'chase', tilt: false, laps: 3, circuit: 'valmont' }, load());
+if (params.get('circuit')) settings.circuit = params.get('circuit');
 function load() { try { return JSON.parse(localStorage.getItem('gpm-settings')) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem('gpm-settings', JSON.stringify(settings)); } catch {} }
 
@@ -33,13 +34,30 @@ function setFov() { const portrait = camera.aspect < 1; camera.fov = settings.ca
 addEventListener('resize', resize); resize();
 
 // ---------- circuit ----------
-const def = CIRCUITS[0];
-const track = buildTrack(def);
-const { sky } = buildEnvironment(scene, renderer, track);
-const { lights } = buildTrackMeshes(track, scene);
-initHud(track);
+let def, track, sky, lights, world = null, R = null;
+function disposeAll(obj) {
+  obj.traverse(o => {
+    if (!o.geometry) return;
+    o.geometry.dispose();
+    for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); }
+  });
+}
+function loadCircuit(id) {
+  if (R) { for (const c of R.cars) scene.remove(c.mesh); R = null; }
+  if (world) { scene.remove(world); disposeAll(world); scene.environment?.dispose(); }
+  def = CIRCUITS.find(c => c.id === id) || CIRCUITS[0];
+  track = buildTrack(def);
+  world = new THREE.Group(); scene.add(world);
+  ({ sky } = buildEnvironment(scene, renderer, track, world));
+  ({ lights } = buildTrackMeshes(track, world));
+  initHud(track);
+  // vue d'attente du menu : survol de la ligne de départ
+  const i = 40 % track.N, h = track.H[i];
+  camera.position.set(track.X[i] - Math.sin(h) * 70 + Math.cos(h) * 30, track.Y[i] + 25, track.Z[i] - Math.cos(h) * 70 - Math.sin(h) * 30);
+  camera.lookAt(track.X[i], track.Y[i] + 2, track.Z[i]);
+}
 
-let R = null, paused = true, last = performance.now();
+let paused = true, last = performance.now();
 const camState = { h: 0, x: 0, y: 0, z: 0 };
 
 function startRace() {
@@ -95,9 +113,7 @@ function loop(now) {
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 1) {
     fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0;
-    if (!paused && fps < 45 && pixelRatio > 0.75) { if (++slowT >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio);
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-setAniso(renderer.capabilities.getMaxAnisotropy()); resize(); slowT = 0; } }
+    if (!paused && fps < 45 && pixelRatio > 0.75) { if (++slowT >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); resize(); slowT = 0; } }
     else slowT = 0;
   }
   if (!paused) updateHud(R, params.has('fps') ? fps + ' i/s · ' + renderer.info.render.calls + ' appels · ' + Math.round(renderer.info.render.triangles / 1000) + 'k tri' : 0);
@@ -130,6 +146,7 @@ document.querySelectorAll('[data-laps]').forEach(b => b.onclick = () => { settin
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
 $('startBtn').onclick = async () => {
+  if (def.id !== settings.circuit) { clearTimeout(loadTimer); loadCircuit(settings.circuit); }
   await enableTilt(settings.tilt);
   try { await document.documentElement.requestFullscreen?.(); await screen.orientation?.lock?.('landscape'); } catch {}
   startRace();
@@ -143,12 +160,38 @@ $('againBtn').onclick = startRace;
 function pause() { if (!R || R.done || paused) return; paused = true; show('pause'); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
-$('circuitName').textContent = `${def.name} · ${def.type} · ${(track.length / 1000).toFixed(2)} km`;
+// choix du circuit : aperçu immédiat, construction 3D après une courte pause
+let loadTimer = 0;
+function showCircuitInfo() {
+  const k = CIRCUITS.findIndex(c => c.id === settings.circuit);
+  const d = CIRCUITS[Math.max(0, k)], t = buildTrack(d);
+  $('circName').textContent = `${Math.max(0, k) + 1}. ${d.name}`;
+  let dz = 0; for (let i = 0; i < t.N; i++) dz = Math.max(dz, t.Y[i]);
+  $('circInfo').textContent = `${d.type} · ${(t.length / 1000).toFixed(2)} km` + (dz > 15 ? ` · dénivelé ${Math.round(dz)} m` : '');
+  const cv = $('circPrev'), c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  let a = Infinity, b = -Infinity, e = Infinity, f = -Infinity;
+  for (let i = 0; i < t.N; i++) { a = Math.min(a, t.X[i]); b = Math.max(b, t.X[i]); e = Math.min(e, t.Z[i]); f = Math.max(f, t.Z[i]); }
+  const sc = Math.min((W - 12) / (b - a), (H - 12) / (f - e));
+  const P = i => [W / 2 - (t.X[i] - (a + b) / 2) * sc, H / 2 - (t.Z[i] - (e + f) / 2) * sc];
+  c.clearRect(0, 0, W, H); c.lineWidth = 3; c.lineJoin = 'round'; c.strokeStyle = '#fff'; c.beginPath();
+  for (let i = 0; i < t.N; i += 3) { const [x, y] = P(i); i ? c.lineTo(x, y) : c.moveTo(x, y); }
+  c.closePath(); c.stroke();
+  const [x, y] = P(0); c.fillStyle = '#e10600'; c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill();
+}
+function pickCircuit(step) {
+  const k = CIRCUITS.findIndex(c => c.id === settings.circuit);
+  settings.circuit = CIRCUITS[(Math.max(0, k) + step + CIRCUITS.length) % CIRCUITS.length].id; save();
+  showCircuitInfo();
+  clearTimeout(loadTimer); loadTimer = setTimeout(() => loadCircuit(settings.circuit), 350);
+}
+$('prevC').onclick = () => pickCircuit(-1);
+$('nextC').onclick = () => pickCircuit(1);
+
+loadCircuit(settings.circuit);
+showCircuitInfo();
 initInput(toggleCam, pause);
 refreshMenu();
 setFov();
-// vue d'attente du menu : survol du circuit
-camera.position.set(track.X[0] - 60, track.Y[0] + 40, track.Z[0] - 90); camera.lookAt(track.X[0] + 80, track.Y[0], track.Z[0] + 40);
 show('menu');
 if (params.has('demo')) startRace();
 requestAnimationFrame(loop);

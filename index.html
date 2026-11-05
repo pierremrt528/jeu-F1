@@ -18,7 +18,11 @@
 <div id="menu" class="screen">
   <div class="card">
     <h1>Grand Prix<br><span>Manager</span></h1>
-    <p class="sub" id="circuitName"></p>
+    <div class="circ">
+      <button id="prevC" aria-label="Circuit précédent">◀</button>
+      <div><canvas id="circPrev" width="150" height="96"></canvas><b id="circName"></b><small id="circInfo"></small></div>
+      <button id="nextC" aria-label="Circuit suivant">▶</button>
+    </div>
     <div class="opts">
       <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>

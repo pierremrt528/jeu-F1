@@ -4,9 +4,42 @@ import * as THREE from '../lib/three.module.min.js';
 import { SPEC } from './car.js';
 
 export const DS = 2;        // pas d'échantillonnage (m)
-export const RUNOFF = 9;    // largeur du dégagement herbeux avant le mur (m)
+
+// Tracé décrit comme une suite de lignes droites et de virages (S longueur, L/R rayon angle),
+// fermé automatiquement, avec un profil d'altitude [fraction du tour, altitude].
+export function layoutPoints(def) {
+  const pts = [[0, 0]]; let h = 0, x = 0, z = 0;
+  for (const sg of def.layout) {
+    if (sg[0] === 'S') {
+      const n = Math.max(1, Math.ceil(sg[1] / 4));
+      for (let k = 0; k < n; k++) { x += Math.sin(h) * sg[1] / n; z += Math.cos(h) * sg[1] / n; pts.push([x, z]); }
+    } else {
+      const a = (sg[0] === 'L' ? 1 : -1) * sg[2] * Math.PI / 180, len = sg[1] * Math.abs(a), n = Math.max(1, Math.ceil(len / 4));
+      for (let k = 0; k < n; k++) { h += a / n / 2; x += Math.sin(h) * len / n; z += Math.cos(h) * len / n; h += a / n / 2; pts.push([x, z]); }
+    }
+  }
+  const s = [0]; for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const tot = s[s.length - 1], ex = x, ez = z;
+  const E = def.elev || [[0, 0]];
+  const elev = f => {
+    const k = E.concat([[1, E[0][1]]]);
+    for (let i = 0; i < k.length - 1; i++) if (f >= k[i][0] && f <= k[i + 1][0]) {
+      const t = (f - k[i][0]) / ((k[i + 1][0] - k[i][0]) || 1), u = t * t * (3 - 2 * t);
+      return k[i][1] + (k[i + 1][1] - k[i][1]) * u;
+    }
+    return E[0][1];
+  };
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i += 6) { const f = s[i] / tot; out.push([pts[i][0] - ex * f, pts[i][1] - ez * f, elev(f)]); }
+  // départ : sur la première ligne droite, en laissant la place à la grille derrière
+  const L0 = def.layout[0][0] === 'S' ? def.layout[0][1] : 200;
+  const sStart = Math.min(L0 * 0.6, Math.max(100, L0 - 60));
+  const ks = s.findIndex(v => v >= sStart);
+  return { points: out, start: [pts[ks][0] - ex * s[ks] / tot, pts[ks][1] - ez * s[ks] / tot] };
+}
 
 export function buildTrack(def) {
+  if (def.layout && !def.points) Object.assign(def, layoutPoints(def));
   const curve = new THREE.CatmullRomCurve3(def.points.map(p => new THREE.Vector3(p[0], p[2], p[1])), true, 'centripetal');
   const N = Math.round(curve.getLength() / DS);
   let pts = curve.getSpacedPoints(N).slice(0, N);
@@ -55,7 +88,7 @@ export function buildTrack(def) {
     }
   }
   let minY = Infinity; for (let i = 0; i < N; i++) minY = Math.min(minY, Y[i]);
-  return { def, N, length: N * DS, width: w, X, Y, Z, TX, TZ, H, C, RL, V, ground: minY - 0.6 };
+  return { def, N, length: N * DS, width: w, runoff: def.runoff ?? 9, X, Y, Z, TX, TZ, H, C, RL, V, ground: minY - 0.6 };
 }
 
 function smooth(a, r) {
