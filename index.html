@@ -27,6 +27,7 @@
       <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
+      <button id="garageBtn" class="garageBtn">🔧 Garage <small id="menuPts"></small></button>
     </div>
     <button id="startBtn" class="main">Départ</button>
     <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause</p>
@@ -69,7 +70,19 @@
   <div class="card wide">
     <h2 id="resultTitle">Classement</h2>
     <div class="scroll"><table id="resultsTable"></table></div>
-    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="menuBtn">Menu</button></div>
+    <div id="rdGain"></div>
+    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="resGarageBtn">🔧 Garage</button><button id="menuBtn">Menu</button></div>
+  </div>
+</div>
+
+<div id="garage" class="screen hidden">
+  <div class="card wide garage">
+    <div class="ghead"><h2>Garage</h2><span class="pts"><b id="gPts">0</b> pts R&amp;D</span><button id="garageClose">Fermer</button></div>
+    <div id="gTabs" class="gtabs"></div>
+    <div class="gbody">
+      <div id="gTree" class="gtree"></div>
+      <div class="gside"><div id="gDetail" class="gdetail"></div><div id="gStats" class="gstats"></div></div>
+    </div>
   </div>
 </div>
 

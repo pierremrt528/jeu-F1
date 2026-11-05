@@ -7,6 +7,7 @@ import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
+import { garage, openGarage, awardPoints } from './garage.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -121,7 +122,7 @@ function loop(now) {
 
 // ---------- écrans ----------
 function show(id) {
-  for (const s of ['menu', 'hud', 'pause', 'results']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['menu', 'hud', 'pause', 'results', 'garage']) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
@@ -132,6 +133,11 @@ function showResults() {
     `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${r.name}<small>${r.team}</small></td>` +
     `<td>${r.pos === 1 ? fmt(r.time) : '+' + (r.time - win).toFixed(3) + (r.finished ? '' : '*')}</td><td>${fmt(r.best)}</td></tr>`).join('');
   const me = rows.find(r => r.player);
+  if (!R.awarded) {
+    const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
+    R.awarded = awardPoints(me.pos, me.grid, R.laps, fastest);
+  }
+  $('rdGain').innerHTML = `Points de R&D : <b>+${R.awarded.total}</b> <small>(${R.awarded.parts.map(p => `${p[0]} : ${p[1]}`).join(' · ')})</small> · total ${garage.pts}`;
   $('resultTitle').textContent = me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`;
   show('results');
 }
@@ -141,7 +147,12 @@ function refreshMenu() {
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
+  $('menuPts').textContent = garage.pts + ' pts R&D';
 }
+let garageFrom = 'menu';
+function showGarage(from) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }); }
+$('garageBtn').onclick = () => showGarage('menu');
+$('resGarageBtn').onclick = () => showGarage('results');
 document.querySelectorAll('[data-laps]').forEach(b => b.onclick = () => { settings.laps = +b.dataset.laps; save(); refreshMenu(); });
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
@@ -155,7 +166,7 @@ $('camBtn').onclick = toggleCam;
 $('pauseBtn').onclick = () => pause();
 $('resumeBtn').onclick = () => { paused = false; last = performance.now(); show('hud'); };
 $('restartBtn').onclick = startRace;
-$('quitBtn').onclick = $('menuBtn').onclick = () => { paused = true; show('menu'); };
+$('quitBtn').onclick = $('menuBtn').onclick = () => { paused = true; refreshMenu(); show('menu'); };
 $('againBtn').onclick = startRace;
 function pause() { if (!R || R.done || paused) return; paused = true; show('pause'); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });

@@ -4,12 +4,14 @@ import { aiDrive } from './ai.js';
 import { readInput } from './input.js';
 import { DS } from './track.js';
 import { TEAMS } from './data.js';
+import { carUpgrades } from './garage.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
   for (const team of TEAMS) for (const d of team.drivers) cars.push(new Car(team, d, team.perf));
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
+  player.up = carUpgrades();
   const ai = cars.filter(c => !c.player).sort((a, b) => b.skill * b.perf - a.skill * a.perf);
   const gridPos = Math.min(19, Math.max(0, (opts.grid ?? 10) - 1));
   ai.splice(gridPos, 0, player);
@@ -123,6 +125,6 @@ export function results(R) {
       const done = (c.lap - 1) * track.N + c.idx, left = Math.max(0, total - done) * DS;
       time = t + left / 70;
     }
-    return { pos: k + 1, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished };
+    return { pos: k + 1, grid: c.grid, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished };
   });
 }
