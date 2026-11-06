@@ -125,7 +125,22 @@ function startRace(opts = raceOpts) {
   R.season = !!opts.season;
   resetInput();
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
+  if (opts.sim) { R.sim = true; return simulate(); }
   show('hud'); paused = false; last = performance.now();
+}
+// course simulée : le pilote automatique court à ta place, la course tourne en accéléré sans affichage
+function simulate() {
+  const btns = ['prGo', 'prSim', 'prBack'].map($);
+  btns.forEach(b => b.disabled = true);
+  const step = () => {
+    if (!R || !R.sim) return;
+    const t0 = performance.now();
+    while (!R.done && performance.now() - t0 < 30) for (let k = 0; k < 30 && !R.done; k++) updateRace(R, 1 / 30);
+    const lead = R.order[0], pct = Math.min(99, Math.round(100 * ((lead.lap - 1) + lead.idx / track.N) / R.laps));
+    $('prHint').textContent = `⏩ Simulation de la course… ${R.done ? 100 : Math.max(0, pct)} %  ·  P${R.order.indexOf(R.player) + 1} · tour ${Math.max(1, Math.min(R.player.lap, R.laps))}/${R.laps}`;
+    if (R.done) { btns.forEach(b => b.disabled = false); showResults(); } else setTimeout(step, 0);
+  };
+  step();
 }
 
 // ---------- caméras ----------
@@ -239,7 +254,7 @@ function showResults() {
     (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
   $('pressBtn').classList.toggle('hidden', R.pressDone);
-  $('resultTitle').textContent = me.dnf ? 'Abandon' : me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`;
+  $('resultTitle').textContent = (me.dnf ? 'Abandon' : me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`) + (R.sim ? ' · course simulée' : '');
   show('results');
 }
 
@@ -407,6 +422,7 @@ function showPrerace(opts) {
   };
   render();
   $('prGo').onclick = () => startRace({ ...opts, wx: { ...wx }, plan });
+  $('prSim').onclick = () => startRace({ ...opts, wx: { ...wx }, plan, sim: true, autopilot: true });
   $('prBack').onclick = () => opts.season ? openSeason() : (refreshMenu(), show('menu'));
   show('prerace');
 }
