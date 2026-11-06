@@ -173,12 +173,19 @@
 
 <div id="prerace" class="screen hidden">
   <div class="card prerace">
-    <h2 id="prTitle">Avant la course</h2>
-    <p id="prWx" class="prwx"></p>
-    <p class="dim">Stratégie proposée par le muret</p>
-    <div id="prPlans" class="prplans"></div>
-    <div id="prAdjust" class="pradj"></div>
-    <p id="prHint" class="dim small"></p>
+    <div class="prhead"><h2 id="prTitle">Avant la course</h2><p id="prWx" class="prwx"></p></div>
+    <div class="prbody">
+      <div class="prleft"><p class="dim small">Stratégies recommandées par le muret</p><div id="prPlans" class="prplans"></div></div>
+      <div class="prdet">
+        <p id="prSel" class="prsel"></p>
+        <div id="prBar" class="sbar big"></div>
+        <div id="prEdit" class="predit"></div>
+        <div id="prChart"></div>
+        <p class="prleg"><i class="lw"></i>usure des pneus (%) <i class="lp"></i>rythme estimé</p>
+        <div id="prAdjust" class="pradj"></div>
+      </div>
+    </div>
+    <p id="prHint" class="dim small prhint"></p>
     <div class="btns"><button id="prGo" class="main">Aller sur la grille</button><button id="prSim">⏩ Simuler la course</button><button id="prBack">Retour</button></div>
   </div>
 </div>

@@ -3,12 +3,12 @@
 // radio avec le muret, dégâts et casse.
 import { DS, pitLane } from './track.js';
 
-// km : distance avant usure complète à rythme normal sans glisser
+// grip : adhérence neuve ; wpl : usure par tour à rythme normal sans glisser (1 = pneu à 0 %)
 export const TYRES = {
-  S: { name: 'Tendre', color: '#ff3b3b', grip: 1.06, km: 18, pace: 0 },
-  M: { name: 'Medium', color: '#ffd400', grip: 1.0, km: 30, pace: 0.9 },
-  H: { name: 'Dur', color: '#f2f2f2', grip: 0.955, km: 45, pace: 1.7 },
-  W: { name: 'Pluie', color: '#2f8cff', grip: 0.86, km: 30, pace: 0 },
+  S: { name: 'Tendre', color: '#ff3b3b', grip: 1.09, wpl: 0.16 },
+  M: { name: 'Medium', color: '#ffd400', grip: 1.0, wpl: 0.085 },
+  H: { name: 'Dur', color: '#f2f2f2', grip: 0.93, wpl: 0.055 },
+  W: { name: 'Pluie', color: '#2f8cff', grip: 0.86, wpl: 0.06 },
 };
 export const FORMATS = {
   flash: { name: 'Éclair', minutes: 0, prize: 0.3 },   // course solo : 3 tours
@@ -39,53 +39,106 @@ export function wxText(wx) {
   return wx.rain ? `🌦️ Pluie, éclaircie vers ${p} % de la course` : `🌦️ Sec, averse attendue vers ${p} % de la course`;
 }
 
+// adhérence selon la vie restante du pneu (r = 1 neuf … 0 usé) :
+// 100-85 % grip maximal, 85-60 % bon, 60-40 % assez faible, sous 40 % presque plus de grip
+export function lifeGrip(r) {
+  if (r >= 0.85) return 1;
+  if (r >= 0.6) return 1 - 0.03 * (0.85 - r) / 0.25;
+  if (r >= 0.4) return 0.97 - 0.1 * (0.6 - r) / 0.2;
+  return Math.max(0.6, 0.87 - 0.27 * (0.4 - r) / 0.4);
+}
+const GRIPTXT = { max: 'maximal', bon: 'bon', faible: 'faible', nul: 'quasi nul' };
+export const lifeBand = r => r >= 0.85 ? 'max' : r >= 0.6 ? 'bon' : r >= 0.4 ? 'faible' : 'nul';
 // adhérence des pneus selon la gomme, l'usure et l'humidité de la piste (0 sec … 1 détrempée)
 export function tyreGrip(car, wet) {
-  const T = TYRES[car.tyre], w = Math.min(car.wear, 1);
-  let g = (T.grip - (car.tyre === 'W' ? 0.04 * wet : 0)) * (1 - 0.16 * w * w);
-  if (car.wear > 1) g *= Math.max(0.7, 1 - (car.wear - 1) * 0.6);   // pneus à bout
+  const T = TYRES[car.tyre];
+  let g = (T.grip - (car.tyre === 'W' ? 0.04 * wet : 0)) * lifeGrip(1 - car.wear);
+  if (car.flat) g *= 0.55;   // crevaison
   if (car.tyre !== 'W') g *= 1 - 0.45 * wet;
   return g;
 }
 
 // ---------- plans d'arrêts ----------
-const softest = km => ['S', 'M', 'H'].find(t => TYRES[t].km >= km * 1.15);
-function estimate(st, lapKm, lapTime) {
-  let t = 0;
-  st.forEach((s, i) => {
-    const f = fuelFor(s.laps, lapKm), wearEnd = s.laps * lapKm / TYRES[s.tyre].km;
-    t += s.laps * (lapTime + TYRES[s.tyre].pace + 0.035 * f / 2 + 1.2 * wearEnd * wearEnd / 2);
-    if (i) t += 22 + 2.4 + f / 10;
+export const PIT_LOSS = 24.4, KPLAN = 1.05;                // temps perdu dans la voie des stands, usure prévue
+const paceOf = (g, lapTime) => lapTime * 0.45 * (1 / Math.sqrt(g) - 1);   // secondes perdues par tour
+const MAXW = 0.6;                                          // le muret fait rentrer avant la chute (40 %)
+// déroulé tour par tour d'une stratégie : vie des pneus en fin de tour, temps estimé du tour
+export function planLaps(stints, lapKm, lapTime, wet) {
+  const out = []; let t = 0, lap = 0;
+  stints.forEach((s, i) => {
+    const T = TYRES[s.tyre], f0 = fuelFor(s.laps, lapKm), w = T.wpl * KPLAN * (s.tyre === 'W' && !wet ? 3 : 1);
+    if (i) t += PIT_LOSS + f0 / 10;
+    for (let k = 0; k < s.laps; k++) {
+      const r0 = 1 - k * w, r1 = 1 - (k + 1) * w, rm = (r0 + r1) / 2;
+      let g = T.grip * lifeGrip(rm) * (s.tyre === 'W' ? (wet ? 1 : 0.95) : wet ? 0.6 : 1);
+      if (r1 < 0) g *= 0.8;
+      const lt = lapTime + paceOf(g, lapTime) + 0.035 * f0 * (1 - (k + 0.5) / s.laps);
+      t += lt; lap++;
+      out.push({ lap, tyre: s.tyre, stint: i, r0, r: r1, t: lt + (i && !k ? PIT_LOSS + f0 / 10 : 0), lt });
+    }
   });
-  return t;
+  return { laps: out, time: t };
 }
-// Trois stratégies de gommes : classique (M → H), inversée (H → M), alternative (S → S → M).
-// Les tours sont répartis selon la durée de vie de chaque gomme ; si une gomme ne tient pas, on ajoute un relais.
-function split(seq, laps, lapKm) {
-  seq = seq.slice();
-  for (;;) {
-    while (seq.length > 2 && laps / seq.length < 2) seq.splice(1, 1);   // course courte : moins de relais
-    const tot = seq.reduce((a, t) => a + TYRES[t].km, 0);
-    const L = seq.map(t => Math.max(1, Math.floor(laps * TYRES[t].km / tot)));
-    for (let i = 0; L.reduce((a, b) => a + b, 0) < laps; i++) L[i % L.length]++;
-    while (L.reduce((a, b) => a + b, 0) > laps) L[L.indexOf(Math.max(...L))]--;
-    const ok = L.every((l, i) => l * lapKm <= TYRES[seq[i]].km * 0.95 && fuelFor(l, lapKm) <= TANK);
-    if (ok || seq.length >= 6 || seq.length >= laps) return seq.map((t, i) => ({ tyre: t, laps: L[i] }));
-    seq.push(seq[seq.length - 1]);
+const softest = laps => ['S', 'M', 'H'].find(t => laps * TYRES[t].wpl * KPLAN <= MAXW);
+// coût d'un relais (gomme, tours) : indépendant de sa place dans la course
+function stintCost(tyre, n, lapKm, lapTime, wet) {
+  if (n * TYRES[tyre].wpl * KPLAN > MAXW || fuelFor(n, lapKm) > TANK) return Infinity;
+  return planLaps([{ tyre, laps: n }], lapKm, lapTime, wet).time;
+}
+// meilleure répartition des tours pour une suite de gommes (programmation dynamique)
+function bestSplit(seq, laps, cost) {
+  let prev = new Map([[0, { c: 0, L: [] }]]);
+  for (let i = 0; i < seq.length; i++) {
+    const nx = new Map();
+    for (const [done, v] of prev) for (let n = 1; done + n <= laps; n++) {
+      if (i === seq.length - 1 && done + n !== laps) continue;
+      const c = v.c + cost(seq[i], n);
+      if (c < (nx.get(done + n)?.c ?? Infinity)) nx.set(done + n, { c, L: [...v.L, n] });
+    }
+    prev = nx;
   }
+  const r = prev.get(laps);
+  return r && isFinite(r.c) ? seq.map((t, i) => ({ tyre: t, laps: r.L[i] })) : null;
 }
+const NAMES = ['Recommandée', 'Alternative 1', 'Alternative 2'];
+const descOf = st => st.length === 1 ? 'Un seul relais : on gère les pneus jusqu’au bout.'
+  : st.some(s => s.tyre === 'S') ? 'Tendres rapides mais fragiles : plus d’attaque, plus d’arrêts.'
+  : 'Gommes durables : relais longs et peu de risques.';
+export function planInfo(stints, lapKm, lapTime, wet) {
+  const pl = planLaps(stints, lapKm, lapTime, wet);
+  return { stints, stops: stints.length - 1, time: pl.time, fuel: Math.min(TANK, fuelFor(stints[0].laps, lapKm)), laps: pl.laps };
+}
+// stratégies recommandées : toutes les combinaisons de 1 à 4 relais, les 3 meilleures (variées)
 export function makePlans(laps, lapKm, lapTime, wet) {
-  const out = [
-    ['Classique', 'Medium puis dur : le choix sûr, relais long en fin de course.', ['M', 'H']],
-    ['Inversée', 'Dur puis medium : long premier relais, gomme plus rapide pour finir.', ['H', 'M']],
-    ['Alternative', 'Deux relais en tendres puis medium : rapide, mais un arrêt de plus.', ['S', 'S', 'M']],
-  ].map(([name, desc, seq]) => {
-    const st = split(seq, laps, lapKm);
-    if (wet) st[0].tyre = 'W';
-    return { name, desc, st, n: st.length - 1, time: estimate(st, lapKm, lapTime) };
-  });
-  const best = Math.min(...out.map(p => p.time));
-  return out.map(p => ({ name: p.name, desc: p.desc, best: p.time === best, stints: p.st.map(s => ({ ...s })), stops: p.n, time: p.time, fuel: Math.min(TANK, fuelFor(p.st[0].laps, lapKm)) }));
+  const memo = new Map(), cost = (t, n) => { const k = t + n; if (!memo.has(k)) memo.set(k, stintCost(t, n, lapKm, lapTime, wet)); return memo.get(k); };
+  const dry = wet ? ['W'] : ['S', 'M', 'H'], seen = new Set(), cands = [];
+  const rec = seq => {
+    if (seq.length) {
+      const key = seq.slice().sort().join('');
+      if (!seen.has(key)) {
+        seen.add(key);
+        const ord = seq.slice().sort((a, b) => 'SMHW'.indexOf(a) - 'SMHW'.indexOf(b));
+        const st = bestSplit(ord, laps, cost);
+        if (st) cands.push(planInfo(st, lapKm, lapTime, wet));
+      }
+    }
+    if (seq.length < Math.min(4, laps)) for (const t of dry) rec([...seq, t]);
+  };
+  rec([]);
+  if (!cands.length) cands.push(planInfo(split(wet ? 'W' : 'H', laps), lapKm, lapTime, wet));
+  cands.sort((a, b) => a.time - b.time);
+  // variété : la meilleure, puis la meilleure avec un autre nombre d'arrêts, puis la suivante
+  const pick = [cands[0]];
+  const other = cands.find(c => c.stops !== cands[0].stops); if (other) pick.push(other);
+  for (const c of cands) if (pick.length < 3 && !pick.includes(c) && !pick.some(p => p.stops === c.stops && p.stints[0].tyre === c.stints[0].tyre)) pick.push(c);
+  for (const c of cands) if (pick.length < 3 && !pick.includes(c)) pick.push(c);
+  pick.sort((a, b) => a.time - b.time);
+  return pick.map((p, k) => ({ ...p, name: NAMES[k], desc: descOf(p.stints), best: !k }));
+}
+function split(t, laps) {   // repli : relais égaux d'une même gomme
+  const n = Math.max(1, Math.ceil(laps * TYRES[t].wpl * KPLAN / 0.7)), out = [];
+  for (let i = 0; i < n; i++) out.push({ tyre: t, laps: Math.floor(laps / n) + (i < laps % n ? 1 : 0) });
+  return out;
 }
 
 // ---------- préparation de la course ----------
@@ -97,11 +150,11 @@ export function setupStrategy(R, track, wx, plan) {
   const plans = R.solo ? null : makePlans(R.laps, R.lapKm, lapT, R.wet > 0.4);
   const failP = c => c.player ? Math.min(0.2, Math.max(0.005, (100 - c.rel) * 0.0025)) : 0.035;
   for (const c of R.cars) {
-    c.wear = 0; c.dmg = 0; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0;
+    c.wear = 0; c.dmg = 0; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0; c.flat = false;
     c.strat = c.stats?.strat ?? 70; c.tyreSkill = c.stats?.tyre ?? 75;
     if (R.solo) { c.tyre = R.wet > 0.4 ? 'W' : 'S'; c.fuel = 15; c.plan = null; continue; }
     // plan : celui du joueur, sinon un des trois au hasard (les bons stratèges choisissent mieux)
-    const bi = Math.max(0, plans?.findIndex(p => p.best) ?? 1), pick = c.player && plan ? plan : plans[Math.random() < 0.3 + c.strat / 250 ? bi : Math.floor(Math.random() * 3)];
+    const pick = c.player && plan ? plan : plans[Math.random() < 0.3 + c.strat / 250 ? 0 : Math.floor(Math.random() * plans.length)];
     c.plan = pick.stints.map(s => ({ ...s }));
     c.tyre = c.plan[0].tyre;
     c.fuel = c.player && plan ? plan.fuel : Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) + 1);
@@ -112,7 +165,9 @@ export function setupStrategy(R, track, wx, plan) {
 export const progress = (R, c) => Math.max(0, ((c.lap - 1) * R.track.N + c.idx) / (R.laps * R.track.N));
 const lapsLeft = (R, c) => Math.max(0, R.laps - (c.lap - 1) - c.idx / R.track.N);
 export const fuelLaps = (R, c) => c.fuel / (R.lapKm * FPK * MODES[c.mode].fuel);
-export const tyreLaps = (R, c) => Math.max(0, (1 - c.wear) * TYRES[c.tyre].km / R.lapKm);
+// tours avant que le pneu tombe à 0 % ; vie restante prévue à l'arrivée
+export const tyreLaps = (R, c) => Math.max(0, (1 - c.wear) / (TYRES[c.tyre].wpl * KPLAN));
+const lifeAtEnd = (R, c) => 1 - c.wear - lapsLeft(R, c) * TYRES[c.tyre].wpl * KPLAN;
 const plannedStop = c => c.plan && c.stint < c.plan.length - 1 ? c.plan.slice(0, c.stint + 1).reduce((a, s) => a + s.laps, 0) : null;
 
 // ce qu'on fait au prochain arrêt : gomme et carburant pour le relais suivant
@@ -124,7 +179,7 @@ export function nextStop(R, c) {
     laps = Math.min(rem, c.plan.slice(c.stint + 1).length > 1 ? nx.laps : rem); tyre = nx.tyre;
   }
   if (R.wet > 0.4 || (R.raining && R.wet > 0.15)) tyre = 'W';
-  else if (!tyre || tyre === 'W') tyre = softest(laps * R.lapKm) || 'H';
+  else if (!tyre || tyre === 'W') tyre = softest(laps) || 'H';
   const fuel = Math.max(0, Math.min(TANK, fuelFor(laps, R.lapKm)) - c.fuel);
   return { tyre, fuel: Math.round(fuel) };
 }
@@ -133,11 +188,12 @@ export function nextStop(R, c) {
 export function wantBox(R, c) {
   if (c.lap >= R.laps || c.lap < 1) return false;
   const left = lapsLeft(R, c);
+  if (c.flat) return true;
   const wetNeed = R.wet > 0.45 - (c.strat - 70) / 400, dryNeed = R.wet < 0.2 && !R.raining;
   if (c.tyre !== 'W' && wetNeed) return true;
   if (c.tyre === 'W' && dryNeed && left > 2) return true;
-  if (plannedStop(c) === c.lap && (fuelLaps(R, c) < left || tyreLaps(R, c) < left * 0.9)) return true;
-  if (tyreLaps(R, c) < Math.min(left, 1.3) && left > 1.5) return true;
+  if (plannedStop(c) === c.lap && (fuelLaps(R, c) < left || lifeAtEnd(R, c) < 0.35)) return true;
+  if (1 - c.wear < 0.25 && left > 1.5) return true;
   if (fuelLaps(R, c) / MODES.save.fuel < left - 0.1 && fuelLaps(R, c) < 2.2) return true;
   if (c.dmg > 0.5 && left > 3) return true;
   return false;
@@ -152,14 +208,14 @@ export function radioAsk(R, what) {
     const run = R.order.filter(c => !c.out), k = run.indexOf(p), a = run[k - 1], b = run[k + 1];
     const fl = fuelLaps(R, p), ps = plannedStop(p), ns = nextStop(R, p);
     const wx = R.raining ? ' · Pluie' : R.wx.change && !R.wx.done ? (R.wx.change.rain ? ' · Averse attendue' : ' · Éclaircie attendue') : '';
-    say(R, `📻 Pneus ${Math.round(100 - p.wear * 100)} % (~${tyreLaps(R, p).toFixed(1)} t)${p.slideWear > 0.25 ? ', tu glisses trop' : ''} · Essence ${fl.toFixed(1)} t${fl < left + 0.2 ? ' ⚠' : ''}` +
+    say(R, `📻 Pneus ${Math.max(0, Math.round(100 - p.wear * 100))} % (grip ${GRIPTXT[lifeBand(1 - p.wear)]})${p.slideWear > 0.25 ? ', tu glisses trop' : ''} · Essence ${fl.toFixed(1)} t${fl < left + 0.2 ? ' ⚠' : ''}` +
       (a ? ` · Devant ${a.name} ${gapTo(R, a, p).toFixed(1)} s` : ' · En tête') + (b ? ` · Derrière ${gapTo(R, p, b).toFixed(1)} s` : '') +
       (ps ? ` · Arrêt fin du tour ${ps} (${TYRES[ns.tyre].name.toLowerCase()}s)` : ' · Plus d’arrêt prévu') + wx);
     return;
   }
   if (what === 'tyres') {
-    const tl = tyreLaps(R, p);
-    say(R, `📻 Pneus ${TYRES[p.tyre].name.toLowerCase()}s usés à ${Math.round(p.wear * 100)} % : encore ~${tl.toFixed(1)} tours. ${p.slideWear > 0.25 ? 'Tu glisses beaucoup, ça les use vite !' : 'Usure normale.'}`);
+    const r = 1 - p.wear, toWeak = Math.max(0, (r - 0.4) / (TYRES[p.tyre].wpl * KPLAN));
+    say(R, `📻 Pneus ${TYRES[p.tyre].name.toLowerCase()}s à ${Math.max(0, Math.round(r * 100))} %, grip ${GRIPTXT[lifeBand(r)]}${r > 0.4 ? ` : ~${toWeak.toFixed(1)} tours avant la chute.` : '. Il faut changer !'} ${p.slideWear > 0.25 ? 'Tu glisses beaucoup, ça les use vite !' : 'Usure normale.'}`);
   } else if (what === 'fuel') {
     const fl = fuelLaps(R, p);
     say(R, `📻 Carburant : ${Math.round(p.fuel)} kg, de quoi faire ${fl.toFixed(1)} tours. ${fl >= left + 0.2 ? 'Ça suffit jusqu’à l’arrivée.' : fl * 1.25 >= left ? 'Juste : passe en économie pour finir.' : 'Il faudra ravitailler.'}`);
@@ -219,11 +275,17 @@ export function updateStrategy(R, dt) {
     c.slideWear = (c.slideWear || 0) * (1 - dt * 0.3) + slide * dt * 0.3;
     let k = (1 + 7 * slide + (c.offTrack ? 1.5 : 0)) * M.wear * (1.3 - c.tyreSkill / 250) * (c.player ? c.up?.tyre ?? 1 : 0.92);
     if (c.tyre === 'W') k *= 1 + 2.4 * (1 - R.wet);
-    if (!R.solo) c.wear += dist / (TYRES[c.tyre].km * 1000) * k;
+    if (!R.solo && !c.pit) c.wear += dist / (R.lapKm * 1000) * TYRES[c.tyre].wpl * k;
+    // pneu à 0 % : il peut exploser à tout moment ; on rentre au stand au ralenti
+    if (!R.solo && !c.flat && !c.pit && c.wear >= 1 && Math.random() < dt * (0.03 + 0.4 * (c.wear - 1))) {
+      c.flat = true; c.flats = (c.flats || 0) + 1;
+      if (c.lap < R.laps) c.box = nextStop(R, c);
+      if (c.player) say(R, '📻 Muret : crevaison ! Rentre au stand doucement, on change les pneus.');
+    } else if (c.player && !c.tyreWarn && !R.solo && c.wear > 0.6 && !c.pit) { c.tyreWarn = true; say(R, '📻 Muret : tes pneus passent sous 40 %, ils n’ont presque plus de grip.'); }
     // carburant : consommation, poids, panne sèche
     if (!R.solo && !c.pit && !c.finished) c.fuel = Math.max(0, c.fuel - dist / 1000 * FPK * M.fuel * (c.up?.fuel ?? 1));
     c.mass = 1 + c.fuel / 750;
-    c.powerMul = M.v; c.accMul = M.a;
+    c.powerMul = M.v * (c.flat ? 0.8 : 1); c.accMul = M.a;
     c.gripMul = tyreGrip(c, R.wet) * (1 - 0.06 * c.dmg);
     c.dmgKd = 1 - 0.45 * c.dmg;
     if (c.fuel <= 0 && !c.dnf && !R.solo && !c.finished) { c.dnf = true; if (c.player) say(R, '📻 Muret : panne sèche… c’est fini. On a mal calculé le carburant.'); }
@@ -283,14 +345,14 @@ export function pitStep(R, c, dt) {
   if (p.phase === 'stop') {
     c.v = 0; p.stop -= dt;
     if (p.stop <= 0) {
-      c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.stops++; c.box = null;
+      c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.stops++; c.box = null; c.flat = false; c.tyreWarn = false;
       c.lowFuel = false; if (c.player) c.fuelAdj = 0;
       if (c.plan) {
         if (c.stint >= c.plan.length - 1) c.plan.push({ laps: 0, tyre: c.tyre });
         c.stint++; c.plan[c.stint].tyre = c.tyre;
         // si le carburant et les pneus suffisent jusqu'à l'arrivée, plus d'autre arrêt
         const left = lapsLeft(R, c);
-        if (fuelLaps(R, c) >= left + 0.1 && tyreLaps(R, c) >= left) { c.plan.length = c.stint + 1; c.plan[c.stint].laps = Math.ceil(left); }
+        if (fuelLaps(R, c) >= left + 0.1 && lifeAtEnd(R, c) >= 0.38) { c.plan.length = c.stint + 1; c.plan[c.stint].laps = Math.ceil(left); }
       }
       p.phase = 'out';
     }

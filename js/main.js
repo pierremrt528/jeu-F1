@@ -14,7 +14,8 @@ import { buildQuestions, runPress, teamLine } from './press.js';
 import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
-import { TYRES, FORMATS, MODES, TANK, forecast, wxText, makePlans, lapsFor, fuelFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
+import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
+import { showPreraceScreen } from './prerace.js';
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { resetCareer } from './career.js';
@@ -459,36 +460,14 @@ $('camBtn').onclick = toggleCam;
 
 // ---------- avant la course : météo, 3 stratégies proposées, réglage des pneus et du carburant ----------
 const chip = t => `<b class="tchip" style="--c:${TYRES[t].color}">${t}</b>`;
-const mmss = s => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')}`;
 function showPrerace(opts) {
   const wx = opts.wx || (params.get('meteo') ? wxParam() : forecast(def.theme));
-  const { laps, lapTime } = raceFormat(), lapKm = track.length / 1000;
-  const plans = makePlans(laps, lapKm, lapTime, wx.rain);
-  let sel = 1, plan = null;
-  const choose = k => { sel = k; plan = { ...plans[k], stints: plans[k].stints.map(s => ({ ...s })) }; };
-  choose(Math.max(0, plans.findIndex(p => p.best)));
-  const render = () => {
-    $('prTitle').textContent = `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min`;
-    $('prWx').textContent = 'Météo : ' + wxText(wx);
-    $('prPlans').innerHTML = plans.map((p, k) => `<button data-plan="${k}" class="${k === sel ? 'pick' : ''}"><b>${p.name}${p.best ? ' <i class="best">★ la plus rapide</i>' : ''}</b>
-      <span class="stints">${p.stints.map(s => chip(s.tyre) + s.laps).join(' → ')}</span>
-      <small>${p.stops} arrêt${p.stops > 1 ? 's' : ''} · ${p.fuel} kg au départ · ≈ ${mmss(p.time)}</small></button>`).join('');
-    const s0 = plan.stints[0], need = fuelFor(s0.laps, lapKm);
-    $('prAdjust').innerHTML = `<span>Départ :</span><button id="prTyre">${chip(s0.tyre)} ${TYRES[s0.tyre].name}</button>
-      <button id="prF-">−</button><b>${plan.fuel} kg</b><button id="prF+">+</button>`;
-    const wetBad = (s0.tyre === 'W') !== wx.rain;
-    $('prHint').textContent = plan.fuel < need ? `⚠ Pas assez de carburant pour ${s0.laps} tours (il faut ${need} kg) : arrêt plus tôt ou panne sèche !`
-      : wetBad ? (wx.rain ? '⚠ Pneus slicks sur piste mouillée : très peu d’adhérence !' : '⚠ Pneus pluie sur le sec : lents et usure rapide.')
-      : `${plans[sel].desc}${plans[sel].best ? ' C’est le choix conseillé par le muret.' : ''} Tu pourras changer d’avis en course avec la radio.`;
-    document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => { choose(+b.dataset.plan); render(); });
-    $('prTyre').onclick = () => { const k = Object.keys(TYRES); s0.tyre = k[(k.indexOf(s0.tyre) + 1) % k.length]; render(); };
-    $('prF-').onclick = () => { plan.fuel = Math.max(10, plan.fuel - 5); render(); };
-    $('prF+').onclick = () => { plan.fuel = Math.min(TANK, plan.fuel + 5); render(); };
-  };
-  render();
-  $('prGo').onclick = () => startRace({ ...opts, wx: { ...wx }, plan });
-  $('prSim').onclick = () => startRace({ ...opts, wx: { ...wx }, plan, sim: true, autopilot: true });
-  $('prBack').onclick = () => opts.season ? openSeason() : showSolo();
+  const { laps, lapTime } = raceFormat();
+  showPreraceScreen($, { laps, lapKm: track.length / 1000, lapTime, wx, title: `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min` }, {
+    go: plan => startRace({ ...opts, wx: { ...wx }, plan }),
+    sim: plan => startRace({ ...opts, wx: { ...wx }, plan, sim: true, autopilot: true }),
+    back: () => opts.season ? openSeason() : showSolo(),
+  });
   show('prerace');
 }
 // stand et radio

@@ -1,7 +1,8 @@
 // HUD en DOM : position, tour, chronos, vitesse, rapport, aspiration, feux, mini-carte, tour des écarts.
 import { DS } from './track.js';
 import { SPEC } from './car.js';
-import { TYRES, MODES, fuelLaps } from './strategy.js';
+import { TYRES, MODES, fuelLaps, lifeBand } from './strategy.js';
+const LIFEC = { max: '#fff', bon: '#c8f07a', faible: '#ffb340', nul: '#ff5a4a' };
 
 // éléments mis en cache et écritures seulement si la valeur change (évite des recalculs de mise en page)
 const EL = {}, last = {};
@@ -51,7 +52,7 @@ export function updateHud(R, fps) {
   if (frame % 6) return;
   // pneus, météo, dégâts, stand
   const T = TYRES[p.tyre];
-  html('tyreChip', `<b style="--c:${T.color}">${p.tyre}</b>${Math.max(0, Math.round(100 - p.wear * 100))} %` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box.tyre].color}">${p.box.tyre}</b>` : ''));
+  html('tyreChip', `<b style="--c:${T.color}">${p.tyre}</b><span style="color:${LIFEC[lifeBand(1 - p.wear)]}">${p.flat ? '💥' : Math.max(0, Math.round(100 - p.wear * 100)) + ' %'}</span>` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box.tyre].color}">${p.box.tyre}</b>` : ''));
   txt('fuelIco', R.solo ? '' : `⛽ ${Math.round(p.fuel)} kg · ${fuelLaps(R, p).toFixed(1)} t` + (p.mode !== 'norm' ? ` · ${MODES[p.mode].name}` : ''));
   tog('fuelIco', 'low', !R.solo && fuelLaps(R, p) < 1.5);
   tog('tyreChip', 'box', !!p.box);
