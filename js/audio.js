@@ -1,6 +1,27 @@
-// Sons générés en direct (Web Audio, aucun fichier) : moteur du joueur, voiture la plus proche,
-// crissements, vent, pluie, chocs, bips des feux, radio.
+// Sons : moteurs = vrais enregistrements (sons/*.wav, un par motoriste, voir sons/CREDITS.txt) joués en boucle
+// et accélérés selon le régime ; le reste est généré en Web Audio (crissements, vent, pluie, chocs, feux, radio).
+// Si un fichier manque, le moteur synthétique d'origine prend le relais.
+import { ENGINES, engineOf } from './career.js';
 let ctx = null, master, nodes = null, on = true;
+// vitesse de lecture au ralenti et au rupteur (l'enregistrement est à régime moyen-haut)
+const SAMPLE = { valdrin: [0.55, 1.35], orsetti: [0.5, 1.25], hexadyne: [0.55, 1.3], kiyora: [0.6, 1.4] };
+const bufs = {};
+function loadSamples() {
+  for (const id in SAMPLE) fetch(`sons/${id}.wav`).then(r => r.ok ? r.arrayBuffer() : Promise.reject())
+    .then(a => new Promise((ok, ko) => ctx.decodeAudioData(a, ok, ko))).then(b => { bufs[id] = b; }).catch(() => {});
+}
+// une voix échantillonnée : boucle -> passe-bas -> volume ; démarrée dès que le fichier est décodé
+function voice(id, vol) {
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3000;
+  const g = ctx.createGain(); g.gain.value = 0; f.connect(g).connect(master);
+  return { id, f, g, vol, src: null };
+}
+function feed(v) {
+  if (v.src || !bufs[v.id]) return !!v.src;
+  const s = ctx.createBufferSource(); s.buffer = bufs[v.id]; s.loop = true;
+  s.connect(v.f); s.start(0, Math.random() * s.buffer.duration); v.src = s; return true;
+}
+const engId = c => c.player || c.teamIdx === 0 ? (engineOf()?.id || 'orsetti') : ENGINES[(c.teamIdx || 0) % ENGINES.length].id;
 
 function noiseBuffer() {
   const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0);
@@ -35,6 +56,9 @@ export function initAudio(enabled) {
     master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
     nodes = { nb: noiseBuffer() };
     nodes.me = engine(0.22); nodes.other = engine(0.12);
+    nodes.sme = {}; nodes.soth = {};
+    for (const id in SAMPLE) { nodes.sme[id] = voice(id, 0.5); nodes.soth[id] = voice(id, 0.3); }
+    loadSamples();
     nodes.screech = noise('bandpass', 1500, 6);
     nodes.wind = noise('lowpass', 500);
     nodes.rain = noise('highpass', 2500);
@@ -73,19 +97,36 @@ export function updateAudio(R, camPos, active) {
   if (!R || !active) return;
   const p = R.player, vtop = 93 * p.perf;
   // moteur du joueur
-  const r = rev(p, vtop), base = p.v < 0.5 ? 55 : 80 + 230 * r;
+  const r = rev(p, vtop), base = p.v < 0.5 ? 55 : 80 + 230 * r, myId = engId(p);
+  let real = false;
+  for (const id in nodes.sme) {
+    const v = nodes.sme[id], mine = id === myId && feed(v); real ||= mine;
+    if (!v.src) continue;
+    const [lo, hi] = SAMPLE[id], rr = p.v < 0.5 ? 0 : 0.12 + 0.88 * r;
+    set(v.src.playbackRate, lo + (hi - lo) * rr);
+    set(v.f.frequency, 900 + 6000 * (0.35 + 0.65 * p.throttle));
+    set(v.g.gain, mine && !p.out ? v.vol * (0.5 + 0.5 * p.throttle) : 0);
+  }
   set(nodes.me.o1.frequency, base); set(nodes.me.o2.frequency, base / 2);
   set(nodes.me.f.frequency, 500 + 2200 * r * (0.4 + 0.6 * p.throttle));
-  set(nodes.me.g.gain, p.out ? 0 : nodes.me.vol * (0.45 + 0.55 * p.throttle));
+  set(nodes.me.g.gain, p.out || real ? 0 : nodes.me.vol * (0.45 + 0.55 * p.throttle));
   // voiture la plus proche (pas le joueur)
   let best = null, bd = 1e9;
   for (const c of R.cars) { if (c === p || c.out) continue; const d = Math.hypot(c.x - camPos.x, c.z - camPos.z); if (d < bd) { bd = d; best = c; } }
+  const near = best ? Math.max(0, 1 - bd / 60) : 0, oId = best && engId(best);
+  let oReal = false;
+  for (const id in nodes.soth) {
+    const v = nodes.soth[id], it = id === oId && feed(v); oReal ||= it;
+    if (!v.src) continue;
+    if (it) { const [lo, hi] = SAMPLE[id], rb = rev(best, 93 * best.perf); set(v.src.playbackRate, lo + (hi - lo) * (0.12 + 0.88 * rb)); }
+    set(v.g.gain, it ? v.vol * near : 0);
+  }
   if (best) {
     const rb = rev(best, 93 * best.perf), fb = best.v < 0.5 ? 50 : 85 + 220 * rb;
     set(nodes.other.o1.frequency, fb); set(nodes.other.o2.frequency, fb / 2);
     set(nodes.other.f.frequency, 400 + 1500 * rb);
-    set(nodes.other.g.gain, nodes.other.vol * Math.max(0, 1 - bd / 60));
   }
+  set(nodes.other.g.gain, oReal ? 0 : nodes.other.vol * near);
   // crissements, vent, pluie
   set(nodes.screech.g.gain, p.sliding && p.v > 12 ? 0.08 : 0, 0.04);
   set(nodes.wind.g.gain, Math.min(0.12, Math.abs(p.v) / 700));

@@ -359,3 +359,4 @@ body.tilt #ctl .left { display: none; }
 .szact .main { letter-spacing: .02em; }
 .seg.mini { display: flex; align-items: center; gap: 8px; } .seg.mini label { margin: 0; } .seg.mini > div { flex: 1; }
 @media (max-height: 480px) and (orientation: landscape) { .szact .main { font-size: 13px; } }
+.help.credits { font-size: 10px; opacity: .6; margin-top: 2px; }
