@@ -134,14 +134,14 @@ function startRace(opts = raceOpts) {
 }
 // course simulée : le pilote automatique court à ta place, la course tourne en accéléré sans affichage
 function simulate() {
-  const btns = ['prGo', 'prSim', 'prBack'].map($);
+  const btns = ['prGo', 'prSim', 'prBack'].map($), out = $('prerace').classList.contains('hidden') ? $('szSimProg') : $('prHint');
   btns.forEach(b => b.disabled = true);
   const step = () => {
     if (!R || !R.sim) return;
     const t0 = performance.now();
     while (!R.done && performance.now() - t0 < 30) for (let k = 0; k < 30 && !R.done; k++) updateRace(R, 1 / 30);
     const lead = R.order[0], pct = Math.min(99, Math.round(100 * ((lead.lap - 1) + lead.idx / track.N) / R.laps));
-    $('prHint').textContent = `⏩ Simulation de la course… ${R.done ? 100 : Math.max(0, pct)} %  ·  P${R.order.indexOf(R.player) + 1} · tour ${Math.max(1, Math.min(R.player.lap, R.laps))}/${R.laps}`;
+    out.textContent = `⏩ Simulation de la course… ${R.done ? 100 : Math.max(0, pct)} %  ·  P${R.order.indexOf(R.player) + 1} · tour ${Math.max(1, Math.min(R.player.lap, R.laps))}/${R.laps}`;
     if (R.done) { btns.forEach(b => b.disabled = false); showResults(); } else setTimeout(step, 0);
   };
   step();
@@ -252,7 +252,8 @@ function showResults() {
       // ouverture du mercato : les écuries IA font leurs transferts
       const S = SZ.season;
       if (career && (S.round === MID_ROUND || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
-      if (S.done && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); }
+      // annonce du règlement de la saison suivante à la mi-saison (ou en fin de saison pour les anciennes sauvegardes)
+      if ((S.round === MID_ROUND || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
       SZ.recordPerf(playerPerf());
     }
   }
@@ -260,6 +261,7 @@ function showResults() {
   $('resGarageBtn').classList.toggle('hidden', R.free);
   $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
     (R.built ? `<br>🏗️ Construction terminée : <b>${R.built}</b>` : '') +
+    (R.regNews ? `<br>📜 <b>Annonce officielle</b> : nouveau règlement ${SZ.season.year + 1} pour <b>${R.regNews}</b>. Tes pièces ${R.regN > 1 ? 'de ces domaines' : 'de ce domaine'} repartiront de zéro l’an prochain.` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
     (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
@@ -324,11 +326,12 @@ function openSeason() {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + (S.round === MID_ROUND ? newsHTML(S) : '');
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === MID_ROUND ? newsHTML(S) : '');
     const mid = S.round === MID_ROUND && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
+      `<button id="szSimGP">⏩ Simuler le Grand Prix${S.grid ? '' : ' (qualifs + course)'}</button><p id="szSimProg" class="dim small"></p>` +
       (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(transferts ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
     document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
     const mk = $('szMarket'); if (mk) mk.onclick = () => {
@@ -337,11 +340,20 @@ function openSeason() {
     };
     const q = $('szQuali'); if (q) q.onclick = async () => { await enableTilt(settings.tilt); startRace({ solo: true, wx: S.wx }); };
     const sm = $('szSim'); if (sm) sm.onclick = () => showQuali(simLap(S.wx));
+    // tout simuler d'un coup : qualifications puis course avec la stratégie conseillée
+    $('szSimGP').onclick = () => {
+      if (!S.grid) {
+        const rows = SZ.qualifying(track, simLap(S.wx), S.wx?.rain);
+        S.quali = rows.map(r => ({ name: r.name, time: r.time })); S.grid = rows.map(r => r.name); SZ.saveSeason();
+      }
+      document.querySelectorAll('#szActions button').forEach(b => b.disabled = true);
+      startRace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: { ...S.wx }, sim: true, autopilot: true });
+    };
     const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx }); };
   }
   show('season');
 }
-const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartent de zéro dans ce domaine : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées.</div>` : '';
+const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartiront de zéro ${S.reg.length > 1 ? "dans ces domaines" : "dans ce domaine"} : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées à l’intersaison. Inutile d’y investir gros d’ici là !</div>` : '';
 const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';
 // intersaison : dotation (niveau de l'écurie + place au championnat), puis moteur et transferts
 function offSeason(tp) {
