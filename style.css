@@ -646,3 +646,35 @@ body.tilt #ctl .left { display: none; }
   .card.prerace { padding: 8px 12px; gap: 4px; } .prplans button { padding: 5px 7px; gap: 3px; }
   .sbar.big button { height: 24px; } .prleft > .dim { display: none; }
 }
+
+/* ---------- QG : zones, chefs, calendrier daté ---------- */
+.zones { display: flex; gap: 4px; margin: 0 auto 0 12px; padding: 3px; border-radius: 6px; background: rgba(0,0,0,.35); }
+.zones button { padding: 6px 12px; font-family: var(--cond); font-stretch: condensed; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .04em; font-size: 14px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--mut); }
+.zones button.sel { background: var(--acc); color: #fff; box-shadow: none; }
+#garage .ghead h2 { flex: none; }
+.dcost.three { grid-template-columns: 1fr 1fr 1fr; } .dcost .rk b { color: #ff9a8a; }
+#gDetail .chief { margin: 0; font-size: 11.5px; color: var(--mut); } #gDetail .chief b { color: #fff; }
+#gTree .node.chef { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 10px; border-radius: 7px; border: 1px solid #2a3140; background: linear-gradient(160deg, #1b2029, #12151c); text-align: left; clip-path: none; }
+#gTree .node.chef .av { width: 34px; height: 34px; font-size: 11px; background: var(--c); }
+#gTree .node.chef b { font-size: 13.5px; } #gTree .node.chef .cf { color: var(--mut); font-size: 10.5px; margin-top: -3px; white-space: normal; }
+.cb { display: grid; grid-template-columns: 44px 1fr 38px; align-items: center; gap: 5px; font-size: 10.5px; }
+.cb small { color: var(--mut); } .cb i { height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; } .cb em { display: block; height: 100%; margin: 0; background: var(--c); }
+.cb b { font-size: 11px; text-align: right; color: #8ff0b6; }
+#gTree .node.chef .fee { color: var(--gold); font-weight: 800; font-size: 12px; margin-top: 2px; }
+#gTree .node.chef.own { border-color: var(--c); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 30%, #12151c), #12151c); } #gTree .node.chef.own .fee { color: #8ff0b6; }
+#gTree .node.chef.poor .fee { color: #ff8a7a; }
+#garage .garage.infra #gTree:has(.chef) { grid-template-columns: repeat(2, 1fr); }
+#gStats .istat small { color: #8ff0b6; margin-left: 4px; }
+.cal .gap { font-style: normal; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.06); color: var(--mut); }
+.cal .gap.b2b { background: rgba(255,61,46,.16); color: #ff9a8a; } .cal .gap.long { background: rgba(34,211,197,.14); color: var(--acc2); }
+#rdGain .bad { color: #ff8a7a; }
+@media (orientation: portrait) {
+  #garage .ghead { flex-wrap: wrap; } .zones { order: 3; width: 100%; margin: 4px 0 0; } .zones button { flex: 1; }
+}
+@media (max-height: 480px) and (orientation: landscape) { .zones button { padding: 4px 10px; font-size: 13px; } }
+#gTree .node.chef > * { flex-shrink: 0; }
+#gTree .node.chef .ch { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+#gTree .node.chef .ch > span:last-child { display: flex; flex-direction: column; min-width: 0; } #gTree .node.chef .cf { margin: 0; }
+#gTree .node.chef .av { flex: none; position: static; display: grid; place-items: center; border-radius: 50%; color: #0a0c10; font-weight: 900; }
+.cb { grid-template-columns: 46px 1fr 46px; } .cb b { white-space: nowrap; }

@@ -5,6 +5,17 @@ import { SPEC } from './car.js';
 import { DS } from './track.js';
 
 export const CALENDAR = ['valmont', 'sahrane', 'portazur', 'kerlan', 'sierra', 'veldmar', 'solenza', 'neokyara', 'varenne', 'brekka'];
+// Rythme d'une vraie saison : jours entre deux GP (week-ends consécutifs, doublés, pause d'été), puis l'intersaison
+export const GAPS = [14, 7, 21, 7, 14, 35, 7, 14, 7], OFF_DAYS = 90;
+const MOIS = ['janv.', 'févr.', 'mars', 'avril', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+// date du GP k : premier départ le 2e dimanche de mars
+export function raceDate(k, year = season?.year || 2027) {
+  const d = new Date(year, 2, 8); d.setDate(d.getDate() + (7 - d.getDay()) % 7);
+  d.setDate(d.getDate() + GAPS.slice(0, k).reduce((a, b) => a + b, 0));
+  return d;
+}
+export const fmtDate = d => `${d.getDate()} ${MOIS[d.getMonth()]}`;
+export const daysAfter = k => k < GAPS.length ? GAPS[k] : OFF_DAYS;   // jours entre le GP k et le suivant
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const KEY = 'gpm-season';
 const DRIVERS = () => TEAMS.flatMap(t => t.drivers.map(d => ({ name: d.name, team: t.name, color: t.color, player: !!d.player })));
@@ -114,7 +125,8 @@ export function calendarHTML() {
     const c = CIRCUITS.find(x => x.id === id), r = season.results[k];
     const cls = k === season.round && !season.done ? 'next' : r ? 'past' : '';
     const res = r ? `<b class="${r.pos <= 3 ? 'pod' : ''}">P${r.pos}</b> <small>+${r.pts} pts</small>` : k === season.round ? '<b>À suivre</b>' : '';
-    return `<div class="cal ${cls}"><span>${k + 1}</span><div>${c.name}<small>${c.type}</small></div><em>${res}</em></div>`;
+    const gap = k ? GAPS[k - 1] : 0, tag = !k ? '' : gap === 7 ? '<i class="gap b2b">enchaîné</i>' : gap >= 28 ? `<i class="gap long">pause ${gap / 7} sem.</i>` : `<i class="gap">${gap / 7} sem.</i>`;
+    return `<div class="cal ${cls}"><span>${k + 1}</span><div>${c.name}<small>${fmtDate(raceDate(k))} · ${c.type}</small></div><em>${res || tag}</em></div>`;
   }).join('');
 }
 export function standingsHTML(kind) {

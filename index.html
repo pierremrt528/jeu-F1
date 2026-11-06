@@ -43,7 +43,7 @@
     </div>
     <nav class="hbar">
       <button id="settingsBtn">⚙ Réglages</button>
-      <button id="garageBtn">🔧 Garage <small id="menuPts"></small></button>
+      <button id="garageBtn">🏭 QG <small id="menuPts"></small></button>
       <span id="teamState" class="pstate"></span>
     </nav>
   </div>
@@ -127,7 +127,7 @@
     <h2 id="resultTitle">Classement</h2>
     <div class="scroll"><table id="resultsTable"></table></div>
     <div id="rdGain"></div>
-    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="pressBtn" class="main">🎤 Presse</button><button id="resGarageBtn">🔧 Garage</button><button id="menuBtn">Menu</button></div>
+    <div class="btns"><button id="againBtn" class="main">Rejouer</button><button id="pressBtn" class="main">🎤 Presse</button><button id="resGarageBtn">🏭 QG</button><button id="menuBtn">Menu</button></div>
   </div>
 </div>
 
@@ -140,7 +140,7 @@
       <div class="szside">
         <div id="szNext" class="sznext"></div>
         <div id="szActions" class="szact"></div>
-        <div class="szact row2"><button id="szStand">🏁 Classements</button><button id="szGarage">🔧 Garage</button></div>
+        <div class="szact row2"><button id="szStand">🏁 Classements</button><button id="szGarage">🏭 QG</button></div>
         <button id="szQuit" class="linkish">Abandonner la saison</button>
         <button id="szReset" class="linkish">↺ Recommencer la carrière au début</button>
       </div>
@@ -201,7 +201,7 @@
 
 <div id="garage" class="screen hidden">
   <div class="card wide garage">
-    <div class="ghead"><h2>Garage</h2><span class="pts"><small>Budget</small><b><span id="gPts">0</span> M€</b></span><button id="garageClose" class="back" aria-label="Fermer">✕</button></div>
+    <div class="ghead"><h2>QG</h2><div id="gZones" class="zones"></div><span class="pts"><small>Budget</small><b><span id="gPts">0</span> M€</b></span><button id="garageClose" class="back" aria-label="Fermer">✕</button></div>
     <div id="gTabs" class="gtabs"></div>
     <div class="gbody">
       <div id="gTree" class="gtree"></div>
