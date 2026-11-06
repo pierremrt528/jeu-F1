@@ -283,3 +283,5 @@ body.tilt #ctl .left { display: none; }
   .copt.drv { padding: 6px 8px; gap: 1px; } .copt.drv b { font-size: 14px; } .copt.drv .cstat { grid-template-columns: 46px 1fr 18px; gap: 4px; font-size: 10px; }
   .setup .ghead h2 { font-size: 20px; }
 }
+.news { margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(255,255,255,.05); font-size: 12px; color: #c3cad3; }
+.news p { margin-top: 3px; line-height: 1.3; }

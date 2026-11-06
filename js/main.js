@@ -20,7 +20,7 @@ import { initFx, updateFx } from './fx.js';
 import { resetCareer } from './career.js';
 import { resetTeam, saveTeam } from './team.js';
 import { tickInfra, sponsorIncome, prizeBonus, resetInfra } from './infra.js';
-import { openMarket, MID_ROUND, MID_MULT } from './market.js';
+import { openMarket, aiMercato, MID_ROUND, MID_MULT } from './market.js';
 import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
@@ -225,11 +225,17 @@ function showResults() {
     R.pressCtx = { pos: me.pos, grid: me.grid, gained: me.grid - me.pos, circuit: def.name, winner: rows[0].name,
       rival: me.pos > 1 && Math.random() < 0.6 ? rows[me.pos - 2].name : null, mate: mate?.name, mateAhead: mate && mate.pos < me.pos, fastest };
     R.pressDone = false;
-    if (R.season) { SZ.recordRace(rows); R.grow = growMate(); }
+    if (R.season) {
+      SZ.recordRace(rows); R.grow = growMate();
+      // ouverture du mercato : les écuries IA font leurs transferts
+      const S = SZ.season;
+      if (career && (S.round === MID_ROUND || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
+    }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Rejouer';
   $('rdGain').innerHTML = `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
     (R.built ? `<br>🏗️ Construction terminée : <b>${R.built}</b>` : '') +
+    (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
     (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
   $('pressBtn').classList.toggle('hidden', R.pressDone);
@@ -272,14 +278,14 @@ function openSeason() {
   if (S.done) {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
     const tp = SZ.teamStandings().findIndex(t => t.player) + 1;
-    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, contrat moteur et transferts à prix normaux.</p>`;
+    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, contrat moteur et transferts à prix normaux.</p>` + newsHTML(S);
     $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
     $('szNew').onclick = () => offSeason(tp);
   } else {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[settings.format].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>`;
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[settings.format].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + (S.round === MID_ROUND ? newsHTML(S) : '');
     const mid = S.round === MID_ROUND && career;
     $('szActions').innerHTML = (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
@@ -298,6 +304,7 @@ function openSeason() {
   }
   show('season');
 }
+const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';
 // intersaison : dotation (niveau de l'écurie + place au championnat), puis moteur et transferts
 function offSeason(tp) {
   const S = SZ.season;
