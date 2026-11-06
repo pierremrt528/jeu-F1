@@ -39,8 +39,8 @@ export function stepCar(car, track, dt) {
   const half = track.width / 2;
   car.offTrack = Math.abs(car.lat) > half + 1.3;
   const u = car.up || NO_UP;   // améliorations du garage (multiplicateurs)
-  const grip = car.offTrack ? 0.55 * u.off : 1;
-  const vtop = SPEC.vtop * car.perf * u.vtop * (1 + SPEC.slip * u.slip * car.slipstream) * (car.offTrack ? 0.5 : 1);
+  const grip = (car.offTrack ? 0.55 * u.off : 1) * (car.gripMul ?? 1);   // pneus, pluie, dégâts
+  const vtop = SPEC.vtop * car.perf * u.vtop * (1 - (car.powerLoss || 0)) * (1 - 0.02 * (car.dmg || 0)) * (1 + SPEC.slip * u.slip * car.slipstream) * (car.offTrack ? 0.5 : 1);
 
   // longitudinal
   let a;
@@ -64,7 +64,7 @@ export function stepCar(car, track, dt) {
   // latéral : braquage réduit avec la vitesse, limité par l'adhérence (appui aéro inclus)
   const delta = SPEC.steerMax * u.steer * car.steer / (1 + Math.abs(v) / 20);
   let yaw = v * Math.tan(delta) / SPEC.wb;
-  const latMax = SPEC.mu * u.mu * grip * (g + SPEC.kd * u.kd * v * v);
+  const latMax = SPEC.mu * u.mu * grip * (g + SPEC.kd * u.kd * (car.dmgKd ?? 1) * v * v);
   const latWant = Math.abs(v * yaw);
   car.sliding = latWant > latMax;
   if (car.sliding) {
@@ -97,6 +97,7 @@ export function stepCar(car, track, dt) {
     const rel = Math.atan2(Math.sin(car.heading - track.H[i]), Math.cos(car.heading - track.H[i]));
     const dir = Math.abs(rel) < Math.PI / 2 ? 0 : Math.PI;
     const impact = Math.abs(Math.sin(rel));
+    if (car.v > 25 && !(car.hitWall > 0) && impact > 0.25) car.dmgNew = (car.dmgNew || 0) + impact * Math.min(1, car.v / 60) * 0.25 * u.wall;
     car.v *= 1 - Math.min(0.7, 0.1 + impact * 0.9) * u.wall;
     const target = track.H[i] + dir;
     const d = Math.atan2(Math.sin(target - car.heading), Math.cos(target - car.heading));

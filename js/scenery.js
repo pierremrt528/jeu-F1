@@ -64,7 +64,7 @@ export function buildEnvironment(scene, renderer, track, world = scene) {
   world.add(sky);
 
   // éclairage
-  world.add(new THREE.HemisphereLight(0xd8e9ff, 0x6a7448, 1.25));
+  const hemi = new THREE.HemisphereLight(0xd8e9ff, 0x6a7448, 1.25); world.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.copy(sunDir); world.add(sun);
 
   // reflets des carrosseries : carte d'environnement tirée du ciel
@@ -78,7 +78,7 @@ export function buildEnvironment(scene, renderer, track, world = scene) {
   scene.environment = pm.fromScene(envScene, 0.02, 0.1, 100).texture;
   pm.dispose();
 
-  return { sky };
+  return { sky, hemi, sun, skyMat, sunSprite, fog: { color: scene.fog.color.clone(), near: scene.fog.near, far: scene.fog.far } };
 }
 
 export function buildTrackMeshes(track, scene) {
@@ -126,7 +126,17 @@ export function buildTrackMeshes(track, scene) {
       fences.quad(A(wall + 0.1, 1.15), A(wall + 0.1, 4.2), B(wall + 0.1, 1.15), B(wall + 0.1, 4.2), [v0 / 3, 0], [v0 / 3, 1], [v1 / 3, 0], [v1 / 3, 1]);
     }
   }
-  group.add(road.mesh(L({ map: TX.asphalt() })));
+  const roadMesh = road.mesh(L({ map: TX.asphalt() })); roadMesh.name = 'road'; group.add(roadMesh);
+  // voie des stands (même décalage que strategy.js) : bande d'asphalte côté stands
+  {
+    const pits = new Geo(), runoff = track.runoff, pitLat = w / 2 + Math.max(1.4, Math.min(runoff - 1.6, 5));
+    const a0 = w / 2 + 1.1, a1 = Math.min(pitLat + 2.2, w / 2 + runoff - 0.4);
+    for (let k = -150; k < 80; k++) {
+      const i = (k + N) % N, j = (i + 1) % N, v0 = k * DSm, v1 = (k + 1) * DSm;
+      pits.quad(pt(i, a0, 0.03), pt(i, a1, 0.03), pt(j, a0, 0.03), pt(j, a1, 0.03), [0, v0 / 16], [0.4, v0 / 16], [0, v1 / 16], [0.4, v1 / 16]);
+    }
+    group.add(pits.mesh(L({ map: TX.asphalt(), color: 0xb9bdc2, polygonOffset: true, polygonOffsetFactor: -1 })));
+  }
   group.add(kerbs.mesh(L({ map: TX.kerb(), polygonOffset: true, polygonOffsetFactor: -1 })));
   group.add(grass.mesh(L({ map: surfTex(), vertexColors: true })));
   group.add(gravel.mesh(L({ map: TX.gravel(), vertexColors: true })));

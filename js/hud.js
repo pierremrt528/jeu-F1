@@ -1,6 +1,7 @@
 // HUD en DOM : position, tour, chronos, vitesse, rapport, aspiration, feux, mini-carte, tour des écarts.
 import { DS } from './track.js';
 import { SPEC } from './car.js';
+import { TYRES } from './strategy.js';
 
 const $ = id => document.getElementById(id);
 let mm, mctx, mapImg, mapTf, frame = 0;
@@ -37,7 +38,19 @@ export function updateHud(R, fps) {
   $('rpm').style.width = (p.gear === 'N' ? 15 : (40 + 60 * ((f * 9) % 1))) + '%';
   $('slip').classList.toggle('show', p.slipstream > 0.25 && R.phase === 'race');
   $('lights').className = R.phase === 'lights' ? 'n' + R.lightsOn : (R.t - R.goAt < 1 ? 'go' : 'off');
+  const rd = $('radio');
+  if (R.radioT > 0 && R.radioMsg) { if (rd.textContent !== R.radioMsg) rd.textContent = R.radioMsg; rd.classList.add('show'); } else rd.classList.remove('show');
   if (frame % 6) return;
+  // pneus, météo, dégâts, stand
+  const T = TYRES[p.tyre], ch = $('tyreChip');
+  ch.innerHTML = `<b style="--c:${T.color}">${p.tyre}</b>${Math.max(0, Math.round(100 - p.wear * 100))} %` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box].color}">${p.box}</b>` : '');
+  ch.classList.toggle('box', !!p.box);
+  $('wxIco').textContent = R.raining ? '🌧️' : R.wet > 0.1 ? '💧' : '';
+  $('dmgIco').textContent = p.dmg > 0.12 ? `⚠ aileron ${Math.round(p.dmg * 100)} %` : p.powerLoss ? '⚠ moteur' : '';
+  const bb = $('boxBtn');
+  bb.classList.toggle('hidden', !!R.solo);
+  bb.classList.toggle('on', !!p.box || !!p.pit);
+  bb.textContent = p.pit ? '🔧 AU STAND' : p.box ? '🔧 BOX ✓' : '🔧 STAND';
   $('pos').innerHTML = `P${pos}<small>/${n}</small>`;
   $('lap').textContent = R.solo ? (p.lap < 1 ? 'Tour de lancement' : 'Tour chrono') : `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`;
   $('cur').textContent = R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0);

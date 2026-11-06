@@ -37,12 +37,12 @@ export function lapEstimate(track, skill, perf, accMul = 1) {
 }
 
 // Temps des IA en qualifications ; le joueur fournit son temps (null = pas de temps)
-export function qualifying(track, playerTime) {
+export function qualifying(track, playerTime, wet = false) {
   const rows = [];
   for (const t of TEAMS) for (const d of t.drivers) {
     if (d.player) { rows.push({ name: d.name, team: t.name, color: t.color, player: true, time: playerTime }); continue; }
     const perf = t.perf + (season?.dev[t.name] || 0);
-    const time = lapEstimate(track, d.skill, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985;
+    const time = lapEstimate(track, d.skill, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985 * (wet ? 1.12 : 1);
     rows.push({ name: d.name, team: t.name, color: t.color, time });
   }
   rows.sort((a, b) => (a.time || 1e9) - (b.time || 1e9));
@@ -53,7 +53,7 @@ export function qualifying(track, playerTime) {
 export function recordRace(rows) {
   const fast = rows.filter(r => r.best).sort((a, b) => a.best - b.best)[0];
   const res = rows.map(r => {
-    let p = POINTS[r.pos - 1] || 0;
+    let p = r.dnf ? 0 : POINTS[r.pos - 1] || 0;
     if (fast && r.name === fast.name && r.pos <= 10) p += 1;   // point du meilleur tour
     season.pts[r.name] = (season.pts[r.name] || 0) + p;
     return { name: r.name, pos: r.pos, pts: p };
@@ -62,7 +62,7 @@ export function recordRace(rows) {
   season.results.push({ circuit: CALENDAR[season.round], pos: me.pos, pts: res.find(r => r.name === me.name).pts, podium: rows.slice(0, 3).map(r => r.name), fast: fast?.name });
   // les écuries rivales progressent un peu à chaque course
   for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + 0.0012 + Math.random() * 0.0018;
-  season.round++; season.grid = null; season.quali = null;
+  season.round++; season.grid = null; season.quali = null; season.wx = null;
   if (season.round >= CALENDAR.length) season.done = true;
   saveSeason();
 }

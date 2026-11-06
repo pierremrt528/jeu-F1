@@ -218,3 +218,22 @@ body.tilt #ctl .left { display: none; }
   .setup { padding: 10px 12px; gap: 6px; } .copt { padding: 6px 8px; gap: 1px; } .copt b { font-size: 14px; } .clist { grid-template-columns: repeat(4, 1fr); }
   .clist.tiers { grid-template-columns: repeat(3, 1fr); } .clist.engs { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* pneus, météo, stands */
+#radio { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); max-width: 70%; padding: 6px 12px; border-radius: 10px; background: rgba(10,14,20,.78); color: #fff; font-size: 13px; text-align: center; opacity: 0; transition: opacity .3s; pointer-events: none; }
+#radio.show { opacity: 1; }
+#carState { position: absolute; left: calc(10px + env(safe-area-inset-left)); bottom: calc(118px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; font-size: 13px; }
+#tyreChip { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 16px; background: rgba(20,24,30,.75); font-size: 13px; }
+#tyreChip b { width: 24px; height: 24px; border-radius: 50%; border: 4px solid var(--c); display: flex; align-items: center; justify-content: center; font-size: 11px; background: #111; }
+#tyreChip.box { outline: 2px solid #ffd84d; }
+#dmgIco { color: #ff9a6a; font-weight: 700; }
+#boxBtn.on { background: #b58900; color: #111; }
+.prerace { max-width: 520px; }
+.prwx { font-size: 17px; font-weight: 700; }
+.prtyres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.prtyres button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: 13px; border: 2px solid transparent; }
+.prtyres button b { width: 34px; height: 34px; border-radius: 50%; border: 6px solid var(--c); background: #111; display: flex; align-items: center; justify-content: center; }
+.prtyres button.pick { border-color: #e10600; background: #3a1f22; }
+.prtyres small { color: #9aa3ae; font-size: 11px; }
+.small { font-size: 12px; }
+@media (orientation: portrait) { #carState { bottom: calc(210px + env(safe-area-inset-bottom)); } }

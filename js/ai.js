@@ -10,7 +10,7 @@ export function aiDrive(car, track, cars, dt) {
   // voiture devant sur la même portion de piste ?
   let ahead = null, gap = 1e9;
   for (const o of cars) {
-    if (o === car) continue;
+    if (o === car || o.out || o.pit) continue;
     const d = ((o.idx - car.idx + N) % N) * DS;
     if (d > 0 && d < 40 && Math.abs(o.lat - car.lat) < 2.6 && d < gap) { gap = d; ahead = o; }
   }
@@ -45,7 +45,7 @@ export function aiDrive(car, track, cars, dt) {
   // vitesse cible
   let vt = V[car.idx];
   for (let k = 1; k <= 4; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
-  vt = Math.min(vt * car.skill, vCap);
+  vt = Math.min(vt * car.skill * Math.sqrt((car.gripMul ?? 1) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
   if (car.offTrack) vt = Math.min(vt, 25);
   if (car.v < vt - 0.8) { car.throttle = 1; car.brake = 0; }
   else if (car.v > vt + 1.2) { car.throttle = 0; car.brake = Math.min(1, (car.v - vt) / 6); }

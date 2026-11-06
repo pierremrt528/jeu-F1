@@ -6,18 +6,22 @@ import { DS } from './track.js';
 import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
 import { raceModifiers } from './team.js';
+import { setupStrategy, updateStrategy, pitStep, addDamage } from './strategy.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
   for (const team of TEAMS) for (const d of team.drivers) {
     if (opts.solo && !d.player) continue;  // qualifications : la voiture du joueur seule
-    cars.push(new Car(team, d, team.perf + (opts.perfBonus?.[team.name] || 0)));
+    const car = new Car(team, d, team.perf + (opts.perfBonus?.[team.name] || 0));
+    car.stats = d.stats; cars.push(car);
   }
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
   player.up = carUpgrades();
   const mod = raceModifiers();
   for (const k in mod) player.up[k] = (player.up[k] ?? 1) + mod[k];
+  player.rel = 50 + player.up.rel;
+  const wx = opts.wx || { rain: false, change: null };
   let ai = cars.filter(c => !c.player).sort((a, b) => b.skill * b.perf - a.skill * a.perf);
   const gridPos = Math.min(19, Math.max(0, (opts.grid ?? 10) - 1));
   ai.splice(gridPos, 0, player);
@@ -28,7 +32,8 @@ export function createRace(track, scene, laps, opts = {}) {
     const i = (N - 150) % N;
     Object.assign(player, { idx: i, heading: track.H[i], x: track.X[i], z: track.Z[i], y: track.Y[i], lat: 0, v: 45, grid: 1 });
     placeMesh(player); scene.add(player.mesh);
-    return { track, cars, player, laps: 1, order: [player], t: 0, phase: 'race', raceStart: 0, lightsOn: 0, goAt: -10, solo: true, autopilot: !!opts.autopilot, done: false };
+    const Rq = { track, cars, player, laps: 1, order: [player], t: 0, phase: 'race', raceStart: 0, lightsOn: 0, goAt: -10, solo: true, autopilot: !!opts.autopilot, done: false };
+    setupStrategy(Rq, track, { rain: wx.rain, change: null }); return Rq;
   }
   ai.forEach((c, k) => {
     const i = (N - 5 - k * 4) % N, s = k % 2 ? 1 : -1;
@@ -38,11 +43,13 @@ export function createRace(track, scene, laps, opts = {}) {
     c.grid = k + 1;
     placeMesh(c); scene.add(c.mesh);
   });
-  return {
+  const R = {
     track, cars, player, laps, order: ai.slice(),
     t: -1, phase: 'lights', lightsOn: 0, goAt: 4.2 + 0.4 + Math.random() * 0.8,
     autopilot: !!opts.autopilot, done: false,
   };
+  setupStrategy(R, track, { ...wx }, opts.tyre);
+  return R;
 }
 
 export function updateRace(R, dt) {
@@ -63,13 +70,14 @@ export function updateRace(R, dt) {
     if (!racing) { c.throttle = 0; c.brake = 1; }
     if (c.finished && c.v > 20) { c.throttle = 0; }
   }
+  if (racing) updateStrategy(R, dt);
 
   // aspiration : voiture devant à moins de 45 m, alignée
   for (const c of cars) {
     let s = 0;
     const fx = Math.sin(c.heading), fz = Math.cos(c.heading);
     for (const o of cars) {
-      if (o === c) continue;
+      if (o === c || o.out || o.pit) continue;
       const dx = o.x - c.x, dz = o.z - c.z, along = dx * fx + dz * fz;
       if (along < 4 || along > 45) continue;
       const side = Math.abs(dx * -fz + dz * fx);
@@ -79,8 +87,10 @@ export function updateRace(R, dt) {
   }
 
   for (const c of cars) {
-    const prev = stepCar(c, track, dt);
-    c.hitWall = Math.max(0, (c.hitWall || 0) - dt);
+    if (c.out) continue;
+    const prev = c.pit ? pitStep(R, c, dt) : stepCar(c, track, dt);
+    if (c.dmgNew) { addDamage(R, c, c.dmgNew); c.dmgNew = 0; }
+    c.hitWall = Math.max(0, (c.hitWall || 0) - dt); c.bump = Math.max(0, (c.bump || 0) - dt);
     // passage de la ligne
     if (prev > N * 0.75 && c.idx < N * 0.25) {
       c.lap++;
@@ -93,13 +103,13 @@ export function updateRace(R, dt) {
     } else if (prev < N * 0.25 && c.idx > N * 0.75) c.lap--;
   }
 
-  collide(cars);
+  collide(cars.filter(c => !c.out && !c.pit));
   for (const c of cars) placeMesh(c);
 
   // classement : tours puis distance parcourue (les arrivés par temps)
-  const prog = c => c.finished ? 1e9 - c.finishTime : c.lap * N + c.idx;
+  const prog = c => c.finished ? 1e9 - c.finishTime : c.dnf ? -1e9 + c.lap * N + c.idx : c.lap * N + c.idx;
   R.order = cars.slice().sort((a, b) => prog(b) - prog(a));
-  if (R.player.finished && !R.done) { R.done = true; R.endT = R.t; }
+  if ((R.player.finished || R.player.out) && !R.done) { R.done = true; R.endT = R.t; }
 }
 
 // Collisions entre voitures : deux cercles par voiture (avant / arrière)
@@ -122,7 +132,9 @@ function collide(cars) {
         const k = close * 0.55;
         A.v -= k * (fa[0] * dx + fa[1] * dz);
         B.v += k * (fb[0] * dx + fb[1] * dz);
-        A.bump = B.bump = 0.25;
+        // dégâts seulement sur un nouveau contact franc
+        if (close > 5) { if (!(A.bump > 0)) A.dmgNew = (A.dmgNew || 0) + close * 0.01; if (!(B.bump > 0)) B.dmgNew = (B.dmgNew || 0) + close * 0.01; }
+        A.bump = B.bump = 0.6;
       }
     }
   }
@@ -135,10 +147,11 @@ export function results(R) {
   const t = R.endT - R.raceStart;
   return R.order.map((c, k) => {
     let time = c.finishTime;
-    if (!c.finished) {
+    if (c.dnf) time = Infinity;
+    else if (!c.finished) {
       const done = (c.lap - 1) * track.N + c.idx, left = Math.max(0, total - done) * DS;
       time = t + left / 70;
     }
-    return { pos: k + 1, grid: c.grid, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished };
+    return { pos: k + 1, grid: c.grid, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished, dnf: !!c.dnf, stops: c.stops, tyre: c.tyre };
   });
 }

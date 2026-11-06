@@ -47,11 +47,14 @@
   <div class="tr">
     <button id="pauseBtn" class="mini">II</button>
     <button id="camBtn" class="mini"></button>
+    <button id="boxBtn" class="mini">🔧 STAND</button>
     <canvas id="minimap"></canvas>
     <div id="fps" class="dim"></div>
   </div>
   <div id="lights" class="off"><i></i><i></i><i></i><i></i><i></i></div>
   <div id="slip">ASPIRATION</div>
+  <div id="radio"></div>
+  <div id="carState"><button id="tyreChip"></button><span id="wxIco"></span><span id="dmgIco"></span></div>
   <div id="dash"><div id="gear">N</div><div><span id="spd">0</span><small> km/h</small><div class="bar"><div id="rpm"></div></div></div></div>
   <div id="ctl">
     <div class="left"><div class="pad" data-ctl="left">◀</div><div class="pad" data-ctl="right">▶</div></div>
@@ -113,6 +116,17 @@
   <div class="card wide press">
     <div class="phead"><h2>Conférence de presse</h2><div id="pressState" class="pstate"></div></div>
     <div id="pressBody"></div>
+  </div>
+</div>
+
+<div id="prerace" class="screen hidden">
+  <div class="card prerace">
+    <h2 id="prTitle">Avant la course</h2>
+    <p id="prWx" class="prwx"></p>
+    <p class="dim">Pneus de départ</p>
+    <div id="prTyres" class="prtyres"></div>
+    <p id="prHint" class="dim small"></p>
+    <div class="btns"><button id="prGo" class="main">Aller sur la grille</button><button id="prBack">Retour</button></div>
   </div>
 </div>
 
