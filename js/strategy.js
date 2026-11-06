@@ -11,6 +11,7 @@ export const TYRES = {
   W: { name: 'Pluie', color: '#2f8cff', grip: 0.86, km: 30, pace: 0 },
 };
 export const FORMATS = {
+  flash: { name: 'Éclair', minutes: 0, prize: 0.3 },   // course solo : 3 tours
   sprint: { name: 'Sprint', minutes: 11, prize: 1 },
   long: { name: 'Long', minutes: 22, prize: 1.6 },
 };

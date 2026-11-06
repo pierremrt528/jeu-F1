@@ -15,26 +15,69 @@
 <body>
 <canvas id="game"></canvas>
 
-<div id="menu" class="screen">
-  <div class="card">
-    <h1>Grand Prix<br><span>Manager</span></h1>
-    <div class="circ">
-      <button id="prevC" aria-label="Circuit précédent">◀</button>
-      <div><canvas id="circPrev" width="150" height="96"></canvas><b id="circName"></b><small id="circInfo"></small></div>
-      <button id="nextC" aria-label="Circuit suivant">▶</button>
+<div id="menu" class="screen home">
+  <div class="hbg"><i></i><i></i><i></i></div>
+  <div class="hwrap">
+    <header class="hlogo">
+      <div class="mark"><b>GP</b><i></i></div>
+      <h1>Grand Prix<span>Manager</span></h1>
+      <p class="tag">Saison <b id="homeYear">2027</b> · 10 circuits · 20 pilotes</p>
+    </header>
+    <div class="hcards">
+      <button id="careerBtn" class="hcard career" style="--k:0">
+        <span class="hnum">01</span>
+        <span class="hico">🏆</span>
+        <b>Carrière</b>
+        <small>Monte ton écurie, développe la voiture, gagne le championnat.</small>
+        <em id="careerInfo"></em>
+        <span class="hgo">Continuer <i>›</i></span>
+      </button>
+      <button id="soloBtn" class="hcard solo" style="--k:1">
+        <span class="hnum">02</span>
+        <span class="hico">🏁</span>
+        <b>Course solo</b>
+        <small>Un circuit, une durée, des qualifs : une course rapide, sans enjeu.</small>
+        <em id="soloInfo"></em>
+        <span class="hgo">Choisir <i>›</i></span>
+      </button>
     </div>
+    <nav class="hbar">
+      <button id="settingsBtn">⚙ Réglages</button>
+      <button id="garageBtn">🔧 Garage <small id="menuPts"></small></button>
+      <span id="teamState" class="pstate"></span>
+    </nav>
+  </div>
+</div>
+
+<div id="solo" class="screen hidden">
+  <div class="card wide pane">
+    <div class="ghead"><button id="soloBack" class="back" aria-label="Retour">‹</button><h2>Course solo</h2><span class="step">Paramètres de l’épreuve</span></div>
+    <div class="sobody">
+      <div class="circ">
+        <button id="prevC" aria-label="Circuit précédent">‹</button>
+        <div><span class="cnum" id="circNum"></span><canvas id="circPrev" width="220" height="130"></canvas><b id="circName"></b><small id="circInfo"></small><span id="circDots" class="dots"></span></div>
+        <button id="nextC" aria-label="Circuit suivant">›</button>
+      </div>
+      <div class="opts">
+        <div class="seg"><label>Durée</label><div><button data-sfmt="flash">Éclair<small>3 tours</small></button><button data-sfmt="sprint">Sprint<small>~11 min</small></button><button data-sfmt="long">Long<small>~22 min</small></button></div></div>
+        <div class="seg"><label>Qualifications</label><div><button data-squali="play">Tour chrono<small>tu pilotes</small></button><button data-squali="sim">Simulées<small>grille calculée</small></button></div></div>
+        <div class="seg"><label>Météo</label><div><button data-swx="auto">Prévision<small>selon le lieu</small></button><button data-swx="dry">Sec<small>☀</small></button><button data-swx="rain">Pluie<small>🌧</small></button></div></div>
+        <button id="soloGo" class="main">Qualifications →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="settings" class="screen hidden">
+  <div class="card pane">
+    <div class="ghead"><button id="setBack" class="back" aria-label="Retour">‹</button><h2>Réglages</h2></div>
     <div class="opts">
-      <div class="row"><label>Mode</label><div class="modes"><button data-mode="free">Course libre</button><button data-mode="season">Saison</button></div></div>
-      <div class="row"><label>Format</label><div class="modes"><button data-fmt="sprint">Sprint ~11 min</button><button data-fmt="long">Long ~25 min</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
       <div class="row"><label>Son</label><button id="soundBtn"></button></div>
-      <button id="garageBtn" class="garageBtn">🔧 Garage <small id="menuPts"></small></button>
     </div>
-    <div id="teamState" class="pstate"></div>
-    <button id="startBtn" class="main">Départ</button>
+    <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause, B = stand, R = radio</p>
     <button id="resetBtn" class="linkish">↺ Recommencer la carrière au début</button>
-    <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause</p>
   </div>
 </div>
 

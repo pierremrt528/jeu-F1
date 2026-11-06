@@ -13,8 +13,8 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 - Déploiement : GitHub Pages depuis la branche `main`, racine du dépôt. Déployer à la fin de chaque étape.
 
 ## Structure
-- `index.html` : écrans (menu, HUD, commandes tactiles, pause, résultats) + canvas WebGL.
-- `js/main.js` : rendu Three.js, caméras (arrière / cockpit), boucle, écrans, réglages (localStorage `gpm-settings`).
+- `index.html` : écrans (accueil Carrière / Course solo, course solo, réglages, HUD, commandes tactiles, pause, résultats) + canvas WebGL.
+- `js/main.js` : rendu Three.js, caméras (arrière / cockpit), boucle, écrans, réglages (localStorage `gpm-settings`). Contexte `ctx` : `career` (saison) ou `solo` (course seule : circuit, durée Éclair/Sprint/Long, qualifs jouées ou simulées, météo ; sans effet sur budget/garage/presse). Style des menus : variables CSS `--acc`, `--acc2` dans `style.css`.
 - `js/data.js` : écuries (10 × 2 pilotes), thèmes de décor (`THEMES` : ciel, sol, arbres, montagnes, ville, mer) et 10 circuits. Un circuit = points de contrôle `[x, z, altitude]` ou `layout` (S longueur / L-R rayon angle, fermé automatiquement) + `elev` (profil d'altitude), largeur, `runoff` (distance au mur).
 - `js/track.js` : spline Catmull-Rom ré-échantillonnée tous les 2 m, courbure, trajectoire, profil de vitesse IA. `pitLane(track)` : géométrie de la voie des stands (entrée, boxes, sortie, côté `lat` positif), utilisée par la physique et le décor.
 - `js/scenery.js` : maillages du circuit et environnement (asphalte, vibreurs, herbe/gravier, murs publicitaires, grillages, tribunes, stands, feux, arbres, montagnes, ciel, soleil, carte d'environnement pour les reflets).

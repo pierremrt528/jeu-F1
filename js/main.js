@@ -25,7 +25,7 @@ import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const settings = Object.assign({ cam: 'chase', tilt: false, format: 'sprint', circuit: 'valmont', mode: 'free', sound: true }, load());
+const settings = Object.assign({ cam: 'chase', tilt: false, format: 'sprint', circuit: 'valmont', sound: true, soloFmt: 'sprint', soloQuali: 'play', soloWx: 'auto' }, load());
 if (params.get('circuit')) settings.circuit = params.get('circuit');
 function load() { try { return JSON.parse(localStorage.getItem('gpm-settings')) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem('gpm-settings', JSON.stringify(settings)); } catch {} }
@@ -110,10 +110,13 @@ function applyWeather(dt, wet, raining) {
 }
 const wxParam = () => ({ pluie: { rain: true, change: null }, averse: { rain: false, change: { at: 0.3, rain: true } }, eclaircie: { rain: true, change: { at: 0.35, rain: false } } })[params.get('meteo')] || { rain: false, change: null };
 
+// contexte de jeu : 'career' (saison) ou 'solo' (course seule, sans effet sur la carrière)
+let ctx = 'solo';
+const fmtKey = () => ctx === 'career' ? settings.format : (FORMATS[settings.soloFmt] ? settings.soloFmt : 'sprint');
 // format de course : nombre de tours d'après le temps au tour estimé du circuit
 function raceFormat() {
   const lapTime = SZ.lapEstimate(track, 0.95, TEAMS[0].perf) * 0.985;
-  return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, settings.format) };
+  return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, fmtKey()) };
 }
 let raceOpts = {};
 function startRace(opts = raceOpts) {
@@ -121,8 +124,8 @@ function startRace(opts = raceOpts) {
   initAudio(settings.sound);
   if (R) clearRace();
   const rf = raceFormat();
-  R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: settings.format, ...opts });
-  R.season = !!opts.season;
+  R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: fmtKey(), ...opts });
+  R.season = !!opts.season; R.free = ctx === 'solo';
   resetInput();
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
   show('hud'); paused = false; last = performance.now();
@@ -201,7 +204,7 @@ function loop(now) {
 
 // ---------- écrans ----------
 function show(id) {
-  for (const s of ['menu', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace']) $(s).classList.toggle('hidden', s !== id);
+  for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace']) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
@@ -212,6 +215,9 @@ function showResults() {
     `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${r.name}<small>${r.team}${r.stops ? ` · ${r.stops} arrêt${r.stops > 1 ? 's' : ''}` : ''}${r.pen ? ` · pénalité +${r.pen} s` : ''}</small></td>` +
     `<td>${r.dnf ? 'Abandon' : r.pos === 1 ? fmt(r.time) : '+' + (r.time - win).toFixed(3) + (r.finished ? '' : '*')}</td><td>${fmt(r.best)}</td></tr>`).join('');
   const me = rows.find(r => r.player);
+  if (R.free && !R.awarded) {
+    R.awarded = true; R.pressDone = true; R.prize = R.sponsor = 0; R.mult = 1; R.parts = []; R.built = R.news = R.grow = 0;
+  }
   if (!R.awarded) {
     const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
     R.mult = repFactor() * prizeBonus();
@@ -232,8 +238,9 @@ function showResults() {
       if (career && (S.round === MID_ROUND || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
     }
   }
-  $('againBtn').textContent = R.season ? 'Saison →' : 'Rejouer';
-  $('rdGain').innerHTML = `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+  $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
+  $('resGarageBtn').classList.toggle('hidden', R.free);
+  $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
     (R.built ? `<br>🏗️ Construction terminée : <b>${R.built}</b>` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
     (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
@@ -244,17 +251,24 @@ function showResults() {
 }
 
 function refreshMenu() {
-  document.querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('sel', b.dataset.fmt === settings.format));
+  document.querySelectorAll('[data-sfmt]').forEach(b => b.classList.toggle('sel', b.dataset.sfmt === settings.soloFmt));
+  document.querySelectorAll('[data-squali]').forEach(b => b.classList.toggle('sel', b.dataset.squali === settings.soloQuali));
+  document.querySelectorAll('[data-swx]').forEach(b => b.classList.toggle('sel', b.dataset.swx === settings.soloWx));
+  $('soloGo').textContent = settings.soloQuali === 'play' ? 'Tour de qualification →' : 'Simuler les qualifs →';
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
   $('soundBtn').textContent = settings.sound ? '🔊 Activé' : '🔇 Coupé';
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
   $('menuPts').textContent = team.budget.toFixed(1) + ' M€';
-  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('sel', b.dataset.mode === settings.mode));
   const S = SZ.season;
-  $('startBtn').textContent = settings.mode === 'season' ? (S ? (S.done ? 'Saison terminée →' : `Saison ${S.year} · manche ${S.round + 1}/10 →`) : 'Commencer une saison') : 'Départ';
-  document.querySelector('.circ').classList.toggle('dim', settings.mode === 'season');
-  $('teamState').innerHTML = teamLine() + (team.boostTxt ? `<span class="boost">Prochaine course : ${team.boostTxt}</span>` : '');
+  $('homeYear').textContent = S ? S.year : 2027;
+  const me = S ? SZ.driverStandings().findIndex(d => d.player) + 1 : 0;
+  $('careerInfo').innerHTML = !S ? 'Nouvelle carrière' : S.done ? `Saison ${S.year} terminée · P${me}` : `Saison ${S.year} · manche <b>${S.round + 1}</b>/10 · P${me} · ${S.pts['Toi'] || 0} pts`;
+  $('careerBtn').querySelector('.hgo').firstChild.textContent = S ? 'Continuer ' : 'Commencer ';
+  const c = CIRCUITS.find(c => c.id === settings.circuit) || CIRCUITS[0];
+  $('soloInfo').textContent = `${c.name} · ${FORMATS[settings.soloFmt]?.name || 'Sprint'}`;
+  $('garageBtn').classList.toggle('hidden', !S);
+  $('teamState').innerHTML = S ? teamLine() : '';
 }
 $('pressBtn').onclick = () => {
   if (!R || R.pressDone) return;
@@ -285,21 +299,19 @@ function openSeason() {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[settings.format].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + (S.round === MID_ROUND ? newsHTML(S) : '');
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + (S.round === MID_ROUND ? newsHTML(S) : '');
     const mid = S.round === MID_ROUND && career;
-    $('szActions').innerHTML = (S.grid
+    $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
       (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(transferts ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
+    document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
     const mk = $('szMarket'); if (mk) mk.onclick = () => {
       show('setup');
       openMarket($('setup'), 'mid', name => { S.midSign = name || S.midSign; SZ.saveSeason(); openSeason(); }, () => openSeason());
     };
     const q = $('szQuali'); if (q) q.onclick = async () => { await enableTilt(settings.tilt); startRace({ solo: true, wx: S.wx }); };
-    const sm = $('szSim'); if (sm) sm.onclick = () => {
-      const up = carUpgrades(), perf = TEAMS[0].perf * up.vtop;
-      showQuali(SZ.lapEstimate(track, 0.95, perf, up.acc) * (1 + 0.006 * Math.random()) * 0.985 * (S.wx.rain ? 1.12 : 1));
-    };
+    const sm = $('szSim'); if (sm) sm.onclick = () => showQuali(simLap(S.wx));
     const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx }); };
   }
   show('season');
@@ -321,16 +333,21 @@ function showQuali(simTime) {
   paused = true;
   const time = simTime ?? (R && R.player.finished ? R.player.lastLap : null);
   if (R) { clearRace(); R = null; }
-  const rows = SZ.qualifying(track, time, SZ.season.wx?.rain);
-  SZ.season.quali = rows.map(r => ({ name: r.name, time: r.time }));
-  SZ.season.grid = rows.map(r => r.name); SZ.saveSeason();
+  const Q = ctx === 'solo' ? soloQ : SZ.season;
+  const rows = SZ.qualifying(track, time, Q.wx?.rain);
+  Q.quali = rows.map(r => ({ name: r.name, time: r.time }));
+  Q.grid = rows.map(r => r.name); if (Q === SZ.season) SZ.saveSeason();
   const pos = rows.findIndex(r => r.player) + 1;
   $('qTitle').textContent = `Qualifications · ${def.name} · ${pos === 1 ? 'Pole position !' : 'P' + pos}`;
   $('qTable').innerHTML = SZ.qualiHTML(rows);
   show('quali');
 }
-$('qRace').onclick = () => openSeason();
-$('qRetry').onclick = async () => { SZ.season.grid = null; startRace({ solo: true, wx: SZ.season.wx }); };
+$('qRace').onclick = () => ctx === 'solo' ? showPrerace({ gridOrder: soloQ.grid, wx: soloQ.wx }) : openSeason();
+$('qRetry').onclick = async () => {
+  const Q = ctx === 'solo' ? soloQ : SZ.season; Q.grid = null;
+  if (ctx === 'solo' && settings.soloQuali === 'sim') return showQuali(simLap(Q.wx));
+  startRace({ solo: true, wx: Q.wx });
+};
 let stTab = 'drivers', stFrom = 'season';
 function showStandings(from) {
   stFrom = from || stFrom;
@@ -353,13 +370,11 @@ function twoTap(btn, action) {
   };
 }
 twoTap($('szQuit'), () => { SZ.quitSeason(); refreshMenu(); show('menu'); });
-document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { settings.mode = b.dataset.mode; save(); refreshMenu(); });
 
 let garageFrom = 'menu';
 function showGarage(from) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }); }
 $('garageBtn').onclick = () => showGarage('menu');
 $('resGarageBtn').onclick = () => showGarage('results');
-document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.fmt; save(); refreshMenu(); });
 $('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };
 // remise à zéro complète : saison, écurie, garage, budget
 function resetAll() {
@@ -368,12 +383,39 @@ function resetAll() {
 twoTap($('resetBtn'), resetAll); twoTap($('szReset'), resetAll);
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
-$('startBtn').onclick = async () => {
+// ---------- écran d'accueil : carrière ou course solo ----------
+async function goFull() { try { await document.documentElement.requestFullscreen?.(); await screen.orientation?.lock?.('landscape'); } catch {} }
+$('careerBtn').onclick = async () => {
+  ctx = 'career'; goFull();
+  SZ.season ? openSeason() : setupSeason();
+};
+$('soloBtn').onclick = () => { ctx = 'solo'; showSolo(); };
+$('settingsBtn').onclick = () => show('settings');
+$('setBack').onclick = () => { refreshMenu(); show('menu'); };
+$('soloBack').onclick = () => { refreshMenu(); show('menu'); };
+function showSolo() {
+  if (R) { clearRace(); R = null; }
+  paused = true;
+  if (def.id !== settings.circuit) loadCircuit(settings.circuit);
+  showCircuitInfo(); refreshMenu(); show('solo');
+}
+const soloOpt = (attr, key) => document.querySelectorAll(`[data-${attr}]`).forEach(b => b.onclick = () => { settings[key] = b.dataset[attr]; save(); refreshMenu(); });
+soloOpt('sfmt', 'soloFmt'); soloOpt('squali', 'soloQuali'); soloOpt('swx', 'soloWx');
+// course solo : météo choisie, puis qualifs jouées ou simulées
+let soloQ = null;
+$('soloGo').onclick = async () => {
+  ctx = 'solo';
   if (def.id !== settings.circuit) { clearTimeout(loadTimer); loadCircuit(settings.circuit); }
-  await enableTilt(settings.tilt);
-  try { await document.documentElement.requestFullscreen?.(); await screen.orientation?.lock?.('landscape'); } catch {}
-  if (settings.mode === 'season') { SZ.season ? openSeason() : setupSeason(); return; }
-  showPrerace({});
+  const w = settings.soloWx;
+  const wx = params.get('meteo') ? wxParam() : w === 'dry' ? { rain: false, change: null } : w === 'rain' ? { rain: true, change: null } : forecast(def.theme);
+  soloQ = { wx, grid: null };
+  goFull();
+  if (settings.soloQuali === 'play') { await enableTilt(settings.tilt); startRace({ solo: true, wx }); }
+  else showQuali(simLap(wx));
+};
+const simLap = wx => {
+  const up = carUpgrades(), perf = TEAMS[0].perf * up.vtop;
+  return SZ.lapEstimate(track, 0.95, perf, up.acc) * (1 + 0.006 * Math.random()) * 0.985 * (wx.rain ? 1.12 : 1);
 };
 $('camBtn').onclick = toggleCam;
 
@@ -388,7 +430,7 @@ function showPrerace(opts) {
   const choose = k => { sel = k; plan = { ...plans[k], stints: plans[k].stints.map(s => ({ ...s })) }; };
   choose(Math.max(0, plans.findIndex(p => p.best)));
   const render = () => {
-    $('prTitle').textContent = `${FORMATS[settings.format].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min`;
+    $('prTitle').textContent = `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min`;
     $('prWx').textContent = 'Météo : ' + wxText(wx);
     $('prPlans').innerHTML = plans.map((p, k) => `<button data-plan="${k}" class="${k === sel ? 'pick' : ''}"><b>${p.name}${p.best ? ' <i class="best">★ la plus rapide</i>' : ''}</b>
       <span class="stints">${p.stints.map(s => chip(s.tyre) + s.laps).join(' → ')}</span>
@@ -407,7 +449,7 @@ function showPrerace(opts) {
   };
   render();
   $('prGo').onclick = () => startRace({ ...opts, wx: { ...wx }, plan });
-  $('prBack').onclick = () => opts.season ? openSeason() : (refreshMenu(), show('menu'));
+  $('prBack').onclick = () => opts.season ? openSeason() : showSolo();
   show('prerace');
 }
 // stand et radio
@@ -430,16 +472,18 @@ $('pauseBtn').onclick = () => pause();
 $('resumeBtn').onclick = () => { paused = false; last = performance.now(); show('hud'); };
 $('restartBtn').onclick = () => startRace();
 $('quitBtn').onclick = $('menuBtn').onclick = () => { paused = true; refreshMenu(); show('menu'); };
-$('againBtn').onclick = () => R?.season ? openSeason() : showPrerace({});
+$('againBtn').onclick = () => R?.season ? openSeason() : showSolo();
 function pause() { if (!R || R.done || paused) return; paused = true; show('pause'); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
 // choix du circuit : aperçu immédiat, construction 3D après une courte pause
 let loadTimer = 0;
 function showCircuitInfo() {
-  const k = CIRCUITS.findIndex(c => c.id === settings.circuit);
-  const d = CIRCUITS[Math.max(0, k)], t = buildTrack(d);
-  $('circName').textContent = `${Math.max(0, k) + 1}. ${d.name}`;
+  const k = Math.max(0, CIRCUITS.findIndex(c => c.id === settings.circuit));
+  const d = CIRCUITS[k], t = buildTrack(d);
+  $('circNum').textContent = String(k + 1).padStart(2, '0');
+  $('circName').textContent = d.name;
+  $('circDots').innerHTML = CIRCUITS.map((c, j) => `<i class="${j === k ? 'on' : ''}"></i>`).join('');
   let dz = 0; for (let i = 0; i < t.N; i++) dz = Math.max(dz, t.Y[i]);
   $('circInfo').textContent = `${d.type} · ${(t.length / 1000).toFixed(2)} km` + (dz > 15 ? ` · dénivelé ${Math.round(dz)} m` : '');
   const cv = $('circPrev'), c = cv.getContext('2d'), W = cv.width, H = cv.height;
@@ -447,15 +491,15 @@ function showCircuitInfo() {
   for (let i = 0; i < t.N; i++) { a = Math.min(a, t.X[i]); b = Math.max(b, t.X[i]); e = Math.min(e, t.Z[i]); f = Math.max(f, t.Z[i]); }
   const sc = Math.min((W - 12) / (b - a), (H - 12) / (f - e));
   const P = i => [W / 2 - (t.X[i] - (a + b) / 2) * sc, H / 2 - (t.Z[i] - (e + f) / 2) * sc];
-  c.clearRect(0, 0, W, H); c.lineWidth = 3; c.lineJoin = 'round'; c.strokeStyle = '#fff'; c.beginPath();
+  c.clearRect(0, 0, W, H); c.lineWidth = 4; c.lineJoin = 'round'; c.strokeStyle = '#fff'; c.shadowColor = 'rgba(255,61,46,.8)'; c.shadowBlur = 8; c.beginPath();
   for (let i = 0; i < t.N; i += 3) { const [x, y] = P(i); i ? c.lineTo(x, y) : c.moveTo(x, y); }
   c.closePath(); c.stroke();
-  const [x, y] = P(0); c.fillStyle = '#e10600'; c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill();
+  c.shadowBlur = 0; const [x, y] = P(0); c.fillStyle = '#ff3d2e'; c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill();
 }
 function pickCircuit(step) {
   const k = CIRCUITS.findIndex(c => c.id === settings.circuit);
   settings.circuit = CIRCUITS[(Math.max(0, k) + step + CIRCUITS.length) % CIRCUITS.length].id; save();
-  showCircuitInfo();
+  showCircuitInfo(); refreshMenu();
   clearTimeout(loadTimer); loadTimer = setTimeout(() => loadCircuit(settings.circuit), 350);
 }
 $('prevC').onclick = () => pickCircuit(-1);
