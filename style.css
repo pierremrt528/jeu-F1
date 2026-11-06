@@ -678,3 +678,9 @@ body.tilt #ctl .left { display: none; }
 #gTree .node.chef .ch > span:last-child { display: flex; flex-direction: column; min-width: 0; } #gTree .node.chef .cf { margin: 0; }
 #gTree .node.chef .av { flex: none; position: static; display: grid; place-items: center; border-radius: 50%; color: #0a0c10; font-weight: 900; }
 .cb { grid-template-columns: 46px 1fr 46px; } .cb b { white-space: nowrap; }
+/* réglages en paysage : 2 colonnes pour que tout tienne à l'écran */
+@media (max-height: 420px) and (min-width: 640px) {
+  #settings .card { max-width: 780px; }
+  #settings .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+  #settings .row button { min-width: 0; width: 150px; padding: 8px 6px; }
+}
