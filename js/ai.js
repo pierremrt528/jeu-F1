@@ -48,7 +48,7 @@ export function aiDrive(car, track, cars, dt) {
   // vitesse cible
   let vt = V[car.idx];
   for (let k = 1; k <= 4; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
-  vt = Math.min(vt * (car.scMode ? (ahead ? 0.72 : 0.9) : 1) * car.skill * Math.sqrt((car.gripMul ?? 1) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
+  vt = Math.min(vt * (car.scMode ? (ahead ? 0.72 : 0.9) : 1) * car.skill * Math.sqrt((car.gripMul ?? 1) / (1 + ((car.mass || 1) - 1) * 0.25) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
   if (car.offTrack) vt = Math.min(vt, 25);
   if (car.v < vt - 0.8) { car.throttle = 1; car.brake = 0; }
   else if (car.v > vt + 1.2) { car.throttle = 0; car.brake = Math.min(1, (car.v - vt) / 6); }

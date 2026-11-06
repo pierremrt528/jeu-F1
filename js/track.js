@@ -115,3 +115,16 @@ export const rightZ = (t, i) => t.TX[i];
 export function mulberry(a) {
   return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
+
+// Voie des stands (côté droit de la ligne droite de départ), en échantillons signés autour de la ligne :
+// entrée de e0 à e1 (la voie s'écarte de la piste), emplacements des écuries, sortie de x0 à x1.
+export function pitLane(track) {
+  const half = track.width / 2, wall = half + (track.runoff ?? 9), lat = wall + 6;
+  const sm = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+  const P = { half, wall, lat, e0: -190, e1: -140, x0: 70, x1: 110 };
+  P.latAt = k => k < P.e1 ? half - 1 + (lat - half + 1) * sm((k - P.e0) / (P.e1 - P.e0))
+    : k > P.x0 ? lat - (lat - half + 1) * sm((k - P.x0) / (P.x1 - P.x0)) : lat;
+  P.box = t => -125 + t * 13;          // emplacement de l'écurie t (0..9), avant et après la ligne
+  P.k = (i, N) => i > N / 2 ? i - N : i;  // indice signé par rapport à la ligne
+  return P;
+}

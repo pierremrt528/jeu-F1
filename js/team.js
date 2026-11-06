@@ -37,8 +37,8 @@ export function consumeBoost() { team.boost = {}; team.boostTxt = ''; saveTeam()
 
 // Gains financiers d'une course (M€), multipliés selon la réputation
 const PRIZE = [5, 4, 3.4, 2.8, 2.4, 2.1, 1.8, 1.6, 1.4, 1.2];
-export function racePrize(pos, laps, mult = 1) {
-  const f = (laps <= 1 ? 0.6 : laps >= 5 ? 1.3 : 1) * mult;
+export function racePrize(pos, fmt = 1, mult = 1) {
+  const f = fmt * mult;
   const p = Math.round(((PRIZE[pos - 1] || 0.8) * f) * 10) / 10;
   team.budget = Math.round((team.budget + p) * 100) / 100;
   // le moral suit les résultats

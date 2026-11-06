@@ -25,7 +25,7 @@
     </div>
     <div class="opts">
       <div class="row"><label>Mode</label><div class="modes"><button data-mode="free">Course libre</button><button data-mode="season">Saison</button></div></div>
-      <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
+      <div class="row"><label>Format</label><div class="modes"><button data-fmt="sprint">Sprint ~11 min</button><button data-fmt="long">Long ~25 min</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
       <div class="row"><label>Son</label><button id="soundBtn"></button></div>
@@ -50,14 +50,21 @@
     <button id="pauseBtn" class="mini">II</button>
     <button id="camBtn" class="mini"></button>
     <button id="boxBtn" class="mini">🔧 STAND</button>
+    <button id="radioBtn" class="mini">📻 RADIO</button>
     <canvas id="minimap"></canvas>
     <div id="fps" class="dim"></div>
   </div>
   <div id="lights" class="off"><i></i><i></i><i></i><i></i><i></i></div>
   <div id="slip">ASPIRATION</div>
   <div id="radio"></div>
+  <div id="radioPanel" class="hidden">
+    <div class="rprow"><span>Infos</span><button data-ask="tyres">Pneus</button><button data-ask="fuel">Carburant</button><button data-ask="weather">Météo</button><button data-ask="rivals">Rivaux</button><button data-ask="plan">Stratégie</button></div>
+    <div class="rprow"><span>Rythme</span><button data-order="push">Attaque</button><button data-order="norm">Normal</button><button data-order="save">Économie</button></div>
+    <div class="rprow"><span>Arrêt</span><button data-order="box">Box</button><button data-order="earlier">−1 tour</button><button data-order="later">+1 tour</button><button data-order="tyre">Pneus</button><button data-order="fuel-">−5 kg</button><button data-order="fuel+">+5 kg</button></div>
+    <button id="rpClose" class="rpclose">✕</button>
+  </div>
   <div id="scBanner">🚨 VOITURE DE SÉCURITÉ</div>
-  <div id="carState"><button id="tyreChip"></button><span id="wxIco"></span><span id="dmgIco"></span></div>
+  <div id="carState"><button id="tyreChip"></button><span id="fuelIco"></span><span id="wxIco"></span><span id="dmgIco"></span></div>
   <div id="dash"><div id="gear">N</div><div><span id="spd">0</span><small> km/h</small><div class="bar"><div id="rpm"></div></div></div></div>
   <div id="ctl">
     <div class="left"><div class="pad" data-ctl="left">◀</div><div class="pad" data-ctl="right">▶</div></div>
@@ -127,8 +134,9 @@
   <div class="card prerace">
     <h2 id="prTitle">Avant la course</h2>
     <p id="prWx" class="prwx"></p>
-    <p class="dim">Pneus de départ</p>
-    <div id="prTyres" class="prtyres"></div>
+    <p class="dim">Stratégie proposée par le muret</p>
+    <div id="prPlans" class="prplans"></div>
+    <div id="prAdjust" class="pradj"></div>
     <p id="prHint" class="dim small"></p>
     <div class="btns"><button id="prGo" class="main">Aller sur la grille</button><button id="prBack">Retour</button></div>
   </div>

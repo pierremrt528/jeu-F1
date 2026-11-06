@@ -40,15 +40,16 @@ export function stepCar(car, track, dt) {
   car.offTrack = Math.abs(car.lat) > half + 1.3;
   const u = car.up || NO_UP;   // améliorations du garage (multiplicateurs)
   const grip = (car.offTrack ? 0.55 * u.off : 1) * (car.gripMul ?? 1);   // pneus, pluie, dégâts
-  const vtop = SPEC.vtop * car.perf * u.vtop * (1 - (car.powerLoss || 0)) * (1 - 0.02 * (car.dmg || 0)) * (1 + SPEC.slip * u.slip * car.slipstream) * (car.offTrack ? 0.5 : 1);
+  const mass = car.mass || 1;   // carburant : plus lourd = moins d'accélération, de freinage et d'adhérence
+  const vtop = SPEC.vtop * car.perf * u.vtop * (car.powerMul || 1) * (1 - (car.powerLoss || 0)) * (1 - 0.02 * (car.dmg || 0)) * (1 + SPEC.slip * u.slip * car.slipstream) * (car.offTrack ? 0.5 : 1);
 
   // longitudinal
   let a;
-  if (car.throttle > 0 && v >= -0.5) a = car.throttle * SPEC.acc * car.perf * u.acc * (1 - Math.pow(Math.max(v, 0) / vtop, 2.2));
+  if (car.throttle > 0 && v >= -0.5) a = car.throttle * SPEC.acc * car.perf * u.acc * (car.accMul || 1) / mass * (1 - Math.pow(Math.max(v, 0) / vtop, 2.2));
   else a = -Math.sign(v) * (0.8 + 0.0009 * v * v);
   if (car.offTrack) a -= v * 0.35;
   if (car.brake > 0) {
-    if (v > 0.3) a -= car.brake * (SPEC.brake0 + SPEC.brakeK * v * v) * grip * u.brake;
+    if (v > 0.3) a -= car.brake * (SPEC.brake0 + SPEC.brakeK * v * v) * grip * u.brake / Math.sqrt(mass);
     else if (car.throttle === 0 && car.canReverse) a = -car.brake * 5; // marche arrière lente pour se dégager
   }
   // pente : dénivelé entre l'échantillon courant et le suivant
@@ -64,9 +65,10 @@ export function stepCar(car, track, dt) {
   // latéral : braquage réduit avec la vitesse, limité par l'adhérence (appui aéro inclus)
   const delta = SPEC.steerMax * u.steer * car.steer / (1 + Math.abs(v) / 20);
   let yaw = v * Math.tan(delta) / SPEC.wb;
-  const latMax = SPEC.mu * u.mu * grip * (g + SPEC.kd * u.kd * (car.dmgKd ?? 1) * v * v);
+  const latMax = SPEC.mu * u.mu * grip / (1 + (mass - 1) * 0.25) * (g + SPEC.kd * u.kd * (car.dmgKd ?? 1) * v * v);
   const latWant = Math.abs(v * yaw);
   car.sliding = latWant > latMax;
+  car.slip = car.sliding ? (latWant - latMax) / latMax : 0;
   if (car.sliding) {
     yaw *= latMax / latWant;
     v -= Math.sign(v) * Math.min(latWant - latMax, 40) * 0.1 * dt; // sous-virage : on frotte

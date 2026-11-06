@@ -1,7 +1,8 @@
 // Maillages du circuit et de l'environnement : piste texturée, vibreurs, herbe/gravier, murs publicitaires,
 // grillages, tribunes avec public, stands, portique de départ, arbres, montagnes, ciel et soleil.
 import * as THREE from '../lib/three.module.min.js';
-import { mulberry } from './track.js';
+import { mulberry, pitLane } from './track.js';
+import { TEAMS } from './data.js';
 import * as TX from './textures.js';
 
 // Petit constructeur de géométrie (triangles non indexés, uv + couleur par sommet)
@@ -10,7 +11,8 @@ class Geo {
   quad(a, b, c, d, ua, ub, uc, ud, k = 1) {   // a-b sur la tranche i, c-d sur la tranche i+1
     this.p.push(...a, ...b, ...c, ...b, ...d, ...c);
     this.u.push(...ua, ...ub, ...uc, ...ub, ...ud, ...uc);
-    for (let n = 0; n < 6; n++) this.c.push(k, k, k);
+    const col = Array.isArray(k) ? k : [k, k, k];
+    for (let n = 0; n < 6; n++) this.c.push(...col);
   }
   mesh(mat) {
     const g = new THREE.BufferGeometry();
@@ -89,6 +91,7 @@ export function buildTrackMeshes(track, scene) {
   const L = (o) => new THREE.MeshLambertMaterial(o);
   const pt = (j, off, dy) => [X[j] - tz[j] * off, Y[j] + dy, Z[j] + tx[j] * off];
   const wall = w / 2 + track.runoff;
+  const P = pitLane(track), pitK = i => P.k(i, N), inPit = i => pitK(i) >= P.e0 - 2 && pitK(i) <= P.x1 + 2;
   const surf = th.surface || 'grass', isGrass = surf === 'grass';
   const surfTex = () => surf === 'sand' ? TX.sand() : surf === 'concrete' ? TX.concrete() : TX.grass();
   // courbure large pour savoir de quel côté est l'extérieur des virages
@@ -113,29 +116,50 @@ export function buildTrackMeshes(track, scene) {
       // dégagement : gravier à l'extérieur des virages, herbe ailleurs
       const zone = outside ? gravel : grass;
       const uvw = (k, o) => { const p = pt(k, s * o, 0); return [p[0] / 7, p[2] / 7]; };
-      const qa = A(edge, 0), qb = A(wall + 3, -0.05), qc = B(edge, 0), qd = B(wall + 3, -0.05);
-      if (s > 0) zone.quad(qa, qb, qc, qd, uvw(i, edge), uvw(i, wall + 3), uvw(j, edge), uvw(j, wall + 3), outside ? 1 : stripe);
-      else zone.quad(qb, qa, qd, qc, uvw(i, wall + 3), uvw(i, edge), uvw(j, wall + 3), uvw(j, edge), outside ? 1 : stripe);
+      const pit = s > 0 && inPit(i), far = pit ? wall + 30 : wall + 3;   // côté stands : terrain plat jusqu'aux garages
+      const qa = A(edge, 0), qb = A(far, -0.05), qc = B(edge, 0), qd = B(far, -0.05);
+      if (s > 0) zone.quad(qa, qb, qc, qd, uvw(i, edge), uvw(i, far), uvw(j, edge), uvw(j, far), outside && !pit ? 1 : stripe);
+      else zone.quad(qb, qa, qd, qc, uvw(i, far), uvw(i, edge), uvw(j, far), uvw(j, edge), outside ? 1 : stripe);
       // talus jusqu'au sol
       const fall = (k) => [X[k] - tz[k] * s * 75, track.ground, Z[k] + tx[k] * s * 75];
       const fu = (k) => [fall(k)[0] / 7, fall(k)[2] / 7];
-      if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, wall + 3), fu(i), uvw(j, wall + 3), fu(j), isGrass ? 0.8 : 0.92);
-      else grass.quad(fall(i), qb, fall(j), qd, fu(i), uvw(i, wall + 3), fu(j), uvw(j, wall + 3), isGrass ? 0.8 : 0.92);
+      if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, far), fu(i), uvw(j, far), fu(j), isGrass ? 0.8 : 0.92);
+      else grass.quad(fall(i), qb, fall(j), qd, fu(i), uvw(i, far), fu(j), uvw(j, far), isGrass ? 0.8 : 0.92);
       // mur publicitaire puis grillage
+      if (pit) continue;   // remplacé par le muret des stands
       walls.quad(A(wall, 0), A(wall, 1.15), B(wall, 0), B(wall, 1.15), [v0 / 48, 0], [v0 / 48, 1], [v1 / 48, 0], [v1 / 48, 1]);
       fences.quad(A(wall + 0.1, 1.15), A(wall + 0.1, 4.2), B(wall + 0.1, 1.15), B(wall + 0.1, 4.2), [v0 / 3, 0], [v0 / 3, 1], [v1 / 3, 0], [v1 / 3, 1]);
     }
   }
   const roadMesh = road.mesh(L({ map: TX.asphalt() })); roadMesh.name = 'road'; group.add(roadMesh);
-  // voie des stands (même décalage que strategy.js) : bande d'asphalte côté stands
+  // voie des stands : bande d'asphalte qui quitte la piste, muret, lignes blanches, emplacements aux couleurs des écuries
   {
-    const pits = new Geo(), runoff = track.runoff, pitLat = w / 2 + Math.max(1.4, Math.min(runoff - 1.6, 5));
-    const a0 = w / 2 + 1.1, a1 = Math.min(pitLat + 2.2, w / 2 + runoff - 0.4);
-    for (let k = -150; k < 80; k++) {
-      const i = (k + N) % N, j = (i + 1) % N, v0 = k * DSm, v1 = (k + 1) * DSm;
-      pits.quad(pt(i, a0, 0.03), pt(i, a1, 0.03), pt(j, a0, 0.03), pt(j, a1, 0.03), [0, v0 / 16], [0.4, v0 / 16], [0, v1 / 16], [0.4, v1 / 16]);
+    const lane = new Geo(), paint = new Geo(), hw = 3.6;
+    const ip = k => (k + N) % N;
+    for (let k = P.e0; k < P.x1; k++) {
+      const i = ip(k), j = ip(k + 1), la = P.latAt(k), lb = P.latAt(k + 1), v0 = k * DSm, v1 = (k + 1) * DSm;
+      lane.quad(pt(i, la - hw, 0.04), pt(i, la + hw, 0.04), pt(j, lb - hw, 0.04), pt(j, lb + hw, 0.04), [0, v0 / 16], [0.45, v0 / 16], [0, v1 / 16], [0.45, v1 / 16]);
+      for (const e of [-hw, hw]) paint.quad(pt(i, la + e - 0.12, 0.06), pt(i, la + e + 0.12, 0.06), pt(j, lb + e - 0.12, 0.06), pt(j, lb + e + 0.12, 0.06), [0, 0], [1, 0], [0, 1], [1, 1]);
     }
-    group.add(pits.mesh(L({ map: TX.asphalt(), color: 0xb9bdc2, polygonOffset: true, polygonOffsetFactor: -1 })));
+    // emplacements : rectangle à la couleur de chaque écurie, côté garages
+    TEAMS.forEach((t, n) => {
+      const c = new THREE.Color(t.color), k0 = P.box(n) - 2;
+      for (let k = k0; k < k0 + 4; k++) {
+        const i = ip(k), j = ip(k + 1);
+        paint.quad(pt(i, P.lat + 0.6, 0.065), pt(i, P.lat + hw - 0.3, 0.065), pt(j, P.lat + 0.6, 0.065), pt(j, P.lat + hw - 0.3, 0.065), [0, 0], [1, 0], [0, 1], [1, 1], [c.r, c.g, c.b]);
+      }
+    });
+    // muret des stands entre la piste et la voie, avec grillage
+    const pw = new Geo();
+    for (let k = P.e1 - 6; k < P.x0 + 6; k++) {
+      const i = ip(k), j = ip(k + 1), A = (o, y) => pt(i, o, y), B = (o, y) => pt(j, o, y);
+      pw.quad(A(wall, 0), A(wall, 1.1), B(wall, 0), B(wall, 1.1), [0, 0], [0, 1], [1, 0], [1, 1]);
+      pw.quad(A(wall, 1.1), A(wall + 0.5, 1.1), B(wall, 1.1), B(wall + 0.5, 1.1), [0, 0], [0, 1], [1, 0], [1, 1]);
+      fences.quad(A(wall + 0.1, 1.1), A(wall + 0.1, 3.4), B(wall + 0.1, 1.1), B(wall + 0.1, 3.4), [k * DSm / 3, 0], [k * DSm / 3, 1], [(k + 1) * DSm / 3, 0], [(k + 1) * DSm / 3, 1]);
+    }
+    group.add(lane.mesh(L({ map: TX.asphalt(), color: 0xc4c8cc, polygonOffset: true, polygonOffsetFactor: -2 })));
+    group.add(paint.mesh(new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3 })));
+    group.add(pw.mesh(L({ color: 0xd9dde2, side: THREE.DoubleSide })));
   }
   group.add(kerbs.mesh(L({ map: TX.kerb(), polygonOffset: true, polygonOffsetFactor: -1 })));
   group.add(grass.mesh(L({ map: surfTex(), vertexColors: true })));
@@ -234,11 +258,11 @@ export function buildTrackMeshes(track, scene) {
   // Bâtiment des stands (côté droit de la ligne droite)
   {
     const wm = L({ color: 0xdfe3e8 }), gm = new THREE.MeshStandardMaterial({ color: 0x1d2a38, metalness: 0.6, roughness: 0.2 });
-    for (let k = -1; k <= 2; k++) {
-      const i = (k * 32 + N) % N;
+    for (let k = -4; k <= 1; k++) {
+      const i = (k * 31 + 8 + N) % N;
       const t = TX.pitWall(); t.repeat.set(4, 1);
       const b = new THREE.Mesh(new THREE.BoxGeometry(62, 9, 16), [wm, wm, wm, wm, L({ map: t }), wm]);
-      const p = pt(i, wall + 11, 0);
+      const p = pt(i, P.lat + 3.6 + 1.5 + 8, 0);
       b.position.set(p[0], Y[i] + 4.5, p[2]); b.rotation.y = track.H[i] + Math.PI / 2;
       group.add(b);
       const glass = new THREE.Mesh(new THREE.BoxGeometry(60, 2.4, 13), gm);
@@ -280,7 +304,7 @@ export function buildTrackMeshes(track, scene) {
         const bw = 14 + rnd() * 24, bd = 12 + rnd() * 20;
         const [d, i] = nearest(x, z);
         if (d < wall + 6 + Math.max(bw, bd) * 0.62) continue;
-        if (Math.min(i, N - i) < 110 && d < 80) continue; // stands et tribunes
+        if (Math.min(i, N - i) < 200 && d < 90) continue; // stands, voie des stands et tribunes
         const far = Math.min(1, d / 220);
         const hgt = th.city.hmin + (th.city.hmax - th.city.hmin) * Math.pow(rnd(), 1.6) * (0.4 + 0.6 * far);
         const g = new THREE.BoxGeometry(bw, hgt, bd);
@@ -318,7 +342,7 @@ export function buildTrackMeshes(track, scene) {
       if (inSea(z)) continue;
       const [d, i] = nearest(x, z);
       if (d < wall + 7) continue;
-      if (Math.min(i, N - i) < 120 && d < 70) continue;
+      if (Math.min(i, N - i) < 200 && d < 70) continue;
       if (blocked.some(b => (b[0] - x) ** 2 + (b[1] - z) ** 2 < b[2] * b[2])) continue;
       const t = Math.min(1, Math.max(0, (d - (wall + 3)) / (75 - (wall + 3))));
       const y = d < 300 ? Y[i] + (track.ground - Y[i]) * t : track.ground;

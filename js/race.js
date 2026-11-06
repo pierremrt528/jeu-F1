@@ -14,7 +14,7 @@ export function createRace(track, scene, laps, opts = {}) {
   for (const team of TEAMS) for (const d of team.drivers) {
     if (opts.solo && !d.player) continue;  // qualifications : la voiture du joueur seule
     const car = new Car(team, d, team.perf + (opts.perfBonus?.[team.name] || 0));
-    car.stats = d.stats; cars.push(car);
+    car.stats = d.stats; car.teamIdx = TEAMS.indexOf(team); cars.push(car);
   }
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
@@ -49,7 +49,8 @@ export function createRace(track, scene, laps, opts = {}) {
     t: -1, phase: 'lights', lightsOn: 0, goAt: 4.2 + 0.4 + Math.random() * 0.8,
     autopilot: !!opts.autopilot, done: false,
   };
-  R.scene = scene; setupStrategy(R, track, { ...wx }, opts.tyre);
+  R.scene = scene; R.lapTime = opts.lapTime; R.format = opts.format || 'sprint';
+  setupStrategy(R, track, { ...wx }, opts.plan);
   return R;
 }
 

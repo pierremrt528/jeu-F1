@@ -14,7 +14,7 @@ import { buildQuestions, runPress, teamLine } from './press.js';
 import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
-import { TYRES, forecast, wxText, wantBox, bestTyre } from './strategy.js';
+import { TYRES, FORMATS, MODES, TANK, forecast, wxText, makePlans, lapsFor, fuelFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { resetCareer } from './career.js';
@@ -22,7 +22,7 @@ import { resetTeam } from './team.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const settings = Object.assign({ cam: 'chase', tilt: false, laps: 3, circuit: 'valmont', mode: 'free', sound: true }, load());
+const settings = Object.assign({ cam: 'chase', tilt: false, format: 'sprint', circuit: 'valmont', mode: 'free', sound: true }, load());
 if (params.get('circuit')) settings.circuit = params.get('circuit');
 function load() { try { return JSON.parse(localStorage.getItem('gpm-settings')) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem('gpm-settings', JSON.stringify(settings)); } catch {} }
@@ -107,12 +107,18 @@ function applyWeather(dt, wet, raining) {
 }
 const wxParam = () => ({ pluie: { rain: true, change: null }, averse: { rain: false, change: { at: 0.3, rain: true } }, eclaircie: { rain: true, change: { at: 0.35, rain: false } } })[params.get('meteo')] || { rain: false, change: null };
 
+// format de course : nombre de tours d'après le temps au tour estimé du circuit
+function raceFormat() {
+  const lapTime = SZ.lapEstimate(track, 0.95, TEAMS[0].perf) * 0.985;
+  return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, settings.format) };
+}
 let raceOpts = {};
 function startRace(opts = raceOpts) {
   raceOpts = opts;
   initAudio(settings.sound);
   if (R) clearRace();
-  R = createRace(track, scene, +params.get('tours') || settings.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, ...opts });
+  const rf = raceFormat();
+  R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: settings.format, ...opts });
   R.season = !!opts.season;
   resetInput();
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
@@ -197,7 +203,7 @@ function showResults() {
   if (!R.awarded) {
     const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
     R.mult = repFactor();
-    R.prize = racePrize(me.pos, R.laps, R.mult);
+    R.prize = racePrize(me.pos, FORMATS[R.format]?.prize || 1, R.mult);
     R.parts = tickDevelopment();
     consumeBoost();
     // contexte pour la presse
@@ -217,7 +223,7 @@ function showResults() {
 }
 
 function refreshMenu() {
-  document.querySelectorAll('[data-laps]').forEach(b => b.classList.toggle('sel', +b.dataset.laps === settings.laps));
+  document.querySelectorAll('[data-fmt]').forEach(b => b.classList.toggle('sel', b.dataset.fmt === settings.format));
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
   $('soundBtn').textContent = settings.sound ? '🔊 Activé' : '🔇 Coupé';
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
@@ -257,7 +263,7 @@ function openSeason() {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${settings.laps} tour${settings.laps > 1 ? 's' : ''}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>`;
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[settings.format].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>`;
     $('szActions').innerHTML = S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`;
@@ -312,7 +318,7 @@ let garageFrom = 'menu';
 function showGarage(from) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }); }
 $('garageBtn').onclick = () => showGarage('menu');
 $('resGarageBtn').onclick = () => showGarage('results');
-document.querySelectorAll('[data-laps]').forEach(b => b.onclick = () => { settings.laps = +b.dataset.laps; save(); refreshMenu(); });
+document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.fmt; save(); refreshMenu(); });
 $('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };
 // remise à zéro complète : saison, écurie, garage, budget
 function resetAll() {
@@ -330,38 +336,49 @@ $('startBtn').onclick = async () => {
 };
 $('camBtn').onclick = toggleCam;
 
-// ---------- avant la course : météo et pneus de départ ----------
+// ---------- avant la course : météo, 3 stratégies proposées, réglage des pneus et du carburant ----------
+const chip = t => `<b class="tchip" style="--c:${TYRES[t].color}">${t}</b>`;
+const mmss = s => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')}`;
 function showPrerace(opts) {
   const wx = opts.wx || (params.get('meteo') ? wxParam() : forecast(def.theme));
-  const laps = +params.get('tours') || settings.laps, wetStart = wx.rain;
-  let pick = wetStart ? 'W' : 'M';
+  const { laps, lapTime } = raceFormat(), lapKm = track.length / 1000;
+  const plans = makePlans(laps, lapKm, lapTime, wx.rain);
+  let sel = 1, plan = null;
+  const choose = k => { sel = k; plan = { ...plans[k], stints: plans[k].stints.map(s => ({ ...s })) }; };
+  choose(Math.max(0, plans.findIndex(p => p.best)));
   const render = () => {
+    $('prTitle').textContent = `${FORMATS[settings.format].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min`;
     $('prWx').textContent = 'Météo : ' + wxText(wx);
-    $('prTyres').innerHTML = Object.entries(TYRES).map(([k, t]) => {
-      const lifeLaps = k === 'W' ? (wetStart ? '~' + Math.round(t.life * Math.max(laps, 3)) + ' tours' : 's’use vite au sec') : '~' + Math.max(1, Math.round(t.life * Math.max(laps, 3) * 10) / 10) + ' tours';
-      return `<button data-ty="${k}" class="${k === pick ? 'pick' : ''}" style="--c:${t.color}"><b>${k}</b>${t.name}<small>${lifeLaps}</small></button>`;
-    }).join('');
-    $('prHint').textContent = (pick === 'W') !== wetStart ? (wetStart ? 'Pneus slicks sur piste mouillée : très peu d’adhérence !' : 'Pneus pluie sur le sec : lents et usure rapide.')
-      : TYRES[pick].life * Math.max(laps, 3) < laps ? 'Ces pneus ne tiendront pas toute la course : prévois un arrêt (bouton STAND).' : 'Ces pneus peuvent tenir jusqu’à l’arrivée.';
-    document.querySelectorAll('[data-ty]').forEach(b => b.onclick = () => { pick = b.dataset.ty; render(); });
+    $('prPlans').innerHTML = plans.map((p, k) => `<button data-plan="${k}" class="${k === sel ? 'pick' : ''}"><b>${p.name}${p.best ? ' <i class="best">★ la plus rapide</i>' : ''}</b>
+      <span class="stints">${p.stints.map(s => chip(s.tyre) + s.laps).join(' → ')}</span>
+      <small>${p.stops} arrêt${p.stops > 1 ? 's' : ''} · ${p.fuel} kg au départ · ≈ ${mmss(p.time)}</small></button>`).join('');
+    const s0 = plan.stints[0], need = fuelFor(s0.laps, lapKm);
+    $('prAdjust').innerHTML = `<span>Départ :</span><button id="prTyre">${chip(s0.tyre)} ${TYRES[s0.tyre].name}</button>
+      <button id="prF-">−</button><b>${plan.fuel} kg</b><button id="prF+">+</button>`;
+    const wetBad = (s0.tyre === 'W') !== wx.rain;
+    $('prHint').textContent = plan.fuel < need ? `⚠ Pas assez de carburant pour ${s0.laps} tours (il faut ${need} kg) : arrêt plus tôt ou panne sèche !`
+      : wetBad ? (wx.rain ? '⚠ Pneus slicks sur piste mouillée : très peu d’adhérence !' : '⚠ Pneus pluie sur le sec : lents et usure rapide.')
+      : `${plans[sel].desc}${plans[sel].best ? ' C’est le choix conseillé par le muret.' : ''} Tu pourras changer d’avis en course avec la radio.`;
+    document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => { choose(+b.dataset.plan); render(); });
+    $('prTyre').onclick = () => { const k = Object.keys(TYRES); s0.tyre = k[(k.indexOf(s0.tyre) + 1) % k.length]; render(); };
+    $('prF-').onclick = () => { plan.fuel = Math.max(10, plan.fuel - 5); render(); };
+    $('prF+').onclick = () => { plan.fuel = Math.min(TANK, plan.fuel + 5); render(); };
   };
   render();
-  $('prGo').onclick = () => startRace({ ...opts, wx: { ...wx }, tyre: pick });
+  $('prGo').onclick = () => startRace({ ...opts, wx: { ...wx }, plan });
   $('prBack').onclick = () => opts.season ? openSeason() : (refreshMenu(), show('menu'));
   show('prerace');
 }
-// stand : demande d'arrêt (gomme conseillée), la pastille pneus change la gomme demandée
-function toggleBox() {
-  if (!R || R.solo || R.done) return;
-  const p = R.player; if (p.pit) return;
-  p.box = p.box ? null : (wantBox(R, p) || bestTyre(R, 0.5));
-}
+// stand et radio
+const toggleBox = () => { if (R && !R.solo) boxToggle(R, R.player); };
 $('boxBtn').onclick = toggleBox;
-$('tyreChip').onclick = () => {
-  const p = R?.player; if (!p || !p.box || p.pit) return;
-  const k = Object.keys(TYRES); p.box = k[(k.indexOf(p.box) + 1) % k.length];
-};
-addEventListener('keydown', e => { if (e.code === 'KeyB') toggleBox(); });
+$('tyreChip').onclick = () => { if (R && !R.solo) radioOrder(R, 'tyre'); };
+addEventListener('keydown', e => { if (e.code === 'KeyB') toggleBox(); if (e.code === 'KeyR') toggleRadio(); });
+function toggleRadio() { if (!R || R.solo) return; $('radioPanel').classList.toggle('hidden'); }
+$('radioBtn').onclick = toggleRadio;
+$('rpClose').onclick = () => $('radioPanel').classList.add('hidden');
+document.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => R && radioAsk(R, b.dataset.ask));
+document.querySelectorAll('[data-order]').forEach(b => b.onclick = () => R && radioOrder(R, b.dataset.order));
 $('pauseBtn').onclick = () => pause();
 $('resumeBtn').onclick = () => { paused = false; last = performance.now(); show('hud'); };
 $('restartBtn').onclick = () => startRace();
@@ -403,5 +420,5 @@ initInput(toggleCam, pause);
 refreshMenu();
 setFov();
 show('menu');
-if (params.has('demo')) startRace({ wx: wxParam(), tyre: params.get('pneus') || undefined });
+if (params.has('demo')) startRace({ wx: wxParam() });
 requestAnimationFrame(loop);
