@@ -63,6 +63,14 @@ export function buildEnvironment(scene, renderer, track, world = scene) {
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: TX.sunGlow(), fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending }));
   sunSprite.scale.set(700, 700, 1); sunSprite.position.copy(sunDir).multiplyScalar(2400); sunSprite.renderOrder = -1;
   sky.add(sunSprite);
+  // nuages photographiques par-dessus le dégradé (orientation variable selon le circuit)
+  const cl = TX.clouds();
+  let cloudMat = null;
+  if (cl) {
+    cloudMat = new THREE.MeshBasicMaterial({ map: cl.map, alphaMap: cl.alpha, transparent: true, fog: false, depthWrite: false, side: THREE.BackSide });
+    const cd = new THREE.Mesh(new THREE.SphereGeometry(2500, 48, 12, 0, Math.PI * 2, 0, Math.PI / 2), cloudMat);
+    cd.renderOrder = -1.5; cd.rotation.y = (track.length % 628) / 100; sky.add(cd);
+  }
   world.add(sky);
 
   // éclairage
@@ -72,6 +80,7 @@ export function buildEnvironment(scene, renderer, track, world = scene) {
   // reflets des carrosseries : carte d'environnement tirée du ciel
   const envScene = new THREE.Scene();
   envScene.add(new THREE.Mesh(skyGeo(40), skyMat.clone()));
+  if (cloudMat) envScene.add(new THREE.Mesh(new THREE.SphereGeometry(39, 32, 8, 0, Math.PI * 2, 0, Math.PI / 2), cloudMat));
   const ground = new THREE.Mesh(new THREE.CircleGeometry(40, 16), new THREE.MeshBasicMaterial({ color: 0x4a5a3a }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -2; envScene.add(ground);
   const s2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunSprite.material.map, blending: THREE.AdditiveBlending, transparent: true }));
@@ -80,7 +89,7 @@ export function buildEnvironment(scene, renderer, track, world = scene) {
   scene.environment = pm.fromScene(envScene, 0.02, 0.1, 100).texture;
   pm.dispose();
 
-  return { sky, hemi, sun, skyMat, sunSprite, fog: { color: scene.fog.color.clone(), near: scene.fog.near, far: scene.fog.far } };
+  return { sky, hemi, sun, skyMat, cloudMat, sunSprite, fog: { color: scene.fog.color.clone(), near: scene.fog.near, far: scene.fog.far } };
 }
 
 export function buildTrackMeshes(track, scene) {
@@ -131,7 +140,7 @@ export function buildTrackMeshes(track, scene) {
       fences.quad(A(wall + 0.1, 1.15), A(wall + 0.1, 4.2), B(wall + 0.1, 1.15), B(wall + 0.1, 4.2), [v0 / 3, 0], [v0 / 3, 1], [v1 / 3, 0], [v1 / 3, 1]);
     }
   }
-  const roadMesh = road.mesh(L({ map: TX.asphalt() })); roadMesh.name = 'road'; group.add(roadMesh);
+  const roadMesh = road.mesh(L({ map: TX.asphalt(), normalMap: TX.asphaltNormal() })); roadMesh.name = 'road'; group.add(roadMesh);
   // voie des stands : bande d'asphalte qui quitte la piste, muret, lignes blanches, emplacements aux couleurs des écuries
   {
     const lane = new Geo(), paint = new Geo(), hw = 3.6;

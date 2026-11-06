@@ -18,7 +18,7 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 - `js/data.js` : écuries (10 × 2 pilotes), thèmes de décor (`THEMES` : ciel, sol, arbres, montagnes, ville, mer) et 10 circuits. Un circuit = points de contrôle `[x, z, altitude]` ou `layout` (S longueur / L-R rayon angle, fermé automatiquement) + `elev` (profil d'altitude), largeur, `runoff` (distance au mur).
 - `js/track.js` : spline Catmull-Rom ré-échantillonnée tous les 2 m, courbure, trajectoire, profil de vitesse IA. `pitLane(track)` : géométrie de la voie des stands (entrée, boxes, sortie, côté `lat` positif), utilisée par la physique et le décor.
 - `js/scenery.js` : maillages du circuit et environnement (asphalte, vibreurs, herbe/gravier, murs publicitaires, grillages, tribunes, stands, feux, arbres, montagnes, ciel, soleil, carte d'environnement pour les reflets).
-- `js/textures.js` : textures générées en canvas au lancement (aucune image à télécharger). Marques publicitaires inventées.
+- `js/textures.js` : photos CC0 Poly Haven (`assets/`, ~450 Ko : asphalte + carte de relief, herbe, sable, gravier, couche de nuages) composées en canvas, repli sur des textures générées si elles ne chargent pas ; autres textures générées en canvas. Marques publicitaires inventées. Crédits dans `assets/CREDITS.md`.
 - `js/carmodel.js` : modèle 3D de monoplace (design original, 3 appels de rendu par voiture).
 - `js/car.js` : physique arcade (adhérence + appui aéro, freinage, sous-virage, pente, murs).
 - `js/ai.js` : pilotes IA (poursuite pure, profil de vitesse × niveau, dépassements).
@@ -48,3 +48,4 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 7. ✅ **Finitions** : sons générés, voiture de sécurité, gerbes d'eau et fumée, secousses de caméra, bouton « Recommencer la carrière ».
 8. ✅ **Stratégie** : formats Sprint / Long, 3 stratégies au choix avant le départ (pneus, carburant), radio du muret (infos et consignes), carburant (poids, ravitaillement), usure des pneus selon les dérapages, voie des stands intégrée aux circuits.
 9. ✅ **Gestion avancée** : jeu plus fluide (HUD allégé, 3D au ralenti derrière les menus, résolution adaptative), radio à 3 boutons, arbres de 9 pièces + pôle Stands, infrastructures, sponsors par GP, mercato de mi-saison (cher) et intersaison (prix normaux, contrat moteur, plusieurs saisons d'affilée).
+10. ✅ **Graphismes réalistes** : textures photo CC0 (asphalte avec relief, herbe, sable, gravier), nuages tirés d'un ciel HDRI, sans coût de rendu supplémentaire notable (1 appel de rendu).

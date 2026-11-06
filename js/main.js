@@ -56,7 +56,7 @@ function disposeAll(obj) {
   obj.traverse(o => {
     if (!o.geometry) return;
     o.geometry.dispose();
-    for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); }
+    for (const m of [].concat(o.material)) { for (const k of ['map', 'normalMap', 'alphaMap']) if (m[k]) m[k].dispose(); m.dispose(); }
   });
 }
 function loadCircuit(id) {
@@ -95,7 +95,7 @@ function applyWeather(dt, wet, raining) {
   scene.fog.color.copy(env.fog.color).lerp(GREY, 0.75 * r); scene.background = scene.fog.color;
   scene.fog.near = env.fog.near * (1 - 0.7 * r); scene.fog.far = env.fog.far * (1 - 0.6 * r);
   env.hemi.intensity = 1.25 * (1 - 0.35 * Math.max(r, wet * 0.5)); env.sun.intensity = 2.6 * (1 - 0.75 * r);
-  env.skyMat.color.setRGB(1, 1, 1).lerp(GREY, 0.8 * r); env.sunSprite.material.opacity = 1 - r;
+  env.skyMat.color.setRGB(1, 1, 1).lerp(GREY, 0.8 * r); if (env.cloudMat) env.cloudMat.color.setRGB(1, 1, 1).lerp(GREY, 0.6 * r); env.sunSprite.material.opacity = 1 - r;
   if (env.road) env.road.material.color.setScalar(1 - 0.38 * wet);
   rain.visible = r > 0.02; rain.material.opacity = 0.45 * r;
   if (rain.visible) {

@@ -1,6 +1,31 @@
-// Textures générées au lancement (canvas) : aucun fichier image à télécharger.
+// Textures : photos libres CC0 (Poly Haven, dossier assets/) composées en canvas,
+// avec repli sur des textures générées si les images ne se chargent pas.
 import * as THREE from '../lib/three.module.min.js';
 import { mulberry } from './track.js';
+
+const PHOTOS = ['asphalte', 'asphalte-normal', 'herbe', 'sable', 'gravier', 'nuages', 'nuages-alpha'];
+const IMG = {};
+await Promise.race([
+  Promise.all(PHOTOS.map(n => new Promise(ok => {
+    const im = new Image(); im.onload = () => { IMG[n] = im; ok(); }; im.onerror = ok; im.src = `assets/${n}.jpg`;
+  }))),
+  new Promise(ok => setTimeout(ok, 8000)),
+]);
+const tile = (c, w, h, im, nx, ny = nx) => { for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) c.drawImage(im, x * w / nx, y * h / ny, w / nx + 0.5, h / ny + 0.5); };
+const photo = (n, nx = 1, size = 512) => make(size, size, (c, w, h) => tile(c, w, h, IMG[n], nx));
+// image brute (cartes de normales, masques) : pas de conversion sRGB
+function raw(im, rx = 1, ry = rx) {
+  const t = new THREE.Texture(im); t.needsUpdate = true; t.anisotropy = ANISO;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); return t;
+}
+export const asphaltNormal = () => IMG['asphalte-normal'] ? raw(IMG['asphalte-normal'], 4, 4) : null;
+// couche de nuages (photo de ciel CC0 « kloppenheim 06 ») : teinte + masque d'opacité
+export function clouds() {
+  if (!IMG.nuages || !IMG['nuages-alpha']) return null;
+  const map = raw(IMG.nuages); map.colorSpace = THREE.SRGBColorSpace; map.wrapT = THREE.ClampToEdgeWrapping;
+  const alpha = raw(IMG['nuages-alpha']); alpha.wrapT = THREE.ClampToEdgeWrapping;
+  return { map, alpha };
+}
 
 let ANISO = 4;
 export function setAniso(a) { ANISO = Math.min(8, a); }
@@ -18,11 +43,14 @@ function noise(c, w, h, n, colors, size = 1, rnd = Math.random) {
 }
 
 // Asphalte : u = travers de la piste (avec lignes blanches de bord), v = longueur
-export const asphalt = () => make(256, 512, (c, w, h) => {
+export const asphalt = () => make(IMG.asphalte ? 1024 : 256, IMG.asphalte ? 1024 : 512, (c, w, h) => {
   const r = mulberry(3);
-  c.fillStyle = '#56585c'; c.fillRect(0, 0, w, h);
-  noise(c, w, h, 26000, ['#4a4c50', '#5f6166', '#505256', '#66686c', '#45474b'], 1, r);
-  noise(c, w, h, 2500, ['#3e4044', '#6d6f73'], 2, r);
+  if (IMG.asphalte) tile(c, w, h, IMG.asphalte, 4);
+  else {
+    c.fillStyle = '#56585c'; c.fillRect(0, 0, w, h);
+    noise(c, w, h, 26000, ['#4a4c50', '#5f6166', '#505256', '#66686c', '#45474b'], 1, r);
+    noise(c, w, h, 2500, ['#3e4044', '#6d6f73'], 2, r);
+  }
   // zone gommée au centre de la piste
   const g = c.createLinearGradient(0, 0, w, 0);
   g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(20,20,22,.18)'); g.addColorStop(0.5, 'rgba(20,20,22,.26)');
@@ -46,14 +74,19 @@ export const kerb = () => make(64, 128, (c, w, h) => {
   noise(c, w, h, 600, ['rgba(0,0,0,.15)', 'rgba(255,255,255,.1)']);
 });
 
-export const grass = () => make(256, 256, (c, w, h) => {
+export const grass = () => IMG.herbe ? make(512, 512, (c, w, h) => {
+  // photo aérienne un peu sèche : on la ravive vers le vert
+  c.drawImage(IMG.herbe, 0, 0, w, h);
+  c.globalCompositeOperation = 'color'; c.fillStyle = 'rgba(70,140,40,.45)'; c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = 'source-over';
+}) : make(256, 256, (c, w, h) => {
   const r = mulberry(5);
   c.fillStyle = '#5d8f3c'; c.fillRect(0, 0, w, h);
   noise(c, w, h, 30000, ['#4f8034', '#679a44', '#578a39', '#71a34b', '#4a7a30'], 1, r);
   noise(c, w, h, 800, ['#7a8f45', '#3f6e2a'], 3, r);
 });
 
-export const gravel = () => make(256, 256, (c, w, h) => {
+export const gravel = () => IMG.gravier ? photo('gravier', 3) : make(256, 256, (c, w, h) => {
   const r = mulberry(9);
   c.fillStyle = '#b9a98a'; c.fillRect(0, 0, w, h);
   noise(c, w, h, 26000, ['#a8987a', '#cbbd9f', '#9a8b6e', '#d6c9ad', '#8e7f63'], 2, r);
@@ -134,7 +167,7 @@ export const sunGlow = () => make(128, 128, (c, w, h) => {
   c.fillStyle = g; c.fillRect(0, 0, w, h);
 }, false);
 
-export const sand = () => make(256, 256, (c, w, h) => {
+export const sand = () => IMG.sable ? photo('sable') : make(256, 256, (c, w, h) => {
   const r = mulberry(13);
   c.fillStyle = '#d9b98c'; c.fillRect(0, 0, w, h);
   noise(c, w, h, 24000, ['#d0ae80', '#e2c498', '#c9a676', '#e8cda4', '#bf9c6c'], 1, r);
