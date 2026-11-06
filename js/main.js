@@ -296,7 +296,16 @@ $('stBack').onclick = () => show(stFrom);
 $('szStand').onclick = () => showStandings('season');
 $('szGarage').onclick = () => showGarage('season');
 $('szMenu').onclick = () => { refreshMenu(); show('menu'); };
-$('szQuit').onclick = () => { if (confirm('Abandonner la saison en cours ? Le garage et le budget sont conservés.')) { SZ.quitSeason(); refreshMenu(); show('menu'); } };
+// confirmation en deux touches (les fenêtres confirm() sont bloquées en plein écran sur certains téléphones)
+function twoTap(btn, action) {
+  const label = btn.textContent;
+  btn.onclick = () => {
+    if (btn.dataset.armed) { clearTimeout(+btn.dataset.armed); delete btn.dataset.armed; btn.textContent = label; btn.classList.remove('warn'); action(); return; }
+    btn.textContent = 'Touche encore pour confirmer'; btn.classList.add('warn');
+    btn.dataset.armed = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; btn.classList.remove('warn'); }, 6000);
+  };
+}
+twoTap($('szQuit'), () => { SZ.quitSeason(); refreshMenu(); show('menu'); });
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { settings.mode = b.dataset.mode; save(); refreshMenu(); });
 
 let garageFrom = 'menu';
@@ -307,10 +316,9 @@ document.querySelectorAll('[data-laps]').forEach(b => b.onclick = () => { settin
 $('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };
 // remise à zéro complète : saison, écurie, garage, budget
 function resetAll() {
-  if (!confirm('Recommencer la carrière depuis le début ? La saison, l’écurie, le garage et le budget seront effacés.')) return;
   SZ.quitSeason(); resetCareer(); resetGarage(); resetTeam(); refreshMenu(); show('menu');
 }
-$('resetBtn').onclick = resetAll; $('szReset').onclick = resetAll;
+twoTap($('resetBtn'), resetAll); twoTap($('szReset'), resetAll);
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
 $('startBtn').onclick = async () => {

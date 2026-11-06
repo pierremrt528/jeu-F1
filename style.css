@@ -246,3 +246,4 @@ body.tilt #ctl .left { display: none; }
   #menu #teamState { grid-area: state; } #menu #resetBtn { grid-area: reset; justify-self: start; }
   #menu .opts .row { padding: 1px 0; } #menu .opts .row button { padding: 6px 10px; }
 }
+.linkish.warn { color: #ffd84d; font-weight: 700; text-decoration: none; }
