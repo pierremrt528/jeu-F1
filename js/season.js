@@ -13,8 +13,10 @@ export let season = load();
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
 export function saveSeason() { try { localStorage.setItem(KEY, JSON.stringify(season)); } catch {} }
 
-export function newSeason(year) {
-  season = { year: year || (season ? season.year + 1 : 2027), round: 0, pts: {}, results: [], dev: {}, grid: null, quali: null, done: false };
+export function newSeason(year, carry = false) {
+  // carry : les écuries rivales gardent la moitié de leurs progrès d'une saison à l'autre
+  const dev = carry && season ? Object.fromEntries(Object.entries(season.dev).map(([k, v]) => [k, v * 0.5])) : {};
+  season = { year: year || (season ? season.year + 1 : 2027), round: 0, pts: {}, results: [], dev, grid: null, quali: null, done: false };
   for (const d of DRIVERS()) season.pts[d.name] = 0;
   saveSeason();
   return season;

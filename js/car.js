@@ -31,7 +31,7 @@ export class Car {
   }
 }
 
-export const NO_UP = { vtop: 1, acc: 1, brake: 1, mu: 1, kd: 1, steer: 1, slip: 1, off: 1, wall: 1, rel: 0 };
+export const NO_UP = { vtop: 1, acc: 1, brake: 1, mu: 1, kd: 1, steer: 1, slip: 1, off: 1, wall: 1, rel: 0, tyre: 1, fuel: 1, pit: 0 };
 
 export function stepCar(car, track, dt) {
   const g = 9.81;

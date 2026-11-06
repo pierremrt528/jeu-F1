@@ -18,7 +18,10 @@ import { TYRES, FORMATS, MODES, TANK, forecast, wxText, makePlans, lapsFor, fuel
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { resetCareer } from './career.js';
-import { resetTeam } from './team.js';
+import { resetTeam, saveTeam } from './team.js';
+import { tickInfra, sponsorIncome, prizeBonus, resetInfra } from './infra.js';
+import { openMarket, MID_ROUND, MID_MULT } from './market.js';
+import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -159,9 +162,16 @@ function toggleCam() {
 // ---------- boucle ----------
 let fpsAcc = 0, fpsN = 0, fps = 0, slowT = 0;
 const timeScale = +params.get('vitesse') || 1;
+// derrière les menus la scène est fixe : on la redessine 4 fois par seconde seulement (menus plus fluides, moins de batterie)
+let menuDraw = 0, upT = 0;
+const maxRatio = Math.min(devicePixelRatio, 1.5);
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!R || paused) {
+    if (now - menuDraw < 250) return;
+    dt = Math.min(0.25, (now - menuDraw) / 1000); menuDraw = now;
+  }
   applyWeather(dt, R ? R.wet : 0, R ? R.raining : false);
   if (!R) { updateAudio(null, camera.position, false); updateFx(null); sky.position.copy(camera.position); renderer.render(scene, camera); return; }
   if (!paused) {
@@ -178,11 +188,13 @@ function loop(now) {
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
   // fps + qualité adaptative
-  fpsAcc += dt; fpsN++;
+  // résolution adaptative : baisse vite si ça rame, remonte doucement si c'est fluide
+  if (paused) { fpsAcc = 0; fpsN = 0; } else { fpsAcc += dt; fpsN++; }
   if (fpsAcc > 1) {
     fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0;
-    if (!paused && fps < 45 && pixelRatio > 0.75) { if (++slowT >= 2) { pixelRatio = Math.max(0.75, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); resize(); slowT = 0; } }
-    else slowT = 0;
+    const setRatio = r => { pixelRatio = Math.round(r * 100) / 100; renderer.setPixelRatio(pixelRatio); resize(); };
+    if (fps < 50 && pixelRatio > 0.6) { if (++slowT >= 2) { setRatio(Math.max(0.6, pixelRatio - (fps < 35 ? 0.3 : 0.15))); slowT = 0; } upT = 0; }
+    else { slowT = 0; if (fps >= 58 && pixelRatio < maxRatio && ++upT >= 6) { setRatio(Math.min(maxRatio, pixelRatio + 0.1)); upT = 0; } }
   }
   if (!paused) updateHud(R, params.has('fps') ? fps + ' i/s · ' + renderer.info.render.calls + ' appels · ' + Math.round(renderer.info.render.triangles / 1000) + 'k tri' : 0);
 }
@@ -202,9 +214,11 @@ function showResults() {
   const me = rows.find(r => r.player);
   if (!R.awarded) {
     const fastest = me.best && rows.every(r => !r.best || r.best >= me.best);
-    R.mult = repFactor();
+    R.mult = repFactor() * prizeBonus();
     R.prize = racePrize(me.pos, FORMATS[R.format]?.prize || 1, R.mult);
+    R.sponsor = sponsorIncome(); team.budget = Math.round((team.budget + R.sponsor) * 10) / 10; saveTeam();
     R.parts = tickDevelopment();
+    R.built = tickInfra();
     consumeBoost();
     // contexte pour la presse
     const mate = rows.find(r => !r.player && r.team === me.team);
@@ -214,7 +228,8 @@ function showResults() {
     if (R.season) { SZ.recordRace(rows); R.grow = growMate(); }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Rejouer';
-  $('rdGain').innerHTML = `Prime : <b>+${R.prize.toFixed(1)} M€</b> <small>(réputation ×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+  $('rdGain').innerHTML = `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+    (R.built ? `<br>🏗️ Construction terminée : <b>${R.built}</b>` : '') +
     (R.parts.length ? `<br>🔧 Pièce${R.parts.length > 1 ? 's' : ''} livrée${R.parts.length > 1 ? 's' : ''} : <b>${R.parts.join(', ')}</b>` : '') +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
   $('pressBtn').classList.toggle('hidden', R.pressDone);
@@ -243,7 +258,7 @@ $('pressBtn').onclick = () => {
 // ---------- saison ----------
 function setupSeason() {
   show('setup');
-  openSetup($('setup'), () => { resetGarage(); SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); openSeason(); }, () => { refreshMenu(); show('menu'); });
+  openSetup($('setup'), () => { resetGarage(); resetInfra(); SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); openSeason(); }, () => { refreshMenu(); show('menu'); });
 }
 function openSeason() {
   const S = SZ.season;
@@ -256,17 +271,24 @@ function openSeason() {
   const me = SZ.driverStandings().findIndex(d => d.player) + 1, myPts = S.pts['Toi'] || 0;
   if (S.done) {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
-    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne.</p>`;
-    $('szActions').innerHTML = `<button class="main" id="szNew">Nouvelle saison</button>`;
-    $('szNew').onclick = () => setupSeason();
+    const tp = SZ.teamStandings().findIndex(t => t.player) + 1;
+    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, contrat moteur et transferts à prix normaux.</p>`;
+    $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
+    $('szNew').onclick = () => offSeason(tp);
   } else {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
     $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[settings.format].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>`;
-    $('szActions').innerHTML = S.grid
+    const mid = S.round === MID_ROUND && career;
+    $('szActions').innerHTML = (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
-      : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`;
+      : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
+      (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(transferts ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
+    const mk = $('szMarket'); if (mk) mk.onclick = () => {
+      show('setup');
+      openMarket($('setup'), 'mid', name => { S.midSign = name || S.midSign; SZ.saveSeason(); openSeason(); }, () => openSeason());
+    };
     const q = $('szQuali'); if (q) q.onclick = async () => { await enableTilt(settings.tilt); startRace({ solo: true, wx: S.wx }); };
     const sm = $('szSim'); if (sm) sm.onclick = () => {
       const up = carUpgrades(), perf = TEAMS[0].perf * up.vtop;
@@ -275,6 +297,18 @@ function openSeason() {
     const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx }); };
   }
   show('season');
+}
+// intersaison : dotation (niveau de l'écurie + place au championnat), puis moteur et transferts
+function offSeason(tp) {
+  const S = SZ.season;
+  if (!career) return setupSeason();
+  if (S.bonus == null) {
+    const tier = TIERS.find(t => t.id === career.tier);
+    S.bonus = Math.round((tier.budget * 0.6 + (11 - tp) * 2.5) * 10) / 10;
+    team.budget = Math.round((team.budget + S.bonus) * 10) / 10; saveTeam(); SZ.saveSeason();
+  }
+  show('setup');
+  openMarket($('setup'), 'off', () => { SZ.newSeason(S.year + 1, true); openSeason(); }, () => openSeason());
 }
 function showQuali(simTime) {
   paused = true;
@@ -322,7 +356,7 @@ document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { setting
 $('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };
 // remise à zéro complète : saison, écurie, garage, budget
 function resetAll() {
-  SZ.quitSeason(); resetCareer(); resetGarage(); resetTeam(); refreshMenu(); show('menu');
+  SZ.quitSeason(); resetCareer(); resetGarage(); resetInfra(); resetTeam(); refreshMenu(); show('menu');
 }
 twoTap($('resetBtn'), resetAll); twoTap($('szReset'), resetAll);
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
@@ -374,11 +408,17 @@ const toggleBox = () => { if (R && !R.solo) boxToggle(R, R.player); };
 $('boxBtn').onclick = toggleBox;
 $('tyreChip').onclick = () => { if (R && !R.solo) radioOrder(R, 'tyre'); };
 addEventListener('keydown', e => { if (e.code === 'KeyB') toggleBox(); if (e.code === 'KeyR') toggleRadio(); });
-function toggleRadio() { if (!R || R.solo) return; $('radioPanel').classList.toggle('hidden'); }
+function toggleRadio() { if (!R || R.solo) return; $('radioPanel').classList.toggle('hidden'); radioLabels(); }
+function radioLabels() {
+  if (!R) return;
+  const p = R.player, nx = p.box?.tyre || p.plan?.[p.stint + 1]?.tyre;
+  $('rpMode').textContent = 'Rythme : ' + MODES[p.mode].name;
+  $('rpTyre').innerHTML = 'Pneus suivants : ' + (nx ? chip(nx) : '—');
+}
 $('radioBtn').onclick = toggleRadio;
 $('rpClose').onclick = () => $('radioPanel').classList.add('hidden');
 document.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => R && radioAsk(R, b.dataset.ask));
-document.querySelectorAll('[data-order]').forEach(b => b.onclick = () => R && radioOrder(R, b.dataset.order));
+document.querySelectorAll('[data-order]').forEach(b => b.onclick = () => { if (R) { radioOrder(R, b.dataset.order); radioLabels(); } });
 $('pauseBtn').onclick = () => pause();
 $('resumeBtn').onclick = () => { paused = false; last = performance.now(); show('hud'); };
 $('restartBtn').onclick = () => startRace();

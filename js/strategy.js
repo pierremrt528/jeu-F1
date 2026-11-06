@@ -144,6 +144,15 @@ const say = (R, txt) => { R.radio.push(txt); };
 const gapTo = (R, a, b) => Math.abs(((a.lap * R.track.N + a.idx) - (b.lap * R.track.N + b.idx)) * DS) / Math.max(30, (a.v + b.v) / 2);
 export function radioAsk(R, what) {
   const p = R.player, left = lapsLeft(R, p);
+  if (what === 'brief') {   // point complet en un message : pneus, carburant, écarts, arrêt, météo
+    const run = R.order.filter(c => !c.out), k = run.indexOf(p), a = run[k - 1], b = run[k + 1];
+    const fl = fuelLaps(R, p), ps = plannedStop(p), ns = nextStop(R, p);
+    const wx = R.raining ? ' · Pluie' : R.wx.change && !R.wx.done ? (R.wx.change.rain ? ' · Averse attendue' : ' · Éclaircie attendue') : '';
+    say(R, `📻 Pneus ${Math.round(100 - p.wear * 100)} % (~${tyreLaps(R, p).toFixed(1)} t)${p.slideWear > 0.25 ? ', tu glisses trop' : ''} · Essence ${fl.toFixed(1)} t${fl < left + 0.2 ? ' ⚠' : ''}` +
+      (a ? ` · Devant ${a.name} ${gapTo(R, a, p).toFixed(1)} s` : ' · En tête') + (b ? ` · Derrière ${gapTo(R, p, b).toFixed(1)} s` : '') +
+      (ps ? ` · Arrêt fin du tour ${ps} (${TYRES[ns.tyre].name.toLowerCase()}s)` : ' · Plus d’arrêt prévu') + wx);
+    return;
+  }
   if (what === 'tyres') {
     const tl = tyreLaps(R, p);
     say(R, `📻 Pneus ${TYRES[p.tyre].name.toLowerCase()}s usés à ${Math.round(p.wear * 100)} % : encore ~${tl.toFixed(1)} tours. ${p.slideWear > 0.25 ? 'Tu glisses beaucoup, ça les use vite !' : 'Usure normale.'}`);
@@ -164,27 +173,17 @@ export function radioAsk(R, what) {
 }
 export function radioOrder(R, what) {
   const p = R.player;
+  if (what === 'mode') { const k = Object.keys(MODES); what = k[(k.indexOf(p.mode) + 1) % k.length]; }
   if (MODES[what]) { p.mode = what; say(R, `📻 Bien reçu, mode ${MODES[what].name.toLowerCase()}.`); return; }
   if (what === 'box') { boxToggle(R, p); return; }
   if (!p.plan) return;
   const last = p.plan.length - 1;
-  if (what === 'later' || what === 'earlier') {
-    if (p.stint >= last) { say(R, '📻 Aucun arrêt prévu. Utilise STAND pour rentrer quand tu veux.'); return; }
-    const s = p.plan[p.stint], n = p.plan[p.stint + 1], d = what === 'later' ? 1 : -1;
-    if (s.laps + d < 1 || n.laps - d < 1) return;
-    s.laps += d; n.laps -= d;
-    say(R, `📻 Arrêt déplacé à la fin du tour ${plannedStop(p)}.`);
-  }
   if (what === 'tyre') {
     if (p.stint >= last) p.plan.push({ laps: 0, tyre: 'M' });
     const n = p.plan[p.stint + 1], k = Object.keys(TYRES);
     n.tyre = k[(k.indexOf(n.tyre) + 1) % k.length];
     if (p.box) p.box.tyre = n.tyre;
     say(R, `📻 Prochains pneus : ${TYRES[n.tyre].name.toLowerCase()}s.`);
-  }
-  if (what === 'fuel+' || what === 'fuel-') {
-    p.fuelAdj = Math.max(-60, Math.min(60, (p.fuelAdj || 0) + (what === 'fuel+' ? 5 : -5)));
-    say(R, `📻 Ravitaillement au prochain arrêt : ${p.fuelAdj >= 0 ? '+' : ''}${p.fuelAdj} kg par rapport au plan.`);
   }
 }
 export function boxToggle(R, p) {
@@ -214,11 +213,11 @@ export function updateStrategy(R, dt) {
     // usure : distance, glissades (fortement), sorties de piste, mode, gestion des pneus du pilote
     const slide = c.sliding ? Math.min(1, c.slip || 0.3) : 0;
     c.slideWear = (c.slideWear || 0) * (1 - dt * 0.3) + slide * dt * 0.3;
-    let k = (1 + 7 * slide + (c.offTrack ? 1.5 : 0)) * M.wear * (1.3 - c.tyreSkill / 250) * (c.player ? 1 : 0.92);
+    let k = (1 + 7 * slide + (c.offTrack ? 1.5 : 0)) * M.wear * (1.3 - c.tyreSkill / 250) * (c.player ? c.up?.tyre ?? 1 : 0.92);
     if (c.tyre === 'W') k *= 1 + 2.4 * (1 - R.wet);
     if (!R.solo) c.wear += dist / (TYRES[c.tyre].km * 1000) * k;
     // carburant : consommation, poids, panne sèche
-    if (!R.solo && !c.pit && !c.finished) c.fuel = Math.max(0, c.fuel - dist / 1000 * FPK * M.fuel);
+    if (!R.solo && !c.pit && !c.finished) c.fuel = Math.max(0, c.fuel - dist / 1000 * FPK * M.fuel * (c.up?.fuel ?? 1));
     c.mass = 1 + c.fuel / 750;
     c.powerMul = M.v; c.accMul = M.a;
     c.gripMul = tyreGrip(c, R.wet) * (1 - 0.06 * c.dmg);
@@ -248,7 +247,7 @@ export function updateStrategy(R, dt) {
       const add = Math.max(0, Math.min(TANK - c.fuel, c.box.fuel + (c.player ? c.fuelAdj || 0 : 0)));
       c.box.fuel = Math.round(add);
       c.frac = 0;
-      c.pit = { phase: 'in', k: k0, stop: 2.3 + Math.random() * 0.6 + add / 10 + (c.dmg > 0.15 ? 3 : 0) };
+      c.pit = { phase: 'in', k: k0, stop: Math.max(1.4, 2.3 + Math.random() * 0.6 + (c.up?.pit ?? 0)) + add / 10 + (c.dmg > 0.15 ? 3 : 0) };
       if (c.player) say(R, `📻 Muret : box, box ! ${TYRES[c.box.tyre].name}s et +${c.box.fuel} kg.`);
     }
     // conseils du muret pour le joueur (un tour avant l'arrêt prévu, ou si besoin)

@@ -3,7 +3,12 @@ import { DS } from './track.js';
 import { SPEC } from './car.js';
 import { TYRES, MODES, fuelLaps } from './strategy.js';
 
-const $ = id => document.getElementById(id);
+// éléments mis en cache et écritures seulement si la valeur change (évite des recalculs de mise en page)
+const EL = {}, last = {};
+const $ = id => EL[id] || (EL[id] = document.getElementById(id));
+const txt = (id, v) => { if (last[id] !== v) { last[id] = v; $(id).textContent = v; } };
+const html = (id, v) => { if (last['h' + id] !== v) { last['h' + id] = v; $(id).innerHTML = v; } };
+const tog = (id, c, on) => { const k = id + '.' + c; if (last[k] !== on) { last[k] = on; $(id).classList.toggle(c, on); } };
 let mm, mctx, mapImg, mapTf, frame = 0;
 
 export const fmt = t => {
@@ -32,33 +37,34 @@ export function updateHud(R, fps) {
   const p = R.player, n = R.cars.length;
   const pos = R.order.indexOf(p) + 1;
   frame++;
-  $('spd').textContent = Math.round(Math.abs(p.v) * 3.6);
-  $('gear').textContent = p.gear;
-  const f = Math.max(0, p.v) / (SPEC.vtop * p.perf);
-  $('rpm').style.width = (p.gear === 'N' ? 15 : (40 + 60 * ((f * 9) % 1))) + '%';
-  $('slip').classList.toggle('show', p.slipstream > 0.25 && R.phase === 'race');
-  $('lights').className = R.phase === 'lights' ? 'n' + R.lightsOn : (R.t - R.goAt < 1 ? 'go' : 'off');
-  const rd = $('radio');
-  if (R.radioT > 0 && R.radioMsg) { if (rd.textContent !== R.radioMsg) rd.textContent = R.radioMsg; rd.classList.add('show'); } else rd.classList.remove('show');
-  $('scBanner').classList.toggle('show', !!R.sc);
+  txt('spd', Math.round(Math.abs(p.v) * 3.6));
+  txt('gear', p.gear);
+  const f = Math.max(0, p.v) / (SPEC.vtop * p.perf), rw = p.gear === 'N' ? 15 : Math.round(40 + 60 * ((f * 9) % 1));
+  if (last.rpm !== rw) { last.rpm = rw; $('rpm').style.transform = `scaleX(${rw / 100})`; }
+  tog('slip', 'show', p.slipstream > 0.25 && R.phase === 'race');
+  const lc = R.phase === 'lights' ? 'n' + R.lightsOn : (R.t - R.goAt < 1 ? 'go' : 'off');
+  if (last.lights !== lc) { last.lights = lc; $('lights').className = lc; }
+  const radioOn = R.radioT > 0 && !!R.radioMsg;
+  if (radioOn) txt('radio', R.radioMsg);
+  tog('radio', 'show', radioOn);
+  tog('scBanner', 'show', !!R.sc);
   if (frame % 6) return;
   // pneus, météo, dégâts, stand
-  const T = TYRES[p.tyre], ch = $('tyreChip');
-  ch.innerHTML = `<b style="--c:${T.color}">${p.tyre}</b>${Math.max(0, Math.round(100 - p.wear * 100))} %` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box.tyre].color}">${p.box.tyre}</b>` : '');
-  $('fuelIco').textContent = R.solo ? '' : `⛽ ${Math.round(p.fuel)} kg · ${fuelLaps(R, p).toFixed(1)} t` + (p.mode !== 'norm' ? ` · ${MODES[p.mode].name}` : '');
-  $('fuelIco').classList.toggle('low', !R.solo && fuelLaps(R, p) < 1.5);
-  ch.classList.toggle('box', !!p.box);
-  $('wxIco').textContent = R.raining ? '🌧️' : R.wet > 0.1 ? '💧' : '';
-  $('dmgIco').textContent = p.dmg > 0.12 ? `⚠ aileron ${Math.round(p.dmg * 100)} %` : p.powerLoss ? '⚠ moteur' : '';
-  const bb = $('boxBtn');
-  bb.classList.toggle('hidden', !!R.solo); $('radioBtn').classList.toggle('hidden', !!R.solo);
-  bb.classList.toggle('on', !!p.box || !!p.pit);
-  bb.textContent = p.pit ? '🔧 AU STAND' : p.box ? '🔧 BOX ✓' : '🔧 STAND';
-  $('pos').innerHTML = `P${pos}<small>/${n}</small>`;
-  $('lap').textContent = R.solo ? (p.lap < 1 ? 'Tour de lancement' : 'Tour chrono') : `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`;
-  $('cur').textContent = R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0);
-  $('best').textContent = 'Meilleur ' + fmt(p.bestLap);
-  $('fps').textContent = fps || '';
+  const T = TYRES[p.tyre];
+  html('tyreChip', `<b style="--c:${T.color}">${p.tyre}</b>${Math.max(0, Math.round(100 - p.wear * 100))} %` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box.tyre].color}">${p.box.tyre}</b>` : ''));
+  txt('fuelIco', R.solo ? '' : `⛽ ${Math.round(p.fuel)} kg · ${fuelLaps(R, p).toFixed(1)} t` + (p.mode !== 'norm' ? ` · ${MODES[p.mode].name}` : ''));
+  tog('fuelIco', 'low', !R.solo && fuelLaps(R, p) < 1.5);
+  tog('tyreChip', 'box', !!p.box);
+  txt('wxIco', R.raining ? '🌧️' : R.wet > 0.1 ? '💧' : '');
+  txt('dmgIco', p.dmg > 0.12 ? `⚠ aileron ${Math.round(p.dmg * 100)} %` : p.powerLoss ? '⚠ moteur' : '');
+  tog('boxBtn', 'hidden', !!R.solo); tog('radioBtn', 'hidden', !!R.solo);
+  tog('boxBtn', 'on', !!p.box || !!p.pit);
+  txt('boxBtn', p.pit ? '🔧 AU STAND' : p.box ? '🔧 BOX ✓' : '🔧 STAND');
+  html('pos', `P${pos}<small>/${n}</small>`);
+  txt('lap', R.solo ? (p.lap < 1 ? 'Tour de lancement' : 'Tour chrono') : `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`);
+  txt('cur', R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0));
+  txt('best', 'Meilleur ' + fmt(p.bestLap));
+  txt('fps', fps || '');
   // tour des écarts : 2 devant, 2 derrière
   const k0 = Math.max(0, Math.min(n - 5, pos - 3));
   let h = '';
@@ -71,7 +77,7 @@ export function updateHud(R, fps) {
     }
     h += `<div class="${c === p ? 'me' : ''}"><b>${k + 1}</b><i style="background:#${c.team.color.toString(16).padStart(6, '0')}"></i>${c.name}<span>${gap}</span></div>`;
   }
-  $('tower').innerHTML = h;
+  html('tower', h);
   // mini-carte
   mctx.clearRect(0, 0, 140, 140); mctx.drawImage(mapImg, 0, 0);
   for (const c of R.cars) {

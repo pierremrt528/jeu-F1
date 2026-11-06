@@ -2,6 +2,7 @@
 // Le choix est appliqué à l'Écurie Martel (TEAMS[0]) : performance de la voiture et équipier.
 import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
+import { mateGrowth } from './infra.js';
 
 export const TIERS = [
   { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait. Tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
@@ -35,14 +36,23 @@ export let career = (() => { try { return JSON.parse(localStorage.getItem(KEY));
 export function resetCareer() { career = null; try { localStorage.removeItem(KEY); } catch {} applyCareer(); }
 export function saveCareer() { try { localStorage.setItem(KEY, JSON.stringify(career)); } catch {} }
 
-// applique le montage à l'Écurie Martel
-const BASE = { perf: TEAMS[0].perf, mate: { ...TEAMS[0].drivers[1] } };
+// applique le montage à l'Écurie Martel (et les transferts aux écuries rivales)
+const BASE = { perf: TEAMS[0].perf, rosters: TEAMS.map(t => t.drivers.map(d => ({ ...d }))) };
 export function applyCareer() {
   const t = TEAMS[0];
-  if (!career) { t.perf = BASE.perf; t.drivers[1] = { ...BASE.mate }; return; }
+  TEAMS.forEach((tm, k) => { if (k) tm.drivers = (career?.rosters?.[tm.name] || BASE.rosters[k]).map(d => ({ ...d })); });
+  if (!career) { t.perf = BASE.perf; t.drivers[1] = { ...BASE.rosters[0][1] }; return; }
   const tier = TIERS.find(x => x.id === career.tier), eng = ENGINES.find(x => x.id === career.engine);
   t.perf = tier.perf * enginePerf(eng);
   t.drivers[1] = { name: career.mate.name, skill: mateSkill(career.mate.spd), stats: career.mate };
+}
+// stats d'un pilote d'une écurie rivale, tirées de son niveau (toujours les mêmes pour un nom donné)
+export function statsOf(d) {
+  if (d.stats) return d.stats;
+  let h = 0; for (const ch of d.name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const r = k => ((h >>> (k * 5)) % 23) - 11;
+  const spd = Math.max(50, Math.min(99, Math.round((d.skill - 0.87) / 0.001)));
+  return { name: d.name, spd, strat: Math.max(50, Math.min(97, spd - 6 + r(1))), tyre: Math.max(50, Math.min(97, spd - 5 + r(2))), pot: Math.max(30, Math.min(95, 60 + r(3) * 2)) };
 }
 applyCareer();
 export const engineOf = () => career && ENGINES.find(x => x.id === career.engine);
@@ -50,7 +60,7 @@ export const engineOf = () => career && ENGINES.find(x => x.id === career.engine
 // Le potentiel fait progresser l'équipier après chaque course de la saison
 export function growMate() {
   if (!career) return null;
-  const m = career.mate, g = Math.round(m.pot / 100 * (0.4 + Math.random() * 1.2) * 10) / 10;
+  const m = career.mate, g = Math.round(m.pot / 100 * (0.4 + Math.random() * 1.2) * mateGrowth() * 10) / 10;
   if (m.spd >= 99) return null;
   m.spd = Math.min(99, Math.round((m.spd + g) * 10) / 10);
   saveCareer(); applyCareer();

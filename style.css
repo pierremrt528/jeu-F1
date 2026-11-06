@@ -3,6 +3,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1014; c
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 .hidden { display: none !important; }
+.screen:not(.hidden) { animation: fadeIn .16s ease-out; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 button { font: inherit; color: #fff; background: #2a2f37; border: 1px solid #3c434e; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
 button.main { background: #e10600; border-color: #e10600; font-weight: 800; font-size: 20px; padding: 14px; width: 100%; margin-top: 14px; }
 button.sel { background: #e10600; border-color: #e10600; }
@@ -68,7 +70,7 @@ tr.me td { background: rgba(225,6,0,.22); }
 #spd { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; display: inline-block; min-width: 54px; text-align: right; }
 #dash small { font-size: 12px; opacity: .8; }
 .bar { width: 110px; height: 5px; background: rgba(255,255,255,.2); border-radius: 3px; overflow: hidden; margin-top: 3px; }
-#rpm { height: 100%; background: linear-gradient(90deg, #3ddc84, #ffd84d 70%, #ff3b3b); }
+#rpm { height: 100%; width: 100%; transform-origin: left; will-change: transform; background: linear-gradient(90deg, #3ddc84, #ffd84d 70%, #ff3b3b); }
 
 /* commandes tactiles */
 #ctl .left, #ctl .right { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; gap: 10px; align-items: flex-end; }
@@ -260,16 +262,24 @@ body.tilt #ctl .left { display: none; }
 .prplans .best { font-style: normal; font-weight: 600; font-size: 11px; color: #ffd24a; margin-left: 6px; }
 .pradj button { padding: 5px 10px; font-size: 13px; } .pradj > b { min-width: 48px; text-align: center; white-space: nowrap; } .pradj #prTyre { white-space: nowrap; }
 .prerace { max-width: 640px; }
-#radioPanel { position: absolute; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: 62vw; background: rgba(12,15,20,.88); border-radius: 12px; padding: 6px 34px 6px 8px; display: flex; flex-direction: column; gap: 6px; z-index: 5; }
-.rprow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.rprow span { width: 46px; font-size: 11px; color: #9aa3ae; text-transform: uppercase; }
-.rprow button { padding: 5px 7px; font-size: 11px; }
-.rpclose { position: absolute; right: 6px; top: 6px; padding: 4px 8px; font-size: 13px; }
+#radioPanel { position: absolute; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 20px); background: rgba(12,15,20,.88); border-radius: 12px; padding: 6px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; z-index: 5; }
+#radioPanel button { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
+#radioPanel .tchip { width: 16px; height: 16px; border-width: 3px; font-size: 9px; }
+.rpclose { padding: 7px 10px; }
 @media (orientation: portrait) {
   .prplans { grid-template-columns: 1fr; }
-  #radioPanel { max-width: calc(100% - 20px); bottom: calc(110px + env(safe-area-inset-bottom)); }
+  #radioPanel { bottom: calc(110px + env(safe-area-inset-bottom)); }
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .prerace { padding: 10px 14px; gap: 5px; } .prerace h2 { font-size: 18px; } .prwx { font-size: 14px; }
   .prplans button { padding: 5px 7px; gap: 2px; }
+}
+.istat { font-size: 13px; color: #c3cad3; padding: 3px 0; } .istat b { color: #fff; }
+.node.infra { grid-row: auto; }
+.gtabs button { min-width: 0; }
+@media (orientation: portrait) { #gTabs { flex-wrap: wrap; } #gTabs button { flex: 1 0 30%; padding: 4px; } }
+@media (orientation: portrait) {
+  .clist.drvs { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .copt.drv { padding: 6px 8px; gap: 1px; } .copt.drv b { font-size: 14px; } .copt.drv .cstat { grid-template-columns: 46px 1fr 18px; gap: 4px; font-size: 10px; }
+  .setup .ghead h2 { font-size: 20px; }
 }
