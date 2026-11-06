@@ -115,7 +115,8 @@ export function updateRace(R, dt) {
   // classement : tours puis distance parcourue (les arrivés par temps)
   const prog = c => c.finished ? 1e9 - c.finishTime : c.dnf ? -1e9 + c.lap * N + c.idx : c.lap * N + c.idx;
   R.order = cars.slice().sort((a, b) => prog(b) - prog(a));
-  if ((R.player.finished || R.player.out) && !R.done) { R.done = true; R.endT = R.t; }
+  // course simulée : on va jusqu’au bout pour tout le peloton (classement exact)
+  if ((R.player.finished || R.player.out) && !R.done && (!R.sim || R.cars.every(c => c.finished || c.out))) { R.done = true; R.endT = R.t; }
 }
 
 // Collisions entre voitures : deux cercles par voiture (avant / arrière)
