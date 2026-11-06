@@ -59,22 +59,22 @@ export function tyreGrip(car, wet) {
 }
 
 // ---------- plans d'arrêts ----------
-export const PIT_LOSS = 24.4, KPLAN = 1.05;                // temps perdu dans la voie des stands, usure prévue
+export const PIT_LOSS = 24.4, KPLAN = 1.05;                // temps perdu par défaut dans la voie des stands, usure prévue
 const paceOf = (g, lapTime) => lapTime * 0.45 * (1 / Math.sqrt(g) - 1);   // secondes perdues par tour
 const MAXW = 0.6;                                          // le muret fait rentrer avant la chute (40 %)
 // déroulé tour par tour d'une stratégie : vie des pneus en fin de tour, temps estimé du tour
-export function planLaps(stints, lapKm, lapTime, wet) {
+export function planLaps(stints, lapKm, lapTime, wet, pitLoss = PIT_LOSS) {
   const out = []; let t = 0, lap = 0;
   stints.forEach((s, i) => {
     const T = TYRES[s.tyre], f0 = fuelFor(s.laps, lapKm), w = T.wpl * KPLAN * (s.tyre === 'W' && !wet ? 3 : 1);
-    if (i) t += PIT_LOSS + f0 / 10;
+    if (i) t += pitLoss + f0 / 10;
     for (let k = 0; k < s.laps; k++) {
       const r0 = 1 - k * w, r1 = 1 - (k + 1) * w, rm = (r0 + r1) / 2;
       let g = T.grip * lifeGrip(rm) * (s.tyre === 'W' ? (wet ? 1 : 0.95) : wet ? 0.6 : 1);
       if (r1 < 0) g *= 0.8;
       const lt = lapTime + paceOf(g, lapTime) + 0.035 * f0 * (1 - (k + 0.5) / s.laps);
       t += lt; lap++;
-      out.push({ lap, tyre: s.tyre, stint: i, r0, r: r1, t: lt + (i && !k ? PIT_LOSS + f0 / 10 : 0), lt });
+      out.push({ lap, tyre: s.tyre, stint: i, r0, r: r1, t: lt + (i && !k ? pitLoss + f0 / 10 : 0), lt });
     }
   });
   return { laps: out, time: t };
@@ -104,12 +104,12 @@ const NAMES = ['Recommandée', 'Alternative 1', 'Alternative 2'];
 const descOf = st => st.length === 1 ? 'Un seul relais : on gère les pneus jusqu’au bout.'
   : st.some(s => s.tyre === 'S') ? 'Tendres rapides mais fragiles : plus d’attaque, plus d’arrêts.'
   : 'Gommes durables : relais longs et peu de risques.';
-export function planInfo(stints, lapKm, lapTime, wet) {
-  const pl = planLaps(stints, lapKm, lapTime, wet);
+export function planInfo(stints, lapKm, lapTime, wet, pitLoss) {
+  const pl = planLaps(stints, lapKm, lapTime, wet, pitLoss);
   return { stints, stops: stints.length - 1, time: pl.time, fuel: Math.min(TANK, fuelFor(stints[0].laps, lapKm)), laps: pl.laps };
 }
 // stratégies recommandées : toutes les combinaisons de 1 à 4 relais, les 3 meilleures (variées)
-export function makePlans(laps, lapKm, lapTime, wet) {
+export function makePlans(laps, lapKm, lapTime, wet, pitLoss) {
   const memo = new Map(), cost = (t, n) => { const k = t + n; if (!memo.has(k)) memo.set(k, stintCost(t, n, lapKm, lapTime, wet)); return memo.get(k); };
   const dry = wet ? ['W'] : ['S', 'M', 'H'], seen = new Set(), cands = [];
   const rec = seq => {
@@ -119,13 +119,13 @@ export function makePlans(laps, lapKm, lapTime, wet) {
         seen.add(key);
         const ord = seq.slice().sort((a, b) => 'SMHW'.indexOf(a) - 'SMHW'.indexOf(b));
         const st = bestSplit(ord, laps, cost);
-        if (st) cands.push(planInfo(st, lapKm, lapTime, wet));
+        if (st) cands.push(planInfo(st, lapKm, lapTime, wet, pitLoss));
       }
     }
     if (seq.length < Math.min(4, laps)) for (const t of dry) rec([...seq, t]);
   };
   rec([]);
-  if (!cands.length) cands.push(planInfo(split(wet ? 'W' : 'H', laps), lapKm, lapTime, wet));
+  if (!cands.length) cands.push(planInfo(split(wet ? 'W' : 'H', laps), lapKm, lapTime, wet, pitLoss));
   cands.sort((a, b) => a.time - b.time);
   // variété : la meilleure, puis la meilleure avec un autre nombre d'arrêts, puis la suivante
   const pick = [cands[0]];
@@ -141,16 +141,36 @@ function split(t, laps) {   // repli : relais égaux d'une même gomme
   return out;
 }
 
+// stratégies risquées ou à contre-pied, tentées par 1 ou 2 IA à chaque course
+function riskyPlan(plans, laps, wet, lapKm) {
+  const w = t => laps * TYRES[t].wpl * KPLAN, best = plans[0].stints;
+  const opts = [];
+  if (!wet) {
+    const t = ['S', 'M', 'H'].filter(t => w(t) > 0.7 && w(t) < 1.4).sort((a, b) => Math.abs(w(a) - 1) - Math.abs(w(b) - 1))[0];
+    if (t && fuelFor(laps, lapKm) <= TANK) opts.push({ txt: `sans arrêt en ${TYRES[t].name.toLowerCase()}s`, stints: [{ tyre: t, laps }] });
+    const n = Math.max(1, Math.ceil(w('S') / 0.92));
+    if (n <= 4) opts.push({ txt: 'tendres poussés jusqu’à la corde', stints: Array.from({ length: n }, (_, i) => ({ tyre: 'S', laps: Math.floor(laps / n) + (i < laps % n ? 1 : 0) })) });
+    if (laps >= 6) opts.push({ txt: 'trois arrêts en tendres', stints: Array.from({ length: 4 }, (_, i) => ({ tyre: 'S', laps: Math.floor(laps / 4) + (i < laps % 4 ? 1 : 0) })) });
+  }
+  if (best.length > 1) {
+    const st = best.map(x => ({ ...x })), m = Math.max(1, Math.round(st[1].laps * 0.5));
+    if (st[1].laps - m >= 1) { st[0].laps += m; st[1].laps -= m; opts.push({ txt: 'premier relais très long', stints: st }); }
+  }
+  if (!opts.length) return null;
+  const o = opts[Math.floor(Math.random() * opts.length)];
+  return { name: 'Risquée', txt: o.txt, stints: o.stints };
+}
+
 // ---------- préparation de la course ----------
 export function setupStrategy(R, track, wx, plan) {
   R.wx = wx; R.raining = wx.rain; R.wet = wx.rain ? 0.9 : 0;
   R.lapKm = track.length / 1000; R.pitP = pitLane(track);
   R.radio = []; R.radioT = 0;
   const lapT = R.lapTime || 80;
-  const plans = R.solo ? null : makePlans(R.laps, R.lapKm, lapT, R.wet > 0.4);
+  const plans = R.solo ? null : makePlans(R.laps, R.lapKm, lapT, R.wet > 0.4, R.pitP.loss);
   const failP = c => c.player ? Math.min(0.2, Math.max(0.005, (100 - c.rel) * 0.0025)) : 0.035;
   for (const c of R.cars) {
-    c.wear = 0; c.dmg = 0; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0; c.flat = false;
+    c.wear = 0; c.dmg = 0; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0; c.flat = false; c.risky = false;
     c.strat = c.stats?.strat ?? 70; c.tyreSkill = c.stats?.tyre ?? 75;
     if (R.solo) { c.tyre = R.wet > 0.4 ? 'W' : 'S'; c.fuel = 15; c.plan = null; continue; }
     // plan : celui du joueur, sinon un des trois au hasard (les bons stratèges choisissent mieux)
@@ -160,6 +180,17 @@ export function setupStrategy(R, track, wx, plan) {
     c.fuel = c.player && plan ? plan.fuel : Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) + 1);
     c.fail = Math.random() < failP(c) * Math.min(1.5, R.laps / 10) ? { at: 0.1 + Math.random() * 0.8, kind: Math.random() < 0.5 ? 'dnf' : 'power' } : null;
   }
+  // 1 ou 2 écuries IA tentent un coup : stratégie risquée, pneus poussés jusqu'au bout
+  if (R.solo || R.laps < 4) return;
+  const ai = R.cars.filter(c => !c.player).sort(() => Math.random() - 0.5).slice(0, Math.random() < 0.5 ? 1 : 2), told = [];
+  for (const c of ai) {
+    const rp = riskyPlan(plans, R.laps, R.wet > 0.4, R.lapKm);
+    if (!rp) continue;
+    c.risky = true; c.plan = rp.stints.map(s => ({ ...s })); c.tyre = c.plan[0].tyre;
+    c.fuel = Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) + 1);
+    told.push(`${c.name} (${rp.txt})`);
+  }
+  if (told.length) say(R, `📻 Muret : stratégie risquée chez ${told.join(' et ')}.`);
 }
 
 export const progress = (R, c) => Math.max(0, ((c.lap - 1) * R.track.N + c.idx) / (R.laps * R.track.N));
@@ -192,8 +223,8 @@ export function wantBox(R, c) {
   const wetNeed = R.wet > 0.45 - (c.strat - 70) / 400, dryNeed = R.wet < 0.2 && !R.raining;
   if (c.tyre !== 'W' && wetNeed) return true;
   if (c.tyre === 'W' && dryNeed && left > 2) return true;
-  if (plannedStop(c) === c.lap && (fuelLaps(R, c) < left || lifeAtEnd(R, c) < 0.35)) return true;
-  if (1 - c.wear < 0.25 && left > 1.5) return true;
+  if (plannedStop(c) === c.lap && (fuelLaps(R, c) < left || lifeAtEnd(R, c) < (c.risky ? -0.1 : 0.35))) return true;
+  if (1 - c.wear < (c.risky ? 0.02 : 0.25) && left > 1.5) return true;
   if (fuelLaps(R, c) / MODES.save.fuel < left - 0.1 && fuelLaps(R, c) < 2.2) return true;
   if (c.dmg > 0.5 && left > 3) return true;
   return false;
@@ -281,6 +312,7 @@ export function updateStrategy(R, dt) {
       c.flat = true; c.flats = (c.flats || 0) + 1;
       if (c.lap < R.laps) c.box = nextStop(R, c);
       if (c.player) say(R, '📻 Muret : crevaison ! Rentre au stand doucement, on change les pneus.');
+      else say(R, `📻 Muret : crevaison pour ${c.name} !`);
     } else if (c.player && !c.tyreWarn && !R.solo && c.wear > 0.6 && !c.pit) { c.tyreWarn = true; say(R, '📻 Muret : tes pneus passent sous 40 %, ils n’ont presque plus de grip.'); }
     // carburant : consommation, poids, panne sèche
     if (!R.solo && !c.pit && !c.finished) c.fuel = Math.max(0, c.fuel - dist / 1000 * FPK * M.fuel * (c.up?.fuel ?? 1));

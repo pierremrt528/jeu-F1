@@ -43,16 +43,16 @@ function chartSVG(info, laps) {
 // race : { laps, lapKm, lapTime, wx, title } ; cb : { go(plan), sim(plan), back() }
 export function showPreraceScreen($, race, cb) {
   const { laps, lapKm, lapTime, wx } = race, wet = !!wx.rain;
-  const plans = makePlans(laps, lapKm, lapTime, wet), ref = plans[0].time;
+  const plans = makePlans(laps, lapKm, lapTime, wet, race.pitLoss), ref = plans[0].time;
   let sel = 0, cur, stint = 0, fOff = 0, custom = false;
-  const info = () => planInfo(cur, lapKm, lapTime, wet);
+  const info = () => planInfo(cur, lapKm, lapTime, wet, race.pitLoss);
   const choose = k => { sel = k; cur = plans[k].stints.map(s => ({ ...s })); stint = 0; fOff = 0; custom = false; };
   choose(0);
   const edit = f => { f(); custom = true; render(); };
   function render() {
     const I = info(), need = fuelFor(cur[0].laps, lapKm), fuel = Math.max(10, Math.min(TANK, need + fOff));
     $('prTitle').textContent = race.title;
-    $('prWx').textContent = 'Météo : ' + wxText(wx);
+    $('prWx').textContent = `Météo : ${wxText(wx)} · Arrêt au stand ≈ ${Math.round(race.pitLoss)} s`;
     $('prPlans').innerHTML = plans.map((p, k) => `<button data-plan="${k}" class="${k === sel && !custom ? 'pick' : ''}">
       <span class="pn"><b>${p.best ? '★ ' : ''}${p.name}</b><small>${p.stops ? p.stops + ' arrêt' + (p.stops > 1 ? 's' : '') : 'Sans arrêt'} · ${p.best ? '≈ ' + mmss(p.time) : dt(p.time - ref)}</small></span>
       <span class="mbar">${barHTML(p.stints, -1, 'i')}</span></button>`).join('');

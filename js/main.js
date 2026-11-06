@@ -1,7 +1,7 @@
 // Point d'entrée : rendu Three.js, caméras, boucle de jeu, écrans.
 import * as THREE from '../lib/three.module.min.js';
 import { CIRCUITS } from './data.js';
-import { buildTrack } from './track.js';
+import { buildTrack, pitLane } from './track.js';
 import { buildTrackMeshes, buildEnvironment } from './scenery.js';
 import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
@@ -327,7 +327,7 @@ function openSeason() {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === MID_ROUND ? newsHTML(S) : '');
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === MID_ROUND ? newsHTML(S) : '');
     const mid = S.round === MID_ROUND && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
@@ -463,7 +463,7 @@ const chip = t => `<b class="tchip" style="--c:${TYRES[t].color}">${t}</b>`;
 function showPrerace(opts) {
   const wx = opts.wx || (params.get('meteo') ? wxParam() : forecast(def.theme));
   const { laps, lapTime } = raceFormat();
-  showPreraceScreen($, { laps, lapKm: track.length / 1000, lapTime, wx, title: `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min` }, {
+  showPreraceScreen($, { laps, lapKm: track.length / 1000, lapTime, wx, pitLoss: pitLane(track).loss, title: `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min` }, {
     go: plan => startRace({ ...opts, wx: { ...wx }, plan }),
     sim: plan => startRace({ ...opts, wx: { ...wx }, plan, sim: true, autopilot: true }),
     back: () => opts.season ? openSeason() : showSolo(),

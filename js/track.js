@@ -121,7 +121,16 @@ export function mulberry(a) {
 export function pitLane(track) {
   const half = track.width / 2, wall = half + (track.runoff ?? 9), lat = wall + 6;
   const sm = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
-  const P = { half, wall, lat, e0: -190, e1: -140, x0: 70, x1: 110 };
+  // longueur de la voie selon le circuit (def.pit : 0,4 courte … 2 très longue) → temps perdu à chaque arrêt
+  const sc = track.def?.pit ?? 1, e1 = -125 - Math.max(10, Math.round(15 + 60 * (sc - 1))), x0 = -8 + Math.max(28, Math.round(78 + 100 * (sc - 1)));
+  const P = { half, wall, lat, e0: e1 - 50, e1, x0, x1: x0 + 40 };
+  // temps perdu : voie au limiteur (22 m/s) comparée à la vitesse de course sur le même tronçon, + arrêt
+  let loss = 5.2;
+  if (track.V) for (let k = P.e0; k <= P.x1; k++) {
+    const v = track.V[(k + track.N) % track.N], f = k < P.e1 ? (k - P.e0) / (P.e1 - P.e0) : k > P.x0 ? 1 - (k - P.x0) / (P.x1 - P.x0) : 1;
+    loss += DS / (v + (22 - v) * f) - DS / v;
+  }
+  P.loss = Math.round(loss * 10) / 10;
   P.latAt = k => k < P.e1 ? half - 1 + (lat - half + 1) * sm((k - P.e0) / (P.e1 - P.e0))
     : k > P.x0 ? lat - (lat - half + 1) * sm((k - P.x0) / (P.x1 - P.x0)) : lat;
   P.box = t => -125 + t * 13;          // emplacement de l'écurie t (0..9), avant et après la ligne
