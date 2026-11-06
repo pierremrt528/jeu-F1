@@ -88,7 +88,27 @@ export function buildTrack(def) {
     }
   }
   let minY = Infinity; for (let i = 0; i < N; i++) minY = Math.min(minY, Y[i]);
-  return { def, N, length: N * DS, width: w, runoff: def.runoff ?? 9, X, Y, Z, TX, TZ, H, C, RL, V, ground: minY - 0.6 };
+  const t = { def, N, length: N * DS, width: w, runoff: def.runoff ?? 9, X, Y, Z, TX, TZ, H, C, RL, V, ground: minY - 0.6 };
+  t.WL = new Float32Array(N).fill(w / 2 + t.runoff); t.WR = new Float32Array(N).fill(w / 2 + t.runoff);
+  // murs à distance variable : points [x, z, alt, mur gauche, mur droit] (m depuis l'axe)
+  const M = def.points.length;
+  if (def.points[0].length > 4) {
+    const ks = def.points.map(p => { let b = 0, bd = Infinity;
+      for (let i = 0; i < N; i++) { const d = (X[i] - p[0]) ** 2 + (Z[i] - p[1]) ** 2 + 25 * (Y[i] - p[2]) ** 2; if (d < bd) { bd = d; b = i; } }
+      return b; });
+    for (let c = 0; c < M; c++) {
+      const a = ks[c], pa = def.points[c], pb = def.points[(c + 1) % M], len = (ks[(c + 1) % M] - a + N) % N;
+      if (len > N / 4) continue;
+      for (let k = 0; k <= len; k++) { const i = (a + k) % N, f = len ? k / len : 0; t.WL[i] = pa[3] + (pb[3] - pa[3]) * f; t.WR[i] = pa[4] + (pb[4] - pa[4]) * f; }
+    }
+    // côté stands : muret à distance fixe, raccordé en douceur
+    const P = pitLane(t), wl = P.wall;
+    for (let k = P.e0 - 60; k <= P.x1 + 60; k++) {
+      const i = (k + N) % N, f = k < P.e0 - 2 ? (P.e0 - 2 - k) / 58 : k > P.x1 + 2 ? (k - P.x1 - 2) / 58 : 0;
+      t.WR[i] = wl + (t.WR[i] - wl) * Math.min(1, f);
+    }
+  }
+  return t;
 }
 
 function smooth(a, r) {
