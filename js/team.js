@@ -6,6 +6,7 @@ export const team = (() => {
   try { s = Object.assign(s, JSON.parse(localStorage.getItem(KEY)) || {}); } catch {}
   return s;
 })();
+export function resetTeam() { Object.assign(team, { moral: 60, budget: 5, rep: 50, boost: {}, boostTxt: '' }); saveTeam(); }
 export function saveTeam() { try { localStorage.setItem(KEY, JSON.stringify(team)); } catch {} }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

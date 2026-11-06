@@ -28,10 +28,12 @@
       <div class="row"><label>Tours</label><div><button data-laps="1">1</button><button data-laps="3">3</button><button data-laps="5">5</button></div></div>
       <div class="row"><label>Commandes</label><button id="tiltBtn"></button></div>
       <div class="row"><label>Caméra</label><button id="camSel"></button></div>
+      <div class="row"><label>Son</label><button id="soundBtn"></button></div>
       <button id="garageBtn" class="garageBtn">🔧 Garage <small id="menuPts"></small></button>
     </div>
     <div id="teamState" class="pstate"></div>
     <button id="startBtn" class="main">Départ</button>
+    <button id="resetBtn" class="linkish">↺ Recommencer la carrière au début</button>
     <p class="help">Tourne ton téléphone en paysage · ◀ ▶ pour tourner · GAZ / FREIN à droite<br>Clavier : flèches, C = caméra, P = pause</p>
   </div>
 </div>
@@ -54,6 +56,7 @@
   <div id="lights" class="off"><i></i><i></i><i></i><i></i><i></i></div>
   <div id="slip">ASPIRATION</div>
   <div id="radio"></div>
+  <div id="scBanner">🚨 VOITURE DE SÉCURITÉ</div>
   <div id="carState"><button id="tyreChip"></button><span id="wxIco"></span><span id="dmgIco"></span></div>
   <div id="dash"><div id="gear">N</div><div><span id="spd">0</span><small> km/h</small><div class="bar"><div id="rpm"></div></div></div></div>
   <div id="ctl">
@@ -91,6 +94,7 @@
         <div id="szActions" class="szact"></div>
         <div class="szact row2"><button id="szStand">🏁 Classements</button><button id="szGarage">🔧 Garage</button></div>
         <button id="szQuit" class="linkish">Abandonner la saison</button>
+        <button id="szReset" class="linkish">↺ Recommencer la carrière au début</button>
       </div>
     </div>
   </div>

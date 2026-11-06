@@ -28,10 +28,13 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 - `js/press.js` : conférence de presse après la course (banque de questions selon le contexte, réponses avec effets), écran de presse.
 - `js/career.js` : montage de l'écurie en début de saison : niveau (`TIERS` : nouvelle écurie / milieu de peloton / top team → budget, perf, réputation), 2e pilote (`MARKET` : Formule B et vétérans, stats vitesse/stratégie/pneus/potentiel, salaire), motoriste (`ENGINES` : 4 marques inventées, performance/fiabilité, prix). Appliqué à `TEAMS[0]`. Sauvegarde `gpm-career`.
 - `js/strategy.js` : pneus (`TYRES` S/M/H/W, usure proportionnelle à la distance de course, adhérence `tyreGrip`), météo (`forecast`, pluie au départ ou averse/éclaircie en course, humidité `R.wet`), arrêts au stand (`wantBox` pour les IA et les conseils du muret, voie des stands à déplacement imposé `pitStep`, limiteur 80 km/h), dégâts d'aileron (chocs) et casse tirée selon la fiabilité. Messages radio du muret (`R.radioMsg`).
+- `js/safety.js` : voiture de sécurité (après un abandon ou un gros choc, file indienne, pénalité de 5 s si le joueur dépasse).
+- `js/audio.js` : sons générés en Web Audio (moteur, voiture la plus proche, crissements, vent, pluie, chocs, feux, radio). Réglage Son au menu.
+- `js/fx.js` : particules partagées (gerbes d'eau sous la pluie, fumée des pneus).
 - `js/season.js` : saison (calendrier `CALENDAR`, qualifications estimées pour les IA, points 25-18-15… + meilleur tour, classements pilotes/écuries, progression des rivaux `dev`). Sauvegarde `gpm-season`. Les écrans saison/qualifs/classements sont gérés dans `main.js`.
 - `js/input.js`, `js/hud.js` : commandes et HUD (position, tour, chronos, vitesse, rapport, mini-carte).
 - `lib/three.module.min.js` (r170, licence MIT), `style.css`, `manifest.json`, `sw.js`, icônes.
-- Tester en local : `python3 -m http.server` puis `localhost:8000`. Paramètres de test : `?circuit=sierra`, `?demo` (pilote auto), `?vitesse=5`, `?tours=1`, `?fps` (i/s, appels de rendu, triangles), `?grille=1`, `?meteo=pluie|averse|eclaircie`, `?pneus=S|M|H|W` (avec `?demo`).
+- Tester en local : `python3 -m http.server` puis `localhost:8000`. Paramètres de test : `?circuit=sierra`, `?demo` (pilote auto), `?vitesse=5`, `?tours=1`, `?fps` (i/s, appels de rendu, triangles), `?grille=1`, `?meteo=pluie|averse|eclaircie`, `?pneus=S|M|H|W` (avec `?demo`), `?sc` (voiture de sécurité forcée).
 
 ## Feuille de route
 1. ✅ **Moteur 3D de course** : 1 circuit (Valmont), physique arcade (adhérence, freinage, aspiration), 19 IA, caméras cockpit / arrière commutables, HUD, qualité adaptative. Passe graphique réaliste (textures, reflets, ciel, tribunes, décor).
@@ -40,4 +43,4 @@ Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. L
 4. ✅ **Presse** : 3 questions de journalistes fictifs après chaque course (selon la place, les places gagnées, le rival, le coéquipier, le circuit), réponses avec bonus/malus : moral (±1 % de performance), budget (achat de points R&D au garage), réputation (multiplie les points R&D), bonus/malus pour la prochaine course.
 5. ✅ **Saison / carrière** : calendrier des 10 circuits, qualifications, points, classements pilotes et écuries, sauvegarde locale (localStorage). Début de saison : choix du niveau d'écurie (budget), du 2e pilote et du motoriste ; développement payé en M€ avec délai de livraison.
 6. ✅ **Météo, pneus, arrêts au stand, dégâts** : 3 gommes sèches + pluie avec usure (gestion des pneus du pilote), pluie et averses (ciel gris, gouttes, piste mouillée), choix des pneus avant la course, bouton STAND et voie des stands, stratégie des IA, messages radio du muret, dégâts d'aileron réparés au stand, casse moteur selon la fiabilité (abandon ou perte de puissance).
-7. Finitions : sons, voiture de sécurité, meilleurs graphismes.
+7. ✅ **Finitions** : sons générés, voiture de sécurité, gerbes d'eau et fumée, secousses de caméra, bouton « Recommencer la carrière ».

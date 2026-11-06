@@ -237,3 +237,12 @@ body.tilt #ctl .left { display: none; }
 .prtyres small { color: #9aa3ae; font-size: 11px; }
 .small { font-size: 12px; }
 @media (orientation: portrait) { #carState { bottom: calc(210px + env(safe-area-inset-bottom)); } }
+#scBanner { position: absolute; top: calc(70px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 4px 14px; border-radius: 8px; background: #ffb300; color: #111; font-weight: 900; font-size: 13px; letter-spacing: 1px; display: none; }
+#scBanner.show { display: block; animation: scb 1s infinite; }
+@keyframes scb { 50% { opacity: .55; } }
+@media (orientation: portrait) { #scBanner { top: calc(120px + env(safe-area-inset-top)); } }
+@media (max-height: 480px) and (orientation: landscape) {
+  #menu .card { grid-template-areas: "title opts" "circ opts" "state opts" "reset start"; }
+  #menu #teamState { grid-area: state; } #menu #resetBtn { grid-area: reset; justify-self: start; }
+  #menu .opts .row { padding: 1px 0; } #menu .opts .row button { padding: 6px 10px; }
+}

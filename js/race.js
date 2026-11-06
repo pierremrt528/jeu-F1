@@ -7,6 +7,7 @@ import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
 import { raceModifiers } from './team.js';
 import { setupStrategy, updateStrategy, pitStep, addDamage } from './strategy.js';
+import { requestSafety, updateSafety } from './safety.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
@@ -33,7 +34,7 @@ export function createRace(track, scene, laps, opts = {}) {
     Object.assign(player, { idx: i, heading: track.H[i], x: track.X[i], z: track.Z[i], y: track.Y[i], lat: 0, v: 45, grid: 1 });
     placeMesh(player); scene.add(player.mesh);
     const Rq = { track, cars, player, laps: 1, order: [player], t: 0, phase: 'race', raceStart: 0, lightsOn: 0, goAt: -10, solo: true, autopilot: !!opts.autopilot, done: false };
-    setupStrategy(Rq, track, { rain: wx.rain, change: null }); return Rq;
+    Rq.scene = scene; setupStrategy(Rq, track, { rain: wx.rain, change: null }); return Rq;
   }
   ai.forEach((c, k) => {
     const i = (N - 5 - k * 4) % N, s = k % 2 ? 1 : -1;
@@ -48,7 +49,7 @@ export function createRace(track, scene, laps, opts = {}) {
     t: -1, phase: 'lights', lightsOn: 0, goAt: 4.2 + 0.4 + Math.random() * 0.8,
     autopilot: !!opts.autopilot, done: false,
   };
-  setupStrategy(R, track, { ...wx }, opts.tyre);
+  R.scene = scene; setupStrategy(R, track, { ...wx }, opts.tyre);
   return R;
 }
 
@@ -65,12 +66,16 @@ export function updateRace(R, dt) {
 
   for (const c of cars) {
     if (c.player && !R.autopilot && !c.finished) readInput(c, dt);
-    else aiDrive(c, track, cars, dt);
+    else aiDrive(c, track, R.sc ? cars.concat(R.sc.car) : cars, dt);
     c.canReverse = racing && c.player && !R.autopilot;
     if (!racing) { c.throttle = 0; c.brake = 1; }
     if (c.finished && c.v > 20) { c.throttle = 0; }
   }
-  if (racing) updateStrategy(R, dt);
+  if (racing) {
+    updateStrategy(R, dt);
+    if (R.scWhy) { requestSafety(R, R.scWhy, R.scWhy === 'test'); R.scWhy = null; }
+    updateSafety(R, dt);
+  }
 
   // aspiration : voiture devant à moins de 45 m, alignée
   for (const c of cars) {
@@ -99,11 +104,11 @@ export function updateRace(R, dt) {
         c.lastLap = lt; if (!c.bestLap || lt < c.bestLap) c.bestLap = lt;
       }
       c.lapStart = R.t;
-      if (c.lap > R.laps && !c.finished) { c.finished = true; c.finishTime = R.solo ? c.lastLap : R.t - R.raceStart; }
+      if (c.lap > R.laps && !c.finished) { c.finished = true; c.finishTime = R.solo ? c.lastLap : R.t - R.raceStart + (c.penalty || 0); }
     } else if (prev < N * 0.25 && c.idx > N * 0.75) c.lap--;
   }
 
-  collide(cars.filter(c => !c.out && !c.pit));
+  collide(cars.filter(c => !c.out && !c.pit).concat(R.sc ? [R.sc.car] : []));
   for (const c of cars) placeMesh(c);
 
   // classement : tours puis distance parcourue (les arrivés par temps)
@@ -152,6 +157,6 @@ export function results(R) {
       const done = (c.lap - 1) * track.N + c.idx, left = Math.max(0, total - done) * DS;
       time = t + left / 70;
     }
-    return { pos: k + 1, grid: c.grid, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished, dnf: !!c.dnf, stops: c.stops, tyre: c.tyre };
+    return { pos: k + 1, grid: c.grid, name: c.name, team: c.team.name, color: c.team.color, player: c.player, time, best: c.bestLap, finished: c.finished, dnf: !!c.dnf, stops: c.stops, tyre: c.tyre, pen: c.penalty || 0 };
   });
 }

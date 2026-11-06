@@ -40,6 +40,7 @@ export function updateHud(R, fps) {
   $('lights').className = R.phase === 'lights' ? 'n' + R.lightsOn : (R.t - R.goAt < 1 ? 'go' : 'off');
   const rd = $('radio');
   if (R.radioT > 0 && R.radioMsg) { if (rd.textContent !== R.radioMsg) rd.textContent = R.radioMsg; rd.classList.add('show'); } else rd.classList.remove('show');
+  $('scBanner').classList.toggle('show', !!R.sc);
   if (frame % 6) return;
   // pneus, météo, dégâts, stand
   const T = TYRES[p.tyre], ch = $('tyreChip');
@@ -76,6 +77,7 @@ export function updateHud(R, fps) {
     const [x, y] = mapTf(c.x, c.z);
     mctx.fillStyle = '#' + c.team.color.toString(16).padStart(6, '0'); mctx.fillRect(x - 2.5, y - 2.5, 5, 5);
   }
+  if (R.sc) { const [sx, sy] = mapTf(R.sc.car.x, R.sc.car.z); mctx.fillStyle = '#ffb300'; mctx.fillRect(sx - 3.5, sy - 3.5, 7, 7); }
   const [x, y] = mapTf(p.x, p.z);
   mctx.fillStyle = '#fff'; mctx.beginPath(); mctx.arc(x, y, 4.5, 0, 7); mctx.fill();
   mctx.fillStyle = '#e10600'; mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill();

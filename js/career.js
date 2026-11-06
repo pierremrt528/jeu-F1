@@ -32,6 +32,7 @@ export const enginePerf = e => 1 + (e.perf - 85) * 0.0012;
 
 const KEY = 'gpm-career';
 export let career = (() => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } })();
+export function resetCareer() { career = null; try { localStorage.removeItem(KEY); } catch {} applyCareer(); }
 export function saveCareer() { try { localStorage.setItem(KEY, JSON.stringify(career)); } catch {} }
 
 // applique le montage à l'Écurie Martel

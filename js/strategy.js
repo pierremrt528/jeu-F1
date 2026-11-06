@@ -101,7 +101,7 @@ export function updateStrategy(R, dt) {
     // casse
     if (c.fail && !c.failed && progress(R, c) >= c.fail.at) {
       c.failed = true;
-      if (c.fail.kind === 'dnf') { c.dnf = true; if (c.player) say(R, '📻 Muret : casse moteur… on doit abandonner. Désolé.'); }
+      if (c.fail.kind === 'dnf') { c.dnf = true; R.scWhy = 'dnf'; if (c.player) say(R, '📻 Muret : casse moteur… on doit abandonner. Désolé.'); }
       else { c.powerLoss = 0.05; if (c.player) say(R, '📻 Muret : perte de puissance moteur, on continue en mode dégradé.'); }
     }
     if (c.dnf) {
@@ -133,6 +133,7 @@ export function addDamage(R, c, amount) {
   if (amount < 0.03 || R.solo) return;
   const before = c.dmg;
   c.dmg = Math.min(1, c.dmg + amount);
+  if (amount > 0.18) R.scWhy = R.scWhy || 'crash';
   if (c.player && before < 0.15 && c.dmg >= 0.15) say(R, '📻 Muret : aileron avant endommagé, tu perds de l’appui. Un arrêt le réparera.');
 }
 

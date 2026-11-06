@@ -12,13 +12,16 @@ export function aiDrive(car, track, cars, dt) {
   for (const o of cars) {
     if (o === car || o.out || o.pit) continue;
     const d = ((o.idx - car.idx + N) % N) * DS;
-    if (d > 0 && d < 40 && Math.abs(o.lat - car.lat) < 2.6 && d < gap) { gap = d; ahead = o; }
+    if (d > 0 && d < 40 && Math.abs(o.lat - car.lat) < (car.scMode ? 99 : 2.6) && d < gap) { gap = d; ahead = o; }
   }
   car.passTimer -= dt;
   const lim = width / 2 - 1.4;
   let laneTarget = RL[car.idx] * 0.85 + car.laneBias;
   let vCap = Infinity;
-  if (ahead && (ahead.v < car.v + 3 || gap < 14)) {
+  if (car.scMode) {
+    // voiture de sécurité : file indienne, pas de dépassement
+    if (ahead) vCap = ahead.v + (gap - 16) * 0.6;
+  } else if (ahead && (ahead.v < car.v + 3 || gap < 14)) {
     if (car.passTimer <= 0) {
       const left = ahead.lat - 3.4, right = ahead.lat + 3.4;
       car.passSide = Math.abs(left) < Math.abs(right) ? -1 : 1;
@@ -45,7 +48,7 @@ export function aiDrive(car, track, cars, dt) {
   // vitesse cible
   let vt = V[car.idx];
   for (let k = 1; k <= 4; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
-  vt = Math.min(vt * car.skill * Math.sqrt((car.gripMul ?? 1) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
+  vt = Math.min(vt * (car.scMode ? (ahead ? 0.72 : 0.9) : 1) * car.skill * Math.sqrt((car.gripMul ?? 1) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
   if (car.offTrack) vt = Math.min(vt, 25);
   if (car.v < vt - 0.8) { car.throttle = 1; car.brake = 0; }
   else if (car.v > vt + 1.2) { car.throttle = 0; car.brake = Math.min(1, (car.v - vt) / 6); }

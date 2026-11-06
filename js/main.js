@@ -15,10 +15,14 @@ import { TEAMS } from './data.js';
 import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
 import { TYRES, forecast, wxText, wantBox, bestTyre } from './strategy.js';
+import { initAudio, updateAudio } from './audio.js';
+import { initFx, updateFx } from './fx.js';
+import { resetCareer } from './career.js';
+import { resetTeam } from './team.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const settings = Object.assign({ cam: 'chase', tilt: false, laps: 3, circuit: 'valmont', mode: 'free' }, load());
+const settings = Object.assign({ cam: 'chase', tilt: false, laps: 3, circuit: 'valmont', mode: 'free', sound: true }, load());
 if (params.get('circuit')) settings.circuit = params.get('circuit');
 function load() { try { return JSON.parse(localStorage.getItem('gpm-settings')) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem('gpm-settings', JSON.stringify(settings)); } catch {} }
@@ -40,6 +44,8 @@ function resize() {
 }
 function setFov() { const portrait = camera.aspect < 1; camera.fov = settings.cam === 'cockpit' ? (portrait ? 95 : 72) : (portrait ? 88 : 62); camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
+initFx(scene);
+function clearRace() { if (!R) return; for (const c of R.cars) scene.remove(c.mesh); if (R.sc) scene.remove(R.sc.car.mesh); }
 
 // ---------- circuit ----------
 let def, track, sky, lights, env, world = null, R = null;
@@ -51,7 +57,7 @@ function disposeAll(obj) {
   });
 }
 function loadCircuit(id) {
-  if (R) { for (const c of R.cars) scene.remove(c.mesh); R = null; }
+  if (R) { clearRace(); R = null; }
   if (world) { scene.remove(world); disposeAll(world); scene.environment?.dispose(); }
   def = CIRCUITS.find(c => c.id === id) || CIRCUITS[0];
   track = buildTrack(def);
@@ -104,7 +110,8 @@ const wxParam = () => ({ pluie: { rain: true, change: null }, averse: { rain: fa
 let raceOpts = {};
 function startRace(opts = raceOpts) {
   raceOpts = opts;
-  if (R) for (const c of R.cars) scene.remove(c.mesh);
+  initAudio(settings.sound);
+  if (R) clearRace();
   R = createRace(track, scene, +params.get('tours') || settings.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, ...opts });
   R.season = !!opts.season;
   resetInput();
@@ -114,6 +121,11 @@ function startRace(opts = raceOpts) {
 
 // ---------- caméras ----------
 const tmp = new THREE.Vector3();
+// petite secousse lors d'un choc
+function shake(p) {
+  const k = Math.max(p.hitWall > 0.2 ? p.hitWall : 0, p.bump > 0.3 ? p.bump * 0.5 : 0);
+  if (k > 0) camera.position.add(tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(k * 0.35));
+}
 function updateCamera(dt) {
   const p = R.player;
   if (settings.cam === 'cockpit') {
@@ -131,6 +143,7 @@ function updateCamera(dt) {
   const back = 6.8 + Math.max(0, p.v) * 0.012;
   camera.position.set(camState.x - fx * back, camState.y + 2.3, camState.z - fz * back);
   camera.lookAt(camState.x + fx * 6, camState.y + 0.9, camState.z + fz * 6);
+  shake(p);
 }
 function toggleCam() {
   settings.cam = settings.cam === 'cockpit' ? 'chase' : 'cockpit'; save(); setFov();
@@ -144,7 +157,7 @@ function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   applyWeather(dt, R ? R.wet : 0, R ? R.raining : false);
-  if (!R) { sky.position.copy(camera.position); renderer.render(scene, camera); return; }
+  if (!R) { updateAudio(null, camera.position, false); updateFx(null); sky.position.copy(camera.position); renderer.render(scene, camera); return; }
   if (!paused) {
     let t = dt * timeScale;
     while (t > 0) { const s = Math.min(t, 1 / 60); updateRace(R, s); t -= s; }
@@ -153,6 +166,9 @@ function loop(now) {
     if (!R) return;
   }
   updateCamera(dt);
+  if (params.has('sc') && !R.solo && R.phase === 'race' && R.t - R.raceStart > 12 && !R.scUsed) R.scWhy = 'test';
+  updateFx(R, camera.position, paused ? 0 : dt * timeScale);
+  updateAudio(R, camera.position, !paused);
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
   // fps + qualité adaptative
@@ -175,7 +191,7 @@ function showResults() {
   const rows = results(R);
   const win = rows[0].time;
   $('resultsTable').innerHTML = rows.map(r =>
-    `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${r.name}<small>${r.team}${r.stops ? ` · ${r.stops} arrêt${r.stops > 1 ? 's' : ''}` : ''}</small></td>` +
+    `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${r.name}<small>${r.team}${r.stops ? ` · ${r.stops} arrêt${r.stops > 1 ? 's' : ''}` : ''}${r.pen ? ` · pénalité +${r.pen} s` : ''}</small></td>` +
     `<td>${r.dnf ? 'Abandon' : r.pos === 1 ? fmt(r.time) : '+' + (r.time - win).toFixed(3) + (r.finished ? '' : '*')}</td><td>${fmt(r.best)}</td></tr>`).join('');
   const me = rows.find(r => r.player);
   if (!R.awarded) {
@@ -203,6 +219,7 @@ function showResults() {
 function refreshMenu() {
   document.querySelectorAll('[data-laps]').forEach(b => b.classList.toggle('sel', +b.dataset.laps === settings.laps));
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
+  $('soundBtn').textContent = settings.sound ? '🔊 Activé' : '🔇 Coupé';
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
   $('menuPts').textContent = team.budget.toFixed(1) + ' M€';
@@ -225,7 +242,7 @@ function setupSeason() {
 function openSeason() {
   const S = SZ.season;
   if (!S) return show('menu');
-  if (R) { for (const c of R.cars) scene.remove(c.mesh); R = null; }
+  if (R) { clearRace(); R = null; }
   paused = true;
   $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : ` · manche ${S.round + 1}/10`);
   $('szCal').innerHTML = SZ.calendarHTML();
@@ -256,7 +273,7 @@ function openSeason() {
 function showQuali(simTime) {
   paused = true;
   const time = simTime ?? (R && R.player.finished ? R.player.lastLap : null);
-  if (R) { for (const c of R.cars) scene.remove(c.mesh); R = null; }
+  if (R) { clearRace(); R = null; }
   const rows = SZ.qualifying(track, time, SZ.season.wx?.rain);
   SZ.season.quali = rows.map(r => ({ name: r.name, time: r.time }));
   SZ.season.grid = rows.map(r => r.name); SZ.saveSeason();
@@ -287,6 +304,13 @@ function showGarage(from) { garageFrom = from; show('garage'); openGarage($('gar
 $('garageBtn').onclick = () => showGarage('menu');
 $('resGarageBtn').onclick = () => showGarage('results');
 document.querySelectorAll('[data-laps]').forEach(b => b.onclick = () => { settings.laps = +b.dataset.laps; save(); refreshMenu(); });
+$('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };
+// remise à zéro complète : saison, écurie, garage, budget
+function resetAll() {
+  if (!confirm('Recommencer la carrière depuis le début ? La saison, l’écurie, le garage et le budget seront effacés.')) return;
+  SZ.quitSeason(); resetCareer(); resetGarage(); resetTeam(); refreshMenu(); show('menu');
+}
+$('resetBtn').onclick = resetAll; $('szReset').onclick = resetAll;
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
 $('startBtn').onclick = async () => {
