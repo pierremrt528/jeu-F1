@@ -21,6 +21,7 @@ export const infra = (() => {
 })();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(infra)); } catch {} }
 export function resetInfra() { infra.lv = {}; infra.build = null; save(); }
+export function grantInfra(lv) { Object.assign(infra.lv, lv); save(); }
 export const level = id => infra.lv[id] || 0;
 
 // effets

@@ -6,9 +6,9 @@ import { mateGrowth } from './infra.js';
 import { driverCard, engineCard, tierCard, steps } from './ui.js';
 
 export const TIERS = [
-  { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait. Tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
-  { id: 'mid', name: 'Milieu de peloton', desc: 'Budget moyen, voiture correcte. Objectif : les points.', budget: 70, perf: 0.97, rep: 50, moral: 60 },
-  { id: 'top', name: 'Top team', desc: 'Énorme budget, voiture de pointe. Obligation de gagner.', budget: 140, perf: 0.985, rep: 80, moral: 55 },
+  { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait, ni pièces ni bâtiments : tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
+  { id: 'mid', name: 'Milieu de peloton', desc: 'Budget moyen, quelques pièces et bâtiments déjà en place. Objectif : les points.', budget: 70, perf: 0.96, parts: 1, infra: { rd: 1, hosp: 1, pitc: 1 }, rep: 50, moral: 60 },
+  { id: 'top', name: 'Top team', desc: 'Énorme budget, voiture développée et usine moderne. Obligation de gagner.', budget: 140, perf: 0.97, parts: 2, infra: { rd: 2, wind: 1, hosp: 2, media: 1, acad: 1, pitc: 2 }, rep: 80, moral: 55 },
 ];
 // Motoristes inventés : perf et fiab sur 100, prix en M€ pour la saison
 export const ENGINES = [

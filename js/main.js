@@ -7,7 +7,7 @@ import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
-import { garage, openGarage, tickDevelopment, resetGarage } from './garage.js';
+import { garage, openGarage, tickDevelopment, resetGarage, grantParts, drawRegulation, applyRegulation, treeName, perfFactor } from './garage.js';
 import { openSetup, growMate, career } from './career.js';
 import { team, racePrize, repFactor, consumeBoost } from './team.js';
 import { buildQuestions, runPress, teamLine } from './press.js';
@@ -19,7 +19,8 @@ import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { resetCareer } from './career.js';
 import { resetTeam, saveTeam } from './team.js';
-import { tickInfra, sponsorIncome, prizeBonus, resetInfra } from './infra.js';
+import { tickInfra, sponsorIncome, prizeBonus, resetInfra, grantInfra } from './infra.js';
+const playerPerf = () => TEAMS[0].perf * perfFactor();
 import { openMarket, aiMercato, MID_ROUND, MID_MULT } from './market.js';
 import { TIERS } from './career.js';
 
@@ -251,6 +252,8 @@ function showResults() {
       // ouverture du mercato : les écuries IA font leurs transferts
       const S = SZ.season;
       if (career && (S.round === MID_ROUND || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
+      if (S.done && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); }
+      SZ.recordPerf(playerPerf());
     }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
@@ -293,7 +296,14 @@ $('pressBtn').onclick = () => {
 // ---------- saison ----------
 function setupSeason() {
   show('setup');
-  openSetup($('setup'), () => { resetGarage(); resetInfra(); SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); openSeason(); }, () => { refreshMenu(); show('menu'); });
+  openSetup($('setup'), () => {
+    // départ selon le niveau : rien pour une nouvelle écurie, des pièces et des bâtiments pour les autres
+    resetGarage(); resetInfra();
+    const tier = TIERS.find(t => t.id === career.tier);
+    if (tier.parts) grantParts(tier.parts);
+    if (tier.infra) grantInfra(tier.infra);
+    SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); SZ.recordPerf(playerPerf()); openSeason();
+  }, () => { refreshMenu(); show('menu'); });
 }
 function openSeason() {
   const S = SZ.season;
@@ -307,7 +317,7 @@ function openSeason() {
   if (S.done) {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
     const tp = SZ.teamStandings().findIndex(t => t.player) + 1;
-    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, contrat moteur et transferts à prix normaux.</p>` + newsHTML(S);
+    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, contrat moteur et transferts à prix normaux.</p>` + regHTML(S) + newsHTML(S);
     $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
     $('szNew').onclick = () => offSeason(tp);
   } else {
@@ -331,6 +341,7 @@ function openSeason() {
   }
   show('season');
 }
+const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartent de zéro dans ce domaine : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées.</div>` : '';
 const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';
 // intersaison : dotation (niveau de l'écurie + place au championnat), puis moteur et transferts
 function offSeason(tp) {
@@ -342,7 +353,7 @@ function offSeason(tp) {
     team.budget = Math.round((team.budget + S.bonus) * 10) / 10; saveTeam(); SZ.saveSeason();
   }
   show('setup');
-  openMarket($('setup'), 'off', () => { SZ.newSeason(S.year + 1, true); openSeason(); }, () => openSeason());
+  openMarket($('setup'), 'off', () => { applyRegulation(S.reg || []); SZ.newSeason(S.year + 1, true, (S.reg || []).length); SZ.recordPerf(playerPerf()); openSeason(); }, () => openSeason());
 }
 function showQuali(simTime) {
   paused = true;
