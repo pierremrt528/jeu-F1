@@ -60,11 +60,13 @@ export function renderInfra(root, sel, onPick, refresh) {
   const x = INFRA.find(i => i.id === sel);
   if (x) {
     const l = level(x.id), cost = l < 3 ? buildCost(x, l) : 0, can = l < 3 && !b && team.budget >= cost;
-    const why = l >= 3 ? '' : b ? `Chantier en cours : ${INFRA.find(i => i.id === b.id).name}` : team.budget < cost ? `Budget insuffisant (${cost} M€)` : `Construire le niveau ${l + 1} : ${cost} M€ · ${TIME[l]} GP`;
+    const why = l >= 3 ? '' : b ? `Chantier en cours : ${INFRA.find(i => i.id === b.id).name}. Un seul à la fois.` : team.budget < cost ? `Budget insuffisant : il manque ${(cost - team.budget).toFixed(1)} M€.` : '';
     $('#gDetail').style.setProperty('--c', '#c06cff');
-    $('#gDetail').innerHTML = `<span class="dk">🏗️ Infrastructure</span><b>${x.icon} ${x.name}</b><p>${x.desc}</p>` +
-      x.lv.map((t, k) => `<p class="${k < l ? 'done' : 'req'}">${k < l ? '✓' : '○'} Niveau ${k + 1} : ${t}</p>`).join('') +
-      (l >= 3 ? '' : b?.id === x.id ? `<p class="done">⏳ En construction, prêt dans ${b.left} GP</p>` : `<button id="iBuy" class="main" ${can ? '' : 'disabled'}>${why}</button>`);
+    $('#gDetail').innerHTML = `<div class="dhead"><span class="dk">🏗️ Infrastructure · niveau ${l}/3</span><b>${x.icon} ${x.name}</b></div><p class="desc">${x.desc}</p>` +
+      `<div class="lvls">${x.lv.map((t, k) => `<p class="${k < l ? 'done' : k === l ? 'next' : ''}"><b>${k < l ? '✓' : k + 1}</b>${t}</p>`).join('')}</div>` +
+      (l >= 3 ? `<p class="state done">✓ Niveau maximum atteint</p>` : b?.id === x.id ? `<p class="state wip">⏳ En construction · prêt dans ${b.left} GP</p>` :
+        `<div class="dcost"><span><small>Niveau ${l + 1}</small><b>${cost} M€</b></span><span><small>Chantier</small><b>${TIME[l]} GP</b></span></div>` +
+        (why ? `<p class="why">${why}</p>` : '') + `<button id="iBuy" class="main" ${can ? '' : 'disabled'}>Construire</button>`);
     const btn = $('#iBuy');
     if (btn) btn.onclick = () => {
       if (!can) return;
@@ -72,6 +74,6 @@ export function renderInfra(root, sel, onPick, refresh) {
       infra.build = { id: x.id, left: TIME[l] }; save(); refresh();
     };
   } else $('#gDetail').innerHTML = `<p class="hint">Touche un bâtiment. Un seul chantier à la fois ; il est payé tout de suite et terminé après 1 à 3 Grands Prix.</p>`;
-  $('#gStats').innerHTML = `<p class="istat">🤝 Sponsors : <b>+${sponsorIncome()} M€</b> par GP</p><p class="istat">📺 Primes de course : <b>×${prizeBonus().toFixed(1)}</b></p>` +
+  $('#gStats').innerHTML = `<h4>Effets des bâtiments</h4><p class="istat">🤝 Sponsors : <b>+${sponsorIncome()} M€</b> par GP</p><p class="istat">📺 Primes de course : <b>×${prizeBonus().toFixed(1)}</b></p>` +
     `<p class="istat">🔬 Prix des pièces : <b>${Math.round(partDiscount() * 100)} %</b></p><p class="istat">🔧 Arrêts : <b>${pitBonus() ? pitBonus() + ' s' : 'normaux'}</b></p>`;
 }
