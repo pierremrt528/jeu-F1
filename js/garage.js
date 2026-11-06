@@ -117,6 +117,7 @@ const slots = t => [t.id, t.id + '#2'].slice(0, parallelParts());
 const devOf = id => Object.values(garage.dev).find(d => d.id === id);
 
 let tab = 0, sel = null, root = null;
+const ICONS = ['⚡', '🌀', '🔩', '🛡️', '🔧'];
 export function openGarage(el, onClose) {
   root = el; root.querySelector('#garageClose').onclick = onClose;
   render();
@@ -127,8 +128,8 @@ function render() {
   $('#gPts').textContent = team.budget.toFixed(1);
   $('#gTabs').innerHTML = TREES.map((tr, k) => {
     const n = tr.nodes.filter(x => owned(x.id)).length, d = slots(tr).some(k => garage.dev[k]);
-    return `<button data-tab="${k}" class="${k === tab ? 'sel' : ''}" style="--c:${tr.color}">${tr.name}<small>${n}/${tr.nodes.length}${d ? ' ⏳' : ''}</small></button>`;
-  }).join('') + `<button data-tab="${TREES.length}" class="${tab === TREES.length ? 'sel' : ''}" style="--c:#c06cff">Infra<small>🏗️</small></button>`;
+    return `<button data-tab="${k}" class="${k === tab ? 'sel' : ''}" style="--c:${tr.color}"><span class="ti">${ICONS[k] || '•'}</span>${tr.name}<small>${n}/${tr.nodes.length}${d ? ' ⏳' : ''}</small><i class="tp"><em style="width:${100 * n / tr.nodes.length}%"></em></i></button>`;
+  }).join('') + `<button data-tab="${TREES.length}" class="${tab === TREES.length ? 'sel' : ''}" style="--c:#c06cff"><span class="ti">🏗️</span>Infra<small>bâtiments</small><i class="tp"></i></button>`;
   root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = +b.dataset.tab; sel = null; render(); });
   root.querySelector('.garage').classList.toggle('infra', tab === TREES.length);
   if (tab === TREES.length) return renderInfra(root, sel, id => { sel = id; render(); }, render);
@@ -141,7 +142,7 @@ function render() {
     const st = owned(n.id) ? 'own' : w ? 'wip' : unlocked(n) ? (free && money(n) ? 'ok' : 'poor') : 'lock';
     const tag = `${price(n)} M€ · ${delay(n)} GP`;
     return `<button class="node ${st} ${slot[k]} ${sel === n.id ? 'pick' : ''}" data-node="${n.id}" style="--c:${t.color};grid-row:${row[k]}">
-      <b>${n.name}</b><small>${st === 'own' ? '✓ Installé' : st === 'wip' ? `⏳ livrée dans ${w.left} GP` : st === 'lock' ? '🔒 ' + tag : tag}</small></button>`;
+      <span class="nst">${st === 'own' ? '✓' : st === 'wip' ? '⏳' : st === 'lock' ? '🔒' : k + 1}</span><b>${n.name}</b><small>${st === 'own' ? 'Installé' : st === 'wip' ? `livrée dans ${w.left} GP` : tag}</small></button>`;
   }).join('');
   root.querySelectorAll('[data-node]').forEach(b => b.onclick = () => { sel = b.dataset.node; render(); });
   requestAnimationFrame(drawLines);
@@ -151,7 +152,8 @@ function render() {
     const reqTxt = n.req ? n.req.map(r => NODES[r].name).join(' + ') : n.reqAny ? n.reqAny.map(r => NODES[r].name).join(' ou ') : '';
     const w = devOf(n.id), can = !owned(n.id) && !w && unlocked(n) && free && money(n);
     const why = !unlocked(n) ? 'Pièce verrouillée' : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant (${price(n)} M€)` : `Développer : ${price(n)} M€ · livrée dans ${delay(n)} GP`;
-    $('#gDetail').innerHTML = `<b>${n.name}</b><p>${n.desc}</p><p class="fx">${Object.entries(n.fx).map(([k, v]) => `${pct(k, v)} ${FXN[k]}`).join(' · ')}</p>` +
+    $('#gDetail').style.setProperty('--c', t.color);
+    $('#gDetail').innerHTML = `<span class="dk">${ICONS[tab] || ''} Pôle ${t.name}</span><b>${n.name}</b><p>${n.desc}</p><p class="fx">${Object.entries(n.fx).map(([k, v]) => `<span>${pct(k, v)} ${FXN[k]}</span>`).join('')}</p>` +
       (reqTxt ? `<p class="req">Requiert : ${reqTxt}</p>` : '') +
       (owned(n.id) ? `<p class="done">✓ Pièce installée sur la voiture</p>` : w ? `<p class="done">⏳ En développement, livrée dans ${w.left} GP</p>` :
         `<button id="gBuy" class="main" ${can ? '' : 'disabled'}>${why}</button>`);

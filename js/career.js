@@ -3,6 +3,7 @@
 import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
 import { mateGrowth } from './infra.js';
+import { driverCard, engineCard, tierCard, steps } from './ui.js';
 
 export const TIERS = [
   { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait. Tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
@@ -68,7 +69,6 @@ export function growMate() {
 }
 
 // ---------- écran de montage (3 étapes) ----------
-const statBar = (l, v) => `<div class="cstat"><span>${l}</span><i><em style="width:${v}%"></em></i><b>${Math.round(v)}</b></div>`;
 export function openSetup(el, onDone, onCancel) {
   const pick = { tier: null, mate: null, engine: null };
   let step = 0;
@@ -80,21 +80,19 @@ export function openSetup(el, onDone, onCancel) {
     return Math.round(b * 10) / 10;
   };
   function render() {
-    const titles = ['1. Ton écurie', '2. Ton deuxième pilote', '3. Ton motoriste'];
-    $('#suTitle').textContent = titles[step];
-    $('#suBudget').innerHTML = pick.tier ? `Budget restant : <b>${left().toFixed(1)} M€</b>` : 'Choisis le niveau de ton écurie';
+    $('#suTitle').textContent = ['Ton écurie', 'Ton équipier', 'Ton motoriste'][step];
+    steps($('#suSteps'), ['Écurie', 'Pilote', 'Moteur'], step);
+    $('#suHint').textContent = ['Choisis ton point de départ : plus de budget, mais plus de pression.', 'Ton coéquipier marque des points pour l’écurie. Le potentiel le fait progresser pendant la saison.', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse.'][step];
+    $('#suBudget').innerHTML = pick.tier ? `<small>Budget restant</small><b>${left().toFixed(1)} M€</b>` : '<small>Budget</small><b>—</b>';
     let h = '';
-    if (step === 0) h = TIERS.map(t => `<button class="copt ${pick.tier === t.id ? 'pick' : ''}" data-v="${t.id}"><b>${t.name}</b><small>${t.desc}</small><em>${t.budget} M€</em></button>`).join('');
+    if (step === 0) h = TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('');
     if (step === 1) h = MARKET.map((d, k) => {
       const s = salary(d), can = s <= left() + (pick.mate ? salary(pick.mate) : 0);
-      return `<button class="copt drv ${pick.mate === d ? 'pick' : ''}" data-v="${k}" ${can ? '' : 'disabled'}><b>${d.name}</b><small>${d.from}</small>
-        ${statBar('Vitesse', d.spd)}${statBar('Stratégie', d.strat)}${statBar('Pneus', d.tyre)}${statBar('Potentiel', d.pot)}
-        <em>${s < 0 ? `apporte ${-s} M€` : s + ' M€ / saison'}</em></button>`;
+      return driverCard(d, { k, from: d.from, price: s < 0 ? `apporte ${-s} M€` : s + ' M€ / saison', pick: pick.mate === d, disabled: !can });
     }).join('');
     if (step === 2) h = ENGINES.map(e => {
       const can = e.price <= left() + (pick.engine ? ENGINES.find(x => x.id === pick.engine).price : 0);
-      return `<button class="copt eng ${pick.engine === e.id ? 'pick' : ''}" data-v="${e.id}" ${can ? '' : 'disabled'} style="--c:${e.color}"><b>${e.name}</b>
-        ${statBar('Performance', e.perf)}${statBar('Fiabilité', e.fiab)}<em>${e.price} M€ / saison</em></button>`;
+      return engineCard(e, { pick: pick.engine === e.id, disabled: !can });
     }).join('');
     $('#suList').innerHTML = h;
     $('#suList').className = 'clist ' + ['tiers', 'drvs', 'engs'][step];

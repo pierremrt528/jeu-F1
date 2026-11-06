@@ -53,14 +53,15 @@ export function renderInfra(root, sel, onPick, refresh) {
     const l = level(x.id), busy = b?.id === x.id;
     const st = busy ? 'wip' : l >= 3 ? 'own' : b ? 'poor' : team.budget >= buildCost(x, l) ? 'ok' : 'poor';
     return `<button class="node infra ${st} ${sel === x.id ? 'pick' : ''}" data-infra="${x.id}" style="--c:#c06cff">
-      <b>${x.icon} ${x.name}</b><small>${busy ? `⏳ niveau ${l + 1} dans ${b.left} GP` : l >= 3 ? '✓ Niveau max' : `Niveau ${l}/3 · ${buildCost(x, l)} M€`}</small></button>`;
+      <span class="nic">${x.icon}</span><b>${x.name}</b><span class="pips">${[0, 1, 2].map(k => `<i class="${k < l ? 'on' : busy && k === l ? 'wip' : ''}"></i>`).join('')}</span><small>${busy ? `⏳ niveau ${l + 1} dans ${b.left} GP` : l >= 3 ? '✓ Niveau max' : `${buildCost(x, l)} M€`}</small></button>`;
   }).join('');
   root.querySelectorAll('[data-infra]').forEach(e => e.onclick = () => onPick(e.dataset.infra));
   const x = INFRA.find(i => i.id === sel);
   if (x) {
     const l = level(x.id), cost = l < 3 ? buildCost(x, l) : 0, can = l < 3 && !b && team.budget >= cost;
     const why = l >= 3 ? '' : b ? `Chantier en cours : ${INFRA.find(i => i.id === b.id).name}` : team.budget < cost ? `Budget insuffisant (${cost} M€)` : `Construire le niveau ${l + 1} : ${cost} M€ · ${TIME[l]} GP`;
-    $('#gDetail').innerHTML = `<b>${x.icon} ${x.name}</b><p>${x.desc}</p>` +
+    $('#gDetail').style.setProperty('--c', '#c06cff');
+    $('#gDetail').innerHTML = `<span class="dk">🏗️ Infrastructure</span><b>${x.icon} ${x.name}</b><p>${x.desc}</p>` +
       x.lv.map((t, k) => `<p class="${k < l ? 'done' : 'req'}">${k < l ? '✓' : '○'} Niveau ${k + 1} : ${t}</p>`).join('') +
       (l >= 3 ? '' : b?.id === x.id ? `<p class="done">⏳ En construction, prêt dans ${b.left} GP</p>` : `<button id="iBuy" class="main" ${can ? '' : 'disabled'}>${why}</button>`);
     const btn = $('#iBuy');

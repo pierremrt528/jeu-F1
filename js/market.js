@@ -4,10 +4,10 @@ import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
 import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET } from './career.js';
 import { salaryCut } from './infra.js';
+import { driverCard, engineCard, steps as stepBar } from './ui.js';
 
 export const MID_ROUND = 5, MID_MULT = 2.5;
 const r1 = v => Math.round(v * 10) / 10;
-const statBar = (l, v) => `<div class="cstat"><span>${l}</span><i><em style="width:${v}%"></em></i><b>${Math.round(v)}</b></div>`;
 
 function candidates(mid) {
   if (!career.free) career.free = MARKET.filter(d => d.name !== career.mate.name).map(d => ({ ...d }));
@@ -32,20 +32,21 @@ export function openMarket(el, kind, onDone, onCancel) {
   const left = () => r1(team.budget - (steps.includes('eng') ? engCost(pick.eng) : 0) - pick.drv.cost);
   function render() {
     const what = steps[step];
-    $('#suTitle').textContent = mid ? '🔁 Mercato de mi-saison' : what === 'eng' ? 'Intersaison · 1. Contrat moteur' : 'Intersaison · 2. Ton deuxième pilote';
+    $('#suTitle').textContent = mid ? 'Mercato' : what === 'eng' ? 'Contrat moteur' : 'Transferts';
+    stepBar($('#suSteps'), mid ? [] : ['Moteur', 'Pilote'], step);
+    $('#suHint').textContent = mid ? `Mi-saison : les transferts coûtent ×${String(MID_MULT).replace('.', ',')}. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux.`
+      : what === 'eng' ? 'Intersaison : renouvelle ou change de motoriste pour la saison prochaine.' : 'Intersaison : garde ton équipier (prolongation) ou recrute un pilote libre ou rival.';
     const shown = what === 'eng' ? r1(team.budget - engCost(pick.eng)) : left();
-    $('#suBudget').innerHTML = `Budget restant : <b>${shown.toFixed(1)} M€</b>` + (mid ? ` <small>· transferts ×${String(MID_MULT).replace('.', ',')} en cours de saison</small>` : '');
+    $('#suBudget').innerHTML = `<small>Budget restant</small><b>${shown.toFixed(1)} M€</b>`;
     let h = '';
     if (what === 'eng') h = ENGINES.map(e => {
       const can = e.price <= team.budget || e === ENGINES[ENGINES.length - 1];
-      return `<button class="copt eng ${pick.eng === e.id ? 'pick' : ''}" data-v="${e.id}" ${can ? '' : 'disabled'} style="--c:${e.color}"><b>${e.name}${career.engine === e.id ? ' ✓' : ''}</b>
-        ${statBar('Performance', e.perf)}${statBar('Fiabilité', e.fiab)}<em>${e.price} M€ / saison</em></button>`;
+      return engineCard(e, { pick: pick.eng === e.id, disabled: !can, cur: career.engine === e.id });
     }).join('');
     else h = list.map((c, k) => {
       const can = c === pick.drv || c.cost <= left() + pick.drv.cost;
-      return `<button class="copt drv ${pick.drv === c ? 'pick' : ''} ${c.cur ? 'cur' : ''}" data-v="${k}" ${can ? '' : 'disabled'}><b>${c.s.name}</b><small>${c.from}</small>
-        ${statBar('Vitesse', c.s.spd)}${statBar('Stratégie', c.s.strat)}${statBar('Pneus', c.s.tyre)}${statBar('Potentiel', c.s.pot)}
-        <em>${c.cur && mid ? 'Sous contrat' : c.cost < 0 ? `apporte ${-c.cost} M€` : c.cost + ' M€' + (c.cur ? ' (prolonger)' : '')}</em></button>`;
+      return driverCard(c.s, { k, from: c.from, color: c.team ? TEAMS[c.team].color : c.cur ? '#ff3d2e' : null, pick: pick.drv === c, disabled: !can, cur: c.cur,
+        price: c.cur && mid ? 'Sous contrat' : c.cost < 0 ? `apporte ${-c.cost} M€` : c.cost + ' M€' + (c.cur ? ' (prolonger)' : '') });
     }).join('');
     $('#suList').innerHTML = h;
     $('#suList').className = 'clist ' + (what === 'eng' ? 'engs' : 'drvs');
