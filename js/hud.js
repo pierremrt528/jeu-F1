@@ -57,7 +57,8 @@ export function updateHud(R, fps) {
   tog('fuelIco', 'low', !R.solo && fuelLaps(R, p) < 1.5);
   tog('tyreChip', 'box', !!p.box);
   txt('wxIco', R.raining ? '🌧️' : R.wet > 0.1 ? '💧' : '');
-  txt('dmgIco', p.dmg > 0.12 ? `⚠ aileron ${Math.round(p.dmg * 100)} %` : p.powerLoss ? '⚠ moteur' : '');
+  const dm = [p.fwOff ? '⚠ aileron avant arraché' : p.dmg > 0.12 ? `⚠ aileron av. ${Math.round(p.dmg * 100)} %` : '', p.rwOff ? '⚠ aileron arrière arraché' : p.dmgR > 0.12 ? `⚠ aileron arr. ${Math.round(p.dmgR * 100)} %` : ''].filter(Boolean).join(' · ');
+  txt('dmgIco', dm || (p.powerLoss ? '⚠ moteur' : ''));
   tog('boxBtn', 'hidden', !!R.solo); tog('radioBtn', 'hidden', !!R.solo);
   tog('boxBtn', 'on', !!p.box || !!p.pit);
   txt('boxBtn', p.pit ? '🔧 AU STAND' : p.box ? '🔧 BOX ✓' : '🔧 STAND');

@@ -18,6 +18,7 @@ import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, 
 import { showPreraceScreen } from './prerace.js';
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
+import { initDebris, updateDebris, clearDebris } from './debris.js';
 import { resetCareer } from './career.js';
 import { resetTeam, saveTeam } from './team.js';
 import { resetStaff, staffWages } from './staff.js';
@@ -28,7 +29,7 @@ import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const settings = Object.assign({ cam: 'chase', tilt: false, format: 'sprint', circuit: 'valmont', sound: true, soloFmt: 'sprint', soloQuali: 'play', soloWx: 'auto' }, load());
+const settings = Object.assign({ cam: 'chase', tilt: false, format: 'sprint', circuit: 'valmont', sound: true, soloFmt: 'sprint', soloQuali: 'play', soloWx: 'auto', abs: true, tc: true, line: 0 }, load());
 if (params.get('circuit')) settings.circuit = params.get('circuit');
 function load() { try { return JSON.parse(localStorage.getItem('gpm-settings')) || {}; } catch { return {}; } }
 function save() { try { localStorage.setItem('gpm-settings', JSON.stringify(settings)); } catch {} }
@@ -50,8 +51,8 @@ function resize() {
 }
 function setFov() { const portrait = camera.aspect < 1; camera.fov = settings.cam === 'cockpit' ? (portrait ? 95 : 72) : (portrait ? 88 : 62); camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
-initFx(scene);
-function clearRace() { if (!R) return; for (const c of R.cars) scene.remove(c.mesh); if (R.sc) scene.remove(R.sc.car.mesh); }
+initFx(scene); initDebris(scene);
+function clearRace() { clearDebris(); if (!R) return; for (const c of R.cars) scene.remove(c.mesh); if (R.sc) scene.remove(R.sc.car.mesh); }
 
 // ---------- circuit ----------
 let def, track, sky, lights, env, world = null, R = null;
@@ -122,12 +123,13 @@ function raceFormat() {
   return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, fmtKey()) };
 }
 let raceOpts = {};
+if (params.has('debug')) window.gpm = () => R;   // tests : accès à la course en cours
 function startRace(opts = raceOpts) {
   raceOpts = opts;
   initAudio(settings.sound);
   if (R) clearRace();
   const rf = raceFormat();
-  R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: fmtKey(), ...opts });
+  R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: fmtKey(), assist: { abs: settings.abs, tc: settings.tc, line: settings.line }, ...opts });
   R.season = !!opts.season; R.free = ctx === 'solo';
   resetInput();
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
@@ -153,7 +155,7 @@ function simulate() {
 const tmp = new THREE.Vector3();
 // petite secousse lors d'un choc
 function shake(p) {
-  const k = Math.max(p.hitWall > 0.2 ? p.hitWall : 0, p.bump > 0.3 ? p.bump * 0.5 : 0);
+  const k = Math.max(p.hitWall > 0.2 ? p.hitWall : 0, p.bump > 0.3 ? p.bump * 0.5 : 0, p.kerb && p.v > 20 ? 0.06 : 0, p.spinT > 0 ? 0.08 : 0);
   if (k > 0) camera.position.add(tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(k * 0.35));
 }
 function updateCamera(dt) {
@@ -162,6 +164,7 @@ function updateCamera(dt) {
     p.mesh.updateMatrixWorld();
     camera.position.copy(tmp.set(0, 1.3, -0.2).applyMatrix4(p.mesh.matrixWorld));
     camera.lookAt(tmp.set(0, 0.2, 10).applyMatrix4(p.mesh.matrixWorld));
+    shake(p);
     return;
   }
   const k = 1 - Math.exp(-dt * 7);
@@ -205,6 +208,7 @@ function loop(now) {
   updateCamera(dt);
   if (params.has('sc') && !R.solo && R.phase === 'race' && R.t - R.raceStart > 12 && !R.scUsed) R.scWhy = 'test';
   updateFx(R, camera.position, paused ? 0 : dt * timeScale);
+  updateDebris(paused ? 0 : dt * timeScale);
   updateAudio(R, camera.position, !paused);
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
@@ -284,6 +288,9 @@ function refreshMenu() {
   $('soloGo').textContent = settings.soloQuali === 'play' ? 'Tour de qualification →' : 'Simuler les qualifs →';
   $('tiltBtn').textContent = settings.tilt ? 'Inclinaison' : 'Boutons';
   $('soundBtn').textContent = settings.sound ? '🔊 Activé' : '🔇 Coupé';
+  $('absBtn').textContent = settings.abs ? 'Activé' : 'Désactivé';
+  $('tcBtn').textContent = settings.tc ? 'Activé' : 'Désactivé';
+  $('lineBtn').textContent = ['Aucune', 'Freinage', 'Freinage + direction'][settings.line || 0];
   $('camBtn').textContent = settings.cam === 'cockpit' ? '🎥 1re' : '🎥 3e';
   $('camSel').textContent = settings.cam === 'cockpit' ? 'Cockpit (1re pers.)' : 'Arrière (3e pers.)';
   $('menuPts').textContent = team.budget.toFixed(1) + ' M€';
@@ -427,6 +434,9 @@ function resetAll() {
   SZ.quitSeason(); resetCareer(); resetGarage(); resetInfra(); resetStaff(); resetTeam(); refreshMenu(); show('menu');
 }
 twoTap($('resetBtn'), resetAll); twoTap($('szReset'), resetAll);
+$('absBtn').onclick = () => { settings.abs = !settings.abs; save(); refreshMenu(); };
+$('tcBtn').onclick = () => { settings.tc = !settings.tc; save(); refreshMenu(); };
+$('lineBtn').onclick = () => { settings.line = ((settings.line || 0) + 1) % 3; save(); refreshMenu(); };
 $('tiltBtn').onclick = async () => { settings.tilt = !settings.tilt; save(); refreshMenu(); };
 $('camSel').onclick = () => { toggleCam(); refreshMenu(); };
 // ---------- écran d'accueil : carrière ou course solo ----------

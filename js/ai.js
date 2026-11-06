@@ -33,17 +33,7 @@ export function aiDrive(car, track, cars, dt) {
   laneTarget = Math.max(-lim, Math.min(lim, laneTarget));
   car.lane += (laneTarget - car.lane) * Math.min(1, dt * 1.5);
 
-  // direction : poursuite pure vers un point devant sur la trajectoire
-  const Ld = 9 + v * 0.5;
-  const j = (car.idx + Math.round(Ld / DS)) % N;
-  const tx = X[j] - TZ[j] * car.lane, tz = Z[j] + TX[j] * car.lane;
-  const dx = tx - car.x, dz = tz - car.z;
-  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-  const lx = dx * -fz + dz * fx, lz = dx * fx + dz * fz;  // repère voiture : x vers la droite
-  const alpha = Math.atan2(lx, lz);
-  const kWant = 2 * Math.sin(alpha) / Math.hypot(dx, dz);
-  const kMax = Math.tan(SPEC.steerMax / (1 + v / 20)) / SPEC.wb;
-  car.steer = Math.max(-1, Math.min(1, kWant / kMax));
+  car.steer = pursuit(car, track, car.lane);
 
   // vitesse cible
   let vt = V[car.idx];
@@ -53,4 +43,38 @@ export function aiDrive(car, track, cars, dt) {
   if (car.v < vt - 0.8) { car.throttle = 1; car.brake = 0; }
   else if (car.v > vt + 1.2) { car.throttle = 0; car.brake = Math.min(1, (car.v - vt) / 6); }
   else { car.throttle = 0.45; car.brake = 0; }
+}
+
+// direction : poursuite pure vers un point devant sur la trajectoire (décalée de `lane`)
+export function pursuit(car, track, lane) {
+  const { N, X, Z, TZ, TX } = track, v = Math.max(car.v, 1);
+  const Ld = 9 + v * 0.5;
+  const j = (car.idx + Math.round(Ld / DS)) % N;
+  const tx = X[j] - TZ[j] * lane, tz = Z[j] + TX[j] * lane;
+  const dx = tx - car.x, dz = tz - car.z;
+  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  const lx = dx * -fz + dz * fx, lz = dx * fx + dz * fz;  // repère voiture : x vers la droite
+  const alpha = Math.atan2(lx, lz);
+  const kWant = 2 * Math.sin(alpha) / Math.hypot(dx, dz);
+  const kMax = Math.tan(SPEC.steerMax / (1 + v / 20)) / SPEC.wb;
+  return Math.max(-1, Math.min(1, kWant / kMax));
+}
+
+// Aide à la trajectoire du joueur : 1 = freine avant les virages trop rapides,
+// 2 = en plus, garde la voiture sur sa ligne quand on ne braque pas (la ligne suit le joueur quand il braque)
+export function driveAssist(car, track, dt) {
+  const { N, V, RL, width } = track;
+  if (car.pit || car.spinT > 0) return;
+  let vt = V[car.idx];
+  for (let k = 1; k <= 6; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
+  vt *= 1.04 * Math.sqrt((car.gripMul ?? 1) * (0.4 + 0.6 * (car.dmgKd ?? 1)));
+  if (car.v > vt + 1.5) { car.brake = Math.max(car.brake, Math.min(1, (car.v - vt) / 6)); car.throttle = 0; }
+  if (car.assist.line < 2) return;
+  const lim = width / 2 - 1.2;
+  if (car.aLane == null) car.aLane = car.lat;
+  if (Math.abs(car.steer) > 0.15) car.aLane = car.lat;
+  else car.aLane += (RL[car.idx] * 0.85 - car.aLane) * Math.min(1, dt * 0.6);
+  car.aLane = Math.max(-lim, Math.min(lim, car.aLane));
+  const pp = pursuit(car, track, car.aLane);
+  car.steer = Math.abs(car.steer) > 0.15 ? car.steer * 0.8 + pp * 0.2 : pp;
 }

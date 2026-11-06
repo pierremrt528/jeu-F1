@@ -31,9 +31,10 @@ function tbox(w, h, l, f = {}) {
 export function buildCarMesh(color, accent, helmet) {
   const m = mats();
   const parts = [];
+  let tag = null;   // 'fw' / 'rw' : ailerons avant / arrière (peuvent se tordre ou se détacher, voir debris.js)
   const add = (geo, hex, x, y, z, rx = 0, ry = 0) => {
     if (geo.index) geo = geo.toNonIndexed();
-    geo.rotateX(rx); geo.rotateY(ry); geo.translate(x, y, z); parts.push([geo, hex]);
+    geo.rotateX(rx); geo.rotateY(ry); geo.translate(x, y, z); parts.push([geo, hex, tag]);
   };
   const B = (w, h, l) => new THREE.BoxGeometry(w, h, l);
   const carbon = 0x1c1e22, black = 0x0b0b0c;
@@ -43,10 +44,12 @@ export function buildCarMesh(color, accent, helmet) {
   add(tbox(0.6, 0.38, 1.95, { fw: 0.42, fh: 0.5, fy: -0.1 }), color, 0, 0.37, 2.55);
   add(tbox(0.26, 0.19, 0.3, { fw: 0.7, fh: 0.8 }), accent, 0, 0.26, 3.6);
   // aileron avant
+  tag = 'fw';
   add(B(1.96, 0.035, 0.52), carbon, 0, 0.1, 3.2);
   add(B(1.72, 0.03, 0.22), accent, 0, 0.18, 3.1, -0.38);
   add(B(1.5, 0.03, 0.16), accent, 0, 0.24, 3.0, -0.6);
   for (const s of [-1, 1]) add(B(0.03, 0.3, 0.64), color, s * 0.98, 0.21, 3.15);
+  tag = null;
   // pontons, entrées d'air
   add(tbox(1.56, 0.5, 1.95, { fh: 0.92, bw: 0.42, bh: 0.5, by: -0.06 }), color, 0, 0.42, -0.3);
   for (const s of [-1, 1]) add(B(0.3, 0.3, 0.04), black, s * 0.6, 0.48, 0.66);
@@ -73,10 +76,12 @@ export function buildCarMesh(color, accent, helmet) {
     add(B(0.18, 0.075, 0.01), 0xa9b6c4, s * 0.62, 0.8, 0.948);
   }
   // aileron arrière, diffuseur, feu de pluie
+  tag = 'rw';
   add(B(1.02, 0.04, 0.38), carbon, 0, 0.93, -2.48);
   add(B(1.02, 0.035, 0.25), accent, 0, 1.05, -2.44, 0.3);
   for (const s of [-1, 1]) add(tbox(0.035, 0.64, 0.8, { fh: 0.8, fy: -0.06 }), color, s * 0.52, 0.83, -2.44);
   add(B(0.06, 0.5, 0.1), carbon, 0, 0.66, -2.36);
+  tag = null;
   add(tbox(1.0, 0.2, 0.5, { fh: 0.6, fy: -0.04 }), carbon, 0, 0.2, -2.3);
   add(B(0.1, 0.08, 0.03), 0xff2020, 0, 0.36, -2.58);
   // suspensions
@@ -87,7 +92,9 @@ export function buildCarMesh(color, accent, helmet) {
   let n = 0; for (const [g] of parts) n += g.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
   const c = new THREE.Color(); let o = 0;
-  for (const [g, hex] of parts) {
+  const ranges = {};
+  for (const [g, hex, t] of parts) {
+    if (t) { const r = ranges[t] || (ranges[t] = [o, 0]); r[1] = o + g.attributes.position.count - r[0]; }
     pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
     c.setHex(hex);
     for (let k = 0; k < g.attributes.position.count; k++) col.set([c.r, c.g, c.b], (o + k) * 3);
@@ -101,6 +108,7 @@ export function buildCarMesh(color, accent, helmet) {
   const group = new THREE.Group();
   group.rotation.order = 'YXZ';
   group.add(new THREE.Mesh(geo, m.body));
+  group.userData = { ranges, base: pos.slice() };
   group.add(new THREE.Mesh(wheels(), [m.tread, m.side]));
   const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 5.8), m.blob);
   sh.rotation.x = -Math.PI / 2; sh.position.set(0, 0.03, -0.1); sh.renderOrder = 1;

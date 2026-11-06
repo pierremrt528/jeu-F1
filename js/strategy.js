@@ -2,6 +2,7 @@
 // carburant (poids, consommation, ravitaillement), météo, plans d'arrêts proposés, arrêts au stand,
 // radio avec le muret, dégâts et casse.
 import { DS, pitLane } from './track.js';
+import { spawnDebris, bendWing, detachWing, repairCar } from './debris.js';
 
 // grip : adhérence neuve ; wpl : usure par tour à rythme normal sans glisser (1 = pneu à 0 %)
 export const TYRES = {
@@ -170,7 +171,7 @@ export function setupStrategy(R, track, wx, plan) {
   const plans = R.solo ? null : makePlans(R.laps, R.lapKm, lapT, R.wet > 0.4, R.pitP.loss);
   const failP = c => c.player ? Math.min(0.2, Math.max(0.005, (100 - c.rel) * 0.0025)) : 0.035;
   for (const c of R.cars) {
-    c.wear = 0; c.dmg = 0; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0; c.flat = false; c.risky = false;
+    c.wear = 0; c.dmg = 0; c.dmgR = 0; c.fwOff = c.rwOff = false; c.stops = 0; c.pit = null; c.box = null; c.mode = 'norm'; c.stint = 0; c.flat = false; c.risky = false;
     c.strat = c.stats?.strat ?? 70; c.tyreSkill = c.stats?.tyre ?? 75;
     if (R.solo) { c.tyre = R.wet > 0.4 ? 'W' : 'S'; c.fuel = 15; c.plan = null; continue; }
     // plan : celui du joueur, sinon un des trois au hasard (les bons stratèges choisissent mieux)
@@ -226,7 +227,7 @@ export function wantBox(R, c) {
   if (plannedStop(c) === c.lap && (fuelLaps(R, c) < left || lifeAtEnd(R, c) < (c.risky ? -0.1 : 0.35))) return true;
   if (1 - c.wear < (c.risky ? 0.02 : 0.25) && left > 1.5) return true;
   if (fuelLaps(R, c) / MODES.save.fuel < left - 0.1 && fuelLaps(R, c) < 2.2) return true;
-  if (c.dmg > 0.5 && left > 3) return true;
+  if ((c.dmg > 0.5 || c.dmgR > 0.5) && left > 2) return true;
   return false;
 }
 
@@ -318,8 +319,10 @@ export function updateStrategy(R, dt) {
     if (!R.solo && !c.pit && !c.finished) c.fuel = Math.max(0, c.fuel - dist / 1000 * FPK * M.fuel * (c.up?.fuel ?? 1));
     c.mass = 1 + c.fuel / 750;
     c.powerMul = M.v * (c.flat ? 0.8 : 1); c.accMul = M.a;
-    c.gripMul = tyreGrip(c, R.wet) * (1 - 0.06 * c.dmg);
-    c.dmgKd = 1 - 0.45 * c.dmg;
+    c.gripMul = tyreGrip(c, R.wet) * (1 - 0.04 * c.dmg - 0.03 * c.dmgR);
+    // appui perdu : aileron avant → sous-virage, aileron arrière → survirage à haute vitesse
+    c.dmgKd = c.fwOff ? 0.3 : 1 - 0.45 * c.dmg;
+    c.rwKd = c.rwOff ? 0.3 : 1 - 0.45 * c.dmgR;
     if (c.fuel <= 0 && !c.dnf && !R.solo && !c.finished) { c.dnf = true; if (c.player) say(R, '📻 Muret : panne sèche… c’est fini. On a mal calculé le carburant.'); }
     if (c.player && !c.lowFuel && !R.solo && fuelLaps(R, c) < lapsLeft(R, c) - 0.3 && fuelLaps(R, c) < 1.5 && !c.box) { c.lowFuel = true; say(R, '📻 Muret : carburant critique ! Rentre au stand ou passe en économie.'); }
     // casse
@@ -345,7 +348,7 @@ export function updateStrategy(R, dt) {
       const add = Math.max(0, Math.min(TANK - c.fuel, c.box.fuel + (c.player ? c.fuelAdj || 0 : 0)));
       c.box.fuel = Math.round(add);
       c.frac = 0;
-      c.pit = { phase: 'in', k: k0, stop: Math.max(1.4, 2.3 + Math.random() * 0.6 + (c.up?.pit ?? 0)) + add / 10 + (c.dmg > 0.15 ? 3 : 0) };
+      c.pit = { phase: 'in', k: k0, stop: Math.max(1.4, 2.3 + Math.random() * 0.6 + (c.up?.pit ?? 0)) + add / 10 + (c.dmg > 0.15 ? 3 : 0) + (c.dmgR > 0.15 ? 4 : 0) + (c.fwOff || c.rwOff ? 2 : 0) };
       if (c.player) say(R, `📻 Muret : box, box ! ${TYRES[c.box.tyre].name}s et +${c.box.fuel} kg.`);
     }
     // conseils du muret pour le joueur (un tour avant l'arrêt prévu, ou si besoin)
@@ -361,12 +364,22 @@ export function updateStrategy(R, dt) {
 }
 
 // dégâts : appelé après un choc contre un mur ou une voiture
-export function addDamage(R, c, amount) {
+// rear : choc à l'arrière (aileron arrière). Éclats projetés, aileron tordu puis arraché.
+export function addDamage(R, c, amount, rear) {
   if (amount < 0.03 || R.solo) return;
-  const before = c.dmg;
-  c.dmg = Math.min(1, c.dmg + amount);
+  const k = rear ? 'dmgR' : 'dmg', off = rear ? 'rwOff' : 'fwOff', part = rear ? 'rw' : 'fw';
+  const before = c[k];
+  c[k] = Math.min(1, c[k] + amount);
+  if (c.mesh.visible) spawnDebris(c, Math.min(20, 3 + Math.round(amount * 50)), rear);
   if (amount > 0.18) R.scWhy = R.scWhy || 'crash';
-  if (c.player && before < 0.15 && c.dmg >= 0.15) say(R, '📻 Muret : aileron avant endommagé, tu perds de l’appui. Un arrêt le réparera.');
+  if (!c[off] && (amount > 0.22 && Math.random() < amount * 2.5 || c[k] >= 0.95 && amount > 0.08)) {
+    c[off] = true; c[k] = 1; detachWing(c, part);
+    if (c.player) say(R, rear ? '📻 Muret : tu as perdu l’aileron arrière ! L’arrière va décrocher, rentre au stand.' : '📻 Muret : l’aileron avant est parti ! Grosse perte d’appui, rentre au stand.');
+    else say(R, `📻 Muret : ${c.name} a perdu son aileron ${rear ? 'arrière' : 'avant'}, débris sur la piste !`);
+    return;
+  }
+  if (before < 0.3 && c[k] >= 0.3) bendWing(c, part, Math.random() < 0.5 ? -1 : 1);
+  if (c.player && before < 0.15 && c[k] >= 0.15) say(R, rear ? '📻 Muret : aileron arrière abîmé, l’arrière sera instable. Un arrêt le réparera.' : '📻 Muret : aileron avant endommagé, tu perds de l’appui. Un arrêt le réparera.');
 }
 
 // ---------- voie des stands (déplacement imposé, limiteur 80 km/h) ----------
@@ -377,7 +390,7 @@ export function pitStep(R, c, dt) {
   if (p.phase === 'stop') {
     c.v = 0; p.stop -= dt;
     if (p.stop <= 0) {
-      c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.stops++; c.box = null; c.flat = false; c.tyreWarn = false;
+      c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.dmgR = 0; c.fwOff = c.rwOff = false; repairCar(c); c.stops++; c.box = null; c.flat = false; c.tyreWarn = false;
       c.lowFuel = false; if (c.player) c.fuelAdj = 0;
       if (c.plan) {
         if (c.stint >= c.plan.length - 1) c.plan.push({ laps: 0, tyre: c.tyre });
@@ -402,6 +415,6 @@ export function pitStep(R, c, dt) {
   const i = c.idx, j = (i + 1) % N, t = c.frac;
   const x = track.X[i] + (track.X[j] - track.X[i]) * t, z = track.Z[i] + (track.Z[j] - track.Z[i]) * t;
   c.x = x - track.TZ[i] * c.lat; c.z = z + track.TX[i] * c.lat; c.y = track.Y[i];
-  c.heading = track.H[i]; c.pitch = 0; c.throttle = 0; c.brake = 0; c.sliding = false; c.offTrack = false;
+  c.heading = track.H[i]; c.pitch = 0; c.beta = 0; c.spinT = 0; c.ax = c.ay = 0; c.dive = c.roll = c.yOff = 0; c.throttle = 0; c.brake = 0; c.sliding = false; c.offTrack = false;
   return prev;
 }
