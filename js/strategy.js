@@ -50,7 +50,6 @@ export function tyreGrip(car, wet) {
 
 // ---------- plans d'arrêts ----------
 const softest = km => ['S', 'M', 'H'].find(t => TYRES[t].km >= km * 1.15);
-const harder = t => ({ S: 'M', M: 'H', H: 'H', W: 'W' })[t];
 function estimate(st, lapKm, lapTime) {
   let t = 0;
   st.forEach((s, i) => {
@@ -60,29 +59,33 @@ function estimate(st, lapKm, lapTime) {
   });
   return t;
 }
-// Trois stratégies (prudente, équilibrée, agressive) selon le nombre de tours, la longueur du circuit et la météo
-export function makePlans(laps, lapKm, lapTime, wet) {
-  const pool = [];
-  for (let n = 0; n <= 4; n++) {
-    const L = Array.from({ length: n + 1 }, (_, i) => Math.floor(laps / (n + 1)) + (i < laps % (n + 1) ? 1 : 0));
-    if (L.some(l => l < 2) || L.some(l => fuelFor(l, lapKm) > TANK)) continue;
-    const soft = L.map(l => softest(l * lapKm));
-    if (soft.includes(undefined)) continue;
-    for (const tyres of [soft, soft.map(t => TYRES[harder(t)].km >= 0 ? harder(t) : t)]) {
-      const st = L.map((l, i) => ({ laps: l, tyre: wet && i === 0 ? 'W' : tyres[i] }));
-      const sig = st.map(s => s.tyre + s.laps).join('-');
-      if (!pool.some(p => p.sig === sig)) pool.push({ n, st, sig, time: estimate(st, lapKm, lapTime) });
-    }
+// Trois stratégies de gommes : classique (M → H), inversée (H → M), alternative (S → S → M).
+// Les tours sont répartis selon la durée de vie de chaque gomme ; si une gomme ne tient pas, on ajoute un relais.
+function split(seq, laps, lapKm) {
+  seq = seq.slice();
+  for (;;) {
+    while (seq.length > 2 && laps / seq.length < 2) seq.splice(1, 1);   // course courte : moins de relais
+    const tot = seq.reduce((a, t) => a + TYRES[t].km, 0);
+    const L = seq.map(t => Math.max(1, Math.floor(laps * TYRES[t].km / tot)));
+    for (let i = 0; L.reduce((a, b) => a + b, 0) < laps; i++) L[i % L.length]++;
+    while (L.reduce((a, b) => a + b, 0) > laps) L[L.indexOf(Math.max(...L))]--;
+    const ok = L.every((l, i) => l * lapKm <= TYRES[seq[i]].km * 0.95 && fuelFor(l, lapKm) <= TANK);
+    if (ok || seq.length >= 6 || seq.length >= laps) return seq.map((t, i) => ({ tyre: t, laps: L[i] }));
+    seq.push(seq[seq.length - 1]);
   }
-  if (!pool.length) pool.push({ n: 0, st: [{ laps, tyre: wet ? 'W' : 'H' }], sig: 'x', time: laps * lapTime });
-  const byTime = pool.slice().sort((a, b) => a.time - b.time);
-  const minN = Math.min(...pool.map(p => p.n));
-  const safe = pool.filter(p => p.n === minN).sort((a, b) => b.time - a.time)[0];   // moins d'arrêts, gommes dures
-  const bal = byTime.find(p => p !== safe) || safe;
-  const agg = pool.filter(p => p !== safe && p !== bal).sort((a, b) => b.n - a.n || a.time - b.time)[0] || bal;
-  const out = [['Prudente', 'Peu d’arrêts, pneus durables, voiture lourde au départ.', safe], ['Équilibrée', 'Compromis entre arrêts et usure des pneus.', bal], ['Agressive', 'Plus d’arrêts, pneus tendres, voiture légère.', agg]];
-  const best = Math.min(safe.time, bal.time, agg.time);
-  return out.map(([name, desc, p]) => ({ name, desc, best: p.time === best, stints: p.st.map(s => ({ ...s })), stops: p.n, time: p.time, fuel: Math.min(TANK, fuelFor(p.st[0].laps, lapKm)) }));
+}
+export function makePlans(laps, lapKm, lapTime, wet) {
+  const out = [
+    ['Classique', 'Medium puis dur : le choix sûr, relais long en fin de course.', ['M', 'H']],
+    ['Inversée', 'Dur puis medium : long premier relais, gomme plus rapide pour finir.', ['H', 'M']],
+    ['Alternative', 'Deux relais en tendres puis medium : rapide, mais un arrêt de plus.', ['S', 'S', 'M']],
+  ].map(([name, desc, seq]) => {
+    const st = split(seq, laps, lapKm);
+    if (wet) st[0].tyre = 'W';
+    return { name, desc, st, n: st.length - 1, time: estimate(st, lapKm, lapTime) };
+  });
+  const best = Math.min(...out.map(p => p.time));
+  return out.map(p => ({ name: p.name, desc: p.desc, best: p.time === best, stints: p.st.map(s => ({ ...s })), stops: p.n, time: p.time, fuel: Math.min(TANK, fuelFor(p.st[0].laps, lapKm)) }));
 }
 
 // ---------- préparation de la course ----------
