@@ -107,6 +107,29 @@ export function buildTrackMeshes(track, scene) {
   const Cw = new Float32Array(N);
   for (let i = 0; i < N; i++) { let s = 0; for (let k = -15; k <= 15; k++) s += C[(i + k + N) % N]; Cw[i] = s / 31; }
 
+  // tracés qui se croisent (pont) : grille des points pour trouver les autres portions de piste proches
+  const tg = new Map(), tc = 50, far2 = 40;
+  for (let i = 0; i < N; i += 2) { const k = Math.floor(X[i] / tc) + ',' + Math.floor(Z[i] / tc); if (!tg.has(k)) tg.set(k, []); tg.get(k).push(i); }
+  const others = (x, z, i, r, f) => {
+    const gx = Math.floor(x / tc), gz = Math.floor(z / tc), n = Math.ceil(r / tc);
+    for (let a = -n; a <= n; a++) for (let b = -n; b <= n; b++) for (const k of tg.get((gx + a) + ',' + (gz + b)) || []) {
+      const di = Math.abs(k - i), ad = Math.min(di, N - di);
+      if (ad > far2 && (X[k] - x) ** 2 + (Z[k] - z) ** 2 < r * r && f(k)) return true;
+    }
+    return false;
+  };
+  const over = new Uint8Array(N), nearLow = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    over[i] = others(X[i], Z[i], i, wall + 7, k => Y[i] - Y[k] > 4) ? 1 : 0;
+    nearLow[i] = others(X[i], Z[i], i, 95, k => Y[i] - Y[k] > 2.5) ? 1 : 0;
+  }
+  // zones de gravier dessinées (def.gravel : x, z tous les 10 m)
+  let gravelAt = null;
+  if (def.gravel) {
+    const gs = new Set(); for (let k = 0; k < def.gravel.length; k += 2) gs.add(def.gravel[k] + ',' + def.gravel[k + 1]);
+    gravelAt = (p) => { const x = Math.round(p[0] / 10) * 10, z = Math.round(p[2] / 10) * 10; return gs.has(x + ',' + z); };
+  }
+  const deck = new Geo();
   const road = new Geo(), kerbs = new Geo(), grass = new Geo(), gravel = new Geo(), walls = new Geo(), fences = new Geo();
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N, v0 = i * DSm, v1 = (i + 1) * DSm;
@@ -121,18 +144,24 @@ export function buildTrackMeshes(track, scene) {
         : geo.quad(A(o2, y2), A(o1, y1), B(o2, y2), B(o1, y1), [u2, va], [u1, va], [u2, vb], [u1, vb], k);
       let edge = w / 2;
       if (kerb) { q(kerbs, w / 2 - 0.1, w / 2 + 1.4, 0.035, 0.09, 0, 1, v0 / 3, v1 / 3, 1); edge = w / 2 + 1.4; }
-      const outside = surf !== 'concrete' && Math.abs(Cw[i]) > 1 / 170 && s === (Cw[i] > 0 ? 1 : -1);
+      const outside = gravelAt ? gravelAt(pt(i, s * (edge + wall) / 2, 0)) : surf !== 'concrete' && Math.abs(Cw[i]) > 1 / 170 && s === (Cw[i] > 0 ? 1 : -1);
       // dégagement : gravier à l'extérieur des virages, herbe ailleurs
       const zone = outside ? gravel : grass;
       const uvw = (k, o) => { const p = pt(k, s * o, 0); return [p[0] / 7, p[2] / 7]; };
       const pit = s > 0 && inPit(i), far = pit ? wall + 30 : wall + 3;   // côté stands : terrain plat jusqu'aux garages
       const qa = A(edge, 0), qb = A(far, -0.05), qc = B(edge, 0), qd = B(far, -0.05);
-      if (s > 0) zone.quad(qa, qb, qc, qd, uvw(i, edge), uvw(i, far), uvw(j, edge), uvw(j, far), outside && !pit ? 1 : stripe);
+      if (over[i]) {   // pont : tablier en béton au lieu du terrain
+        deck.quad(A(edge, 0), A(wall + 0.6, 0), B(edge, 0), B(wall + 0.6, 0), [0, 0], [1, 0], [0, 1], [1, 1], 0.9);
+        deck.quad(A(wall + 0.6, 0), A(wall + 0.6, -1.6), B(wall + 0.6, 0), B(wall + 0.6, -1.6), [0, 0], [1, 0], [0, 1], [1, 1], 0.75);
+        deck.quad(A(0, -1.6), A(wall + 0.6, -1.6), B(0, -1.6), B(wall + 0.6, -1.6), [0, 0], [1, 0], [0, 1], [1, 1], 0.6);
+      } else if (s > 0) zone.quad(qa, qb, qc, qd, uvw(i, edge), uvw(i, far), uvw(j, edge), uvw(j, far), outside && !pit ? 1 : stripe);
       else zone.quad(qb, qa, qd, qc, uvw(i, far), uvw(i, edge), uvw(j, far), uvw(j, edge), outside ? 1 : stripe);
-      // talus jusqu'au sol
-      const fall = (k) => [X[k] - tz[k] * s * 75, track.ground, Z[k] + tx[k] * s * 75];
+      // talus jusqu'au sol (mur de soutènement près d'une piste plus basse)
+      const fd = nearLow[i] ? far : 75, fall = (k) => [X[k] - tz[k] * s * fd, track.ground, Z[k] + tx[k] * s * fd];
+      if (over[i]) { if (!pit) { walls.quad(A(wall, 0), A(wall, 1.15), B(wall, 0), B(wall, 1.15), [v0 / 48, 0], [v0 / 48, 1], [v1 / 48, 0], [v1 / 48, 1]); } continue; }
       const fu = (k) => [fall(k)[0] / 7, fall(k)[2] / 7];
-      if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, far), fu(i), uvw(j, far), fu(j), isGrass ? 0.8 : 0.92);
+      if (nearLow[i]) deck.quad(qb, fall(i), qd, fall(j), [v0 / 8, 0], [v0 / 8, (Y[i] - track.ground) / 8], [v1 / 8, 0], [v1 / 8, (Y[j] - track.ground) / 8], 0.8);
+      else if (s > 0) grass.quad(qb, fall(i), qd, fall(j), uvw(i, far), fu(i), uvw(j, far), fu(j), isGrass ? 0.8 : 0.92);
       else grass.quad(fall(i), qb, fall(j), qd, fu(i), uvw(i, far), fu(j), uvw(j, far), isGrass ? 0.8 : 0.92);
       // mur publicitaire puis grillage
       if (pit) continue;   // remplacé par le muret des stands
@@ -170,6 +199,7 @@ export function buildTrackMeshes(track, scene) {
     group.add(paint.mesh(new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -3 })));
     group.add(pw.mesh(L({ color: 0xd9dde2, side: THREE.DoubleSide })));
   }
+  if (deck.p.length) group.add(deck.mesh(L({ map: TX.concrete(), vertexColors: true, side: THREE.DoubleSide })));
   group.add(kerbs.mesh(L({ map: TX.kerb(), polygonOffset: true, polygonOffsetFactor: -1 })));
   group.add(grass.mesh(L({ map: surfTex(), vertexColors: true })));
   group.add(gravel.mesh(L({ map: TX.gravel(), vertexColors: true })));
@@ -239,7 +269,7 @@ export function buildTrackMeshes(track, scene) {
   const crowdTex = TX.crowd();
   const concrete = L({ color: 0xb4b8bd }), roofMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, metalness: 0.3, roughness: 0.6, side: THREE.DoubleSide });
   const crowdMat = L({ map: crowdTex, color: 0xb0b0b0 });
-  const stand = (i, s, len) => {
+  const stand = (i, s, len, off = wall + 3.5) => {
     const g = new THREE.Group();
     const seats = new THREE.PlaneGeometry(len, Math.hypot(14, 9));
     const uv = seats.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * len / 24, uv.getY(k));
@@ -249,11 +279,26 @@ export function buildTrackMeshes(track, scene) {
     for (let x = -len / 2; x <= len / 2 + 0.1; x += len / Math.round(len / 15)) parts.push(box(0.5, 16, 0.5, x, 8, -14.6));
     g.add(new THREE.Mesh(merge(parts), concrete));
     g.add(new THREE.Mesh(box(len + 3, 0.25, 19, 0, 15.6, -6.5, -0.12), roofMat));
-    const p = pt(i, s * (wall + 3.5), 0);
+    const p = pt(i, s * off, 0);
     g.position.set(p[0], Y[i] - 0.3, p[2]); g.rotation.y = track.H[i] + s * Math.PI / 2;
     group.add(g);
   };
-  for (let k = -2; k <= 3; k++) stand((k * 33 + N) % N, -1, 62);
+  if (def.stands) {   // tribunes placées sur le dessin du circuit : [x, z, longueur]
+    for (const [x, z, len] of def.stands) {
+      let i = 0, bd = Infinity;
+      for (let k = 0; k < N; k++) { const d = (X[k] - x) ** 2 + (Z[k] - z) ** 2; if (d < bd) { bd = d; i = k; } }
+      const lat = (x - X[i]) * -tz[i] + (z - Z[i]) * tx[i], s = lat >= 0 ? 1 : -1;
+      const n = Math.max(1, Math.round(len / 80)), seg = len / n;
+      for (let m = 0; m < n; m++) {
+        const k = (i + Math.round((m - (n - 1) / 2) * seg / DSm) + N) % N;
+        let off = Math.min(Math.max(Math.abs(lat), wall + 3.5), wall + 40);
+        if (s > 0 && inPit(k)) off = Math.max(off, P.lat + 24);
+        const sp = pt(k, s * (off + 7), 0);
+        if (over[k] || others(sp[0], sp[2], k, 7 + w / 2 + 4, () => true)) continue;   // pas de tribune sur une autre portion de piste
+        stand(k, s, seg - 4, off);
+      }
+    }
+  } else for (let k = -2; k <= 3; k++) stand((k * 33 + N) % N, -1, 62);
   // virages les plus serrés : tribune à l'extérieur
   const corners = [];
   for (let i = 0; i < N; i++) if (Math.abs(Cw[i]) > 1 / 120) corners.push(i);
@@ -262,7 +307,7 @@ export function buildTrackMeshes(track, scene) {
     if (picked.every(p => Math.min(Math.abs(p - i), N - Math.abs(p - i)) > 150) && Math.min(i, N - i) > 250) picked.push(i);
     if (picked.length >= 4) break;
   }
-  for (const i of picked) stand(i, Cw[i] > 0 ? 1 : -1, 70);
+  if (!def.stands) for (const i of picked) stand(i, Cw[i] > 0 ? 1 : -1, 70);
 
   // Bâtiment des stands (côté droit de la ligne droite)
   {
