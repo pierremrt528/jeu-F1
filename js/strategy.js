@@ -28,10 +28,11 @@ export const fuelFor = (laps, lapKm) => Math.ceil(laps * lapKm * FPK * 1.03 + 2)
 // ---------- météo ----------
 export function forecast(theme, rnd = Math.random) {
   if (theme.surface === 'sand') return { rain: false, change: null };
-  const r = rnd();
-  if (r < 0.55) return { rain: false, change: null };
-  if (r < 0.7) return { rain: true, change: null };
-  if (r < 0.88) return { rain: false, change: { at: 0.25 + rnd() * 0.4, rain: true } };
+  // dry : probabilité d'un week-end sec selon le climat du circuit (0,55 par défaut)
+  const r = rnd(), dry = theme.dry ?? 0.55, w = (1 - dry) / 0.45;
+  if (r < dry) return { rain: false, change: null };
+  if (r < dry + 0.15 * w) return { rain: true, change: null };
+  if (r < dry + 0.33 * w) return { rain: false, change: { at: 0.25 + rnd() * 0.4, rain: true } };
   return { rain: true, change: { at: 0.3 + rnd() * 0.35, rain: false } };
 }
 export function wxText(wx) {

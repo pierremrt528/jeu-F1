@@ -24,7 +24,7 @@ import { resetTeam, saveTeam } from './team.js';
 import { resetStaff, staffWages } from './staff.js';
 import { tickInfra, sponsorIncome, prizeBonus, resetInfra, grantInfra } from './infra.js';
 const playerPerf = () => TEAMS[0].perf * perfFactor();
-import { openMarket, aiMercato, MID_ROUND, MID_MULT } from './market.js';
+import { openMarket, aiMercato, MID_MULT } from './market.js';
 import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
@@ -259,9 +259,9 @@ function showResults() {
       SZ.recordRace(rows); R.grow = growMate();
       // ouverture du mercato : les écuries IA font leurs transferts
       const S = SZ.season;
-      if (career && (S.round === MID_ROUND || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
+      if (career && (S.round === SZ.midRound() || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
       // annonce du règlement de la saison suivante à la mi-saison (ou en fin de saison pour les anciennes sauvegardes)
-      if ((S.round === MID_ROUND || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
+      if ((S.round === SZ.midRound() || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
       SZ.recordPerf(playerPerf());
     }
   }
@@ -297,7 +297,7 @@ function refreshMenu() {
   const S = SZ.season;
   $('homeYear').textContent = S ? S.year : 2027;
   const me = S ? SZ.driverStandings().findIndex(d => d.player) + 1 : 0;
-  $('careerInfo').innerHTML = !S ? 'Nouvelle carrière' : S.done ? `Saison ${S.year} terminée · P${me}` : `Saison ${S.year} · manche <b>${S.round + 1}</b>/10 · P${me} · ${S.pts['Toi'] || 0} pts`;
+  $('careerInfo').innerHTML = !S ? 'Nouvelle carrière' : S.done ? `Saison ${S.year} terminée · P${me}` : `Saison ${S.year} · manche <b>${S.round + 1}</b>/${SZ.nRounds()} · P${me} · ${S.pts['Toi'] || 0} pts`;
   $('careerBtn').querySelector('.hgo').firstChild.textContent = S ? 'Continuer ' : 'Commencer ';
   const c = CIRCUITS.find(c => c.id === settings.circuit) || CIRCUITS[0];
   $('soloInfo').textContent = `${c.name} · ${FORMATS[settings.soloFmt]?.name || 'Sprint'}`;
@@ -326,7 +326,7 @@ function openSeason() {
   if (!S) return show('menu');
   if (R) { clearRace(); R = null; }
   paused = true;
-  $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : ` · manche ${S.round + 1}/10`);
+  $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : ` · manche ${S.round + 1}/${SZ.nRounds()}`);
   $('szCal').innerHTML = SZ.calendarHTML();
   $('szState').innerHTML = teamLine();
   const me = SZ.driverStandings().findIndex(d => d.player) + 1, myPts = S.pts['Toi'] || 0;
@@ -340,8 +340,8 @@ function openSeason() {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 ${SZ.fmtDate(SZ.raceDate(S.round))}${S.round ? ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent` : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === MID_ROUND ? newsHTML(S) : '');
-    const mid = S.round === MID_ROUND && career;
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
+    const mid = S.round === SZ.midRound() && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
