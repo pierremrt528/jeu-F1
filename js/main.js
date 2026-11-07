@@ -16,6 +16,7 @@ import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
 import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
 import { showPreraceScreen } from './prerace.js';
+import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
@@ -123,7 +124,7 @@ function raceFormat() {
   const lapTime = SZ.lapEstimate(track, 0.95, TEAMS[0].perf) * 0.985;
   return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, fmtKey()) };
 }
-let raceOpts = {};
+let raceOpts = {}, lastIntro = '';
 if (params.has('debug')) { window.gpm = () => R; window.gpmCam = camera; window.gpmTrack = () => track; }   // tests : accès à la course, caméra et circuit
 function startRace(opts = raceOpts) {
   const S = SZ.season;
@@ -142,6 +143,11 @@ function startRace(opts = raceOpts) {
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
   if (opts.sim) { R.sim = true; return simulate(); }
   show('hud'); paused = false; last = performance.now();
+  // cinématique : survol du circuit et titre du Grand Prix avant les feux (pas quand on recommence la même course)
+  const ik = `${def.id}:${opts.season && S ? S.year + '-' + S.round : ctx}`;
+  if (!opts.solo && ik !== lastIntro) lastIntro = ik, startIntro(R, track, {
+    top: opts.season && S ? `Manche ${S.round + 1}/${SZ.nRounds()} · ${SZ.fmtDate(SZ.raceDate(S.round))} ${S.year}` : 'Course solo',
+    name: def.name, sub: `${def.type} · ${(track.length / 1000).toFixed(2).replace('.', ',')} km · ${R.laps} tour${R.laps > 1 ? 's' : ''} · ${wxText(R.wx)}` }, () => {});
 }
 // course simulée : le pilote automatique court à ta place, la course tourne en accéléré sans affichage
 function simulate() {
@@ -206,13 +212,19 @@ function loop(now) {
   applyWeather(dt, R ? R.wet : 0, R ? R.raining : false);
   if (!R) { updateAudio(null, camera.position, false); updateFx(null); sky.position.copy(camera.position); renderer.render(scene, camera); return; }
   if (!paused) {
-    let t = dt * timeScale;
+    let t = cineKind() === 'intro' ? 0 : dt * timeScale;   // la course attend la fin du survol
     while (t > 0) { const s = Math.min(t, 1 / 60); updateRace(R, s); t -= s; }
     lights.forEach((l, k) => l.material.color.setHex(R.phase === 'lights' && k < R.lightsOn ? 0xff1a1a : 0x330000));
-    if (R.done && R.t - R.endT > (R.solo ? 1.2 : 2.5)) R.solo ? showQuali() : showResults();
+    // podium : tour d'honneur avant les résultats
+    const pos = R.order.indexOf(R.player) + 1;
+    if (R.done && !R.outro && !R.solo && R.player.finished && pos <= 3) {
+      R.outro = true;
+      startOutro(R, { top: def.name, name: pos === 1 ? 'Victoire !' : `Podium · P${pos}`, sub: pos === 1 ? 'Tu remportes le Grand Prix' : 'Un nouveau podium pour l’écurie', confetti: pos === 1 }, () => showResults());
+    }
+    if (R.done && cineKind() !== 'outro' && R.t - R.endT > (R.solo ? 1.2 : 2.5)) R.solo ? showQuali() : showResults();
     if (!R) return;
   }
-  updateCamera(dt);
+  if (!cineCamera(camera)) updateCamera(dt);
   if (params.has('sc') && !R.solo && R.phase === 'race' && R.t - R.raceStart > 12 && !R.scUsed) R.scWhy = 'test';
   updateFx(R, camera.position, paused ? 0 : dt * timeScale);
   updateDebris(paused ? 0 : dt * timeScale);
@@ -233,6 +245,7 @@ function loop(now) {
 
 // ---------- écrans ----------
 function show(id) {
+  if (id !== 'hud') endCine(false);
   for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace']) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('racing', id === 'hud');
 }
@@ -407,6 +420,15 @@ function openSeason() {
   show('season');
   // événement survenu depuis le dernier GP : il faut trancher avant de continuer
   if (S.event && !S.done) showEvent(S.event, () => { S.event = null; SZ.saveSeason(); openSeason(); });
+  // sacre de fin de saison
+  if (S.done && career && !S.champCine) {
+    const titles = [];
+    if (SZ.driverStandings()[0].player) titles.push('Champion du monde des pilotes');
+    if (SZ.teamStandings()[0].player) titles.push('Champion du monde des écuries');
+    S.champCine = true; SZ.saveSeason();
+    const wins = S.results.filter(r => r.pos === 1).length;
+    if (titles.length) champCard($('nego'), { year: S.year, titles, line: `${wins} victoire${wins > 1 ? 's' : ''} · ${S.pts['Toi'] || 0} points · ${TEAMS[0].name}` }, () => {});
+  }
 }
 const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartiront de zéro ${S.reg.length > 1 ? "dans ces domaines" : "dans ce domaine"} : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées à l’intersaison. Inutile d’y investir gros d’ici là !</div>` : '';
 const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';

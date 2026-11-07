@@ -785,3 +785,35 @@ body.tilt #ctl .left { display: none; }
 @media (max-height: 480px) and (orientation: landscape) {
   .flash span { font-size: 16px; } .evb p { font-size: 13px; } .evi { font-size: 26px; } .evch button { padding: 7px 10px; font-size: 13px; } .ncard.evc { gap: 6px; }
 }
+/* mini cinématiques (survol avant le départ, tour d'honneur, sacre) */
+.cine { position: fixed; inset: 0; z-index: 30; overflow: hidden; cursor: pointer; }
+body.cine #hud { visibility: hidden; }
+.cine .lb { position: absolute; left: 0; right: 0; top: 0; height: 11vh; background: #000; animation: lbIn .7s cubic-bezier(.2,.8,.2,1) both; }
+.cine .lb.b { top: auto; bottom: 0; animation-name: lbIn2; }
+.cine.intro .lb { animation: lbIn .7s cubic-bezier(.2,.8,.2,1) both, lbIn .5s 5.4s reverse forwards; }
+.cine.intro .lb.b { animation: lbIn2 .7s cubic-bezier(.2,.8,.2,1) both, lbIn2 .5s 5.4s reverse forwards; }
+@keyframes lbIn { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes lbIn2 { from { transform: translateY(100%); } to { transform: none; } }
+.ctitle { position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: calc(11vh + 16px); max-width: calc(100% - 44px); display: flex; flex-direction: column; gap: 3px; text-shadow: 0 2px 14px rgba(0,0,0,.7); }
+.ctitle::before { content: ""; width: 0; height: 4px; margin-bottom: 4px; background: var(--acc); animation: grow .5s .4s both; }
+.ctitle small { font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); animation: slideR .5s .5s both; }
+.ctitle b { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; font-size: clamp(30px, 7vw, 54px); line-height: .95; text-transform: uppercase; animation: slideR .6s .7s cubic-bezier(.2,.8,.2,1) both; }
+.ctitle span { font-size: 14px; color: #e3e7ec; animation: slideR .5s 1s both; }
+.cine.intro .ctitle { animation: fadeIn .4s 4.9s reverse forwards; }
+@keyframes slideR { from { transform: translateX(-34px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes grow { to { width: 90px; } }
+.ctitle.outro { left: 0; right: 0; max-width: none; bottom: auto; top: calc(11vh + 14px); align-items: center; text-align: center; }
+.ctitle.outro b { color: var(--gold); font-size: clamp(40px, 9vw, 70px); animation: pop .6s .5s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes pop { from { transform: scale(2.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.cskip { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: 3.5vh; font-size: 11px; font-style: normal; color: rgba(255,255,255,.6); animation: fadeIn .6s 1.4s both; }
+.cine .conf i { animation-name: fallFar; }
+@keyframes fallFar { 0% { transform: translateY(0) rotate(0); opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(105vh) rotate(var(--r)); opacity: 0; } }
+.ncard.champ { --c: var(--gold); max-width: 540px; align-items: center; text-align: center; overflow: hidden; padding: 18px 16px; gap: 6px; }
+.ncard.champ .trophy { font-size: 64px; line-height: 1; filter: drop-shadow(0 0 18px rgba(255,200,61,.6)); animation: trophy 1s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes trophy { from { transform: translateY(40px) scale(.3) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.ncard.champ > small { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); animation: rise .4s .5s both; }
+.ncard.champ > b { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; font-size: 24px; line-height: 1.05; text-transform: uppercase; color: var(--gold); animation: rise .4s .7s both; }
+.ncard.champ > b + b { animation-delay: .9s; }
+.ncard.champ > p { font-size: 14px; color: #c3cad3; animation: rise .4s 1.1s both; }
+.ncard.champ .main { width: 70%; margin-top: 6px; animation: rise .4s 1.4s both; }
+@media (max-height: 480px) and (orientation: landscape) { .ctitle span { font-size: 13px; } .ncard.champ .trophy { font-size: 46px; } .ncard.champ { padding: 12px; gap: 3px; } .ncard.champ > b { font-size: 21px; } }
