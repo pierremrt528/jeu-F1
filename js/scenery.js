@@ -272,8 +272,8 @@ export function buildTrackMeshes(track, scene) {
 
   // Tribunes avec public (côté gauche de la ligne droite + extérieur de quelques virages)
   const crowdTex = TX.crowd();
-  const concrete = L({ color: 0xb4b8bd }), roofMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, metalness: 0.3, roughness: 0.6, side: THREE.DoubleSide });
-  const crowdMat = L({ map: crowdTex, color: 0xb0b0b0 });
+  const concrete = L({ color: 0xb4b8bd }), roofMat = L({ color: 0xe6e9ec, emissive: 0x4a4f56, side: THREE.DoubleSide });
+  const crowdMat = L({ map: crowdTex, color: 0xc4c4c4 });
   const stand = (i, s, len, off = (s > 0 ? WR[i] : WL[i]) + 3.5) => {
     const g = new THREE.Group();
     const seats = new THREE.PlaneGeometry(len, Math.hypot(14, 9));
@@ -349,11 +349,41 @@ export function buildTrackMeshes(track, scene) {
       return [Math.sqrt(bd), bi];
     };
     const rnd = mulberry(7);
+    // feuillage : touffes de feuilles ombrées (claires en haut à gauche, sombres en bas)
     const leafTex = (() => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
-      c.fillStyle = '#3f6f2c'; c.fillRect(0, 0, 128, 128);
-      for (let k = 0; k < 1800; k++) { c.fillStyle = ['#2f5a22', '#4d8036', '#5d9440', '#264b1c', '#6aa24a'][(rnd() * 5) | 0]; c.beginPath(); c.arc(rnd() * 128, rnd() * 128, 1 + rnd() * 3, 0, 7); c.fill(); }
+      const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d');
+      c.fillStyle = '#2c5220'; c.fillRect(0, 0, S, S);
+      for (let k = 0; k < 900; k++) {
+        const x = rnd() * S, y = rnd() * S, r = 3 + rnd() * 7, l = rnd();
+        for (const [dx, dy, col] of [[1.5, 1.5, '#1c3a15'], [0, 0, l < 0.33 ? '#3d6d2a' : l < 0.66 ? '#4c8034' : '#5f9640'], [-1.2, -1.2, l < 0.5 ? '#6ea84a' : '#7fb955']]) {
+          c.fillStyle = col; c.beginPath(); c.ellipse(x + dx, y + dy, r * (dx < 0 ? 0.45 : 1), r * 0.7 * (dx < 0 ? 0.45 : 1), rnd() * 3, 0, 7); c.fill();
+        }
+      }
       const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+    })();
+    // couronne bosselée (plusieurs lobes fusionnés) et sapin à étages, ombrés par sommet (dessous plus sombre)
+    const shade = (g, y0, y1, lo = 0.45) => {
+      const p = g.attributes.position, col = [];
+      for (let k = 0; k < p.count; k++) { const t = Math.min(1, Math.max(0, (p.getY(k) - y0) / (y1 - y0))); const v = lo + (1 - lo) * t; col.push(v, v, v); }
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
+    };
+    const lumpy = (() => {
+      const rr = mulberry(3), lobes = [];
+      for (const [x, y, z, r] of [[0, 0.15, 0, 0.82], [0.45, -0.1, 0.25, 0.62], [-0.45, -0.05, 0.1, 0.62], [0.05, -0.1, -0.48, 0.6], [0.05, 0.6, 0.05, 0.55]]) {
+        const g = new THREE.IcosahedronGeometry(r, 1), p = g.attributes.position;
+        for (let k = 0; k < p.count; k++) { const f = 1 + (rr() - 0.5) * 0.22; p.setXYZ(k, p.getX(k) * f + x, p.getY(k) * f + y, p.getZ(k) * f + z); }
+        g.computeVertexNormals(); lobes.push(g);
+      }
+      const g = merge(lobes); g.computeVertexNormals(); return shade(g, -0.7, 1.0, 0.4);
+    })();
+    const firGeo = (() => {
+      const tiers = [];
+      for (const [y, r, h] of [[-0.42, 1, 0.42], [-0.12, 0.78, 0.38], [0.15, 0.56, 0.34], [0.38, 0.34, 0.24]]) {
+        const g = new THREE.ConeGeometry(r, h, 8, 1, true); g.translate(0, y + h / 2, 0);
+        const p = g.attributes.position; for (let k = 0; k < p.count; k++) if (p.getY(k) < y + 0.01) p.setY(k, y - 0.04);   // bords tombants
+        tiers.push(g);
+      }
+      const g = merge(tiers); g.computeVertexNormals(); return shade(g, -0.5, 0.62, 0.35);
     })();
     // Immeubles (circuits urbains) : une seule géométrie fusionnée, UV à l'échelle réelle
     const blocked = [];
@@ -392,15 +422,31 @@ export function buildTrackMeshes(track, scene) {
 
     // Arbres : feuillus, conifères ou palmiers selon le thème
     const nT = th.trees || 0, kind = th.treeKind || 'mix', hue = th.treeHue || [0.24, 0.32];
-    const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), L({ map: leafTex }), nT);
-    const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), L({ map: leafTex, color: 0x9fb89a }), nT);
-    const palmGeo = new THREE.ConeGeometry(1, 1, 8, 1, true); palmGeo.rotateX(Math.PI);
-    const palm = new THREE.InstancedMesh(palmGeo, L({ map: leafTex, color: 0xc8e0a0, side: THREE.DoubleSide }), nT);
+    const leafMat = L({ map: leafTex, vertexColors: true });
+    const crown = new THREE.InstancedMesh(lumpy, leafMat, nT);
+    const crownFar = new THREE.InstancedMesh(shade(new THREE.IcosahedronGeometry(1, 1), -0.9, 1, 0.45), leafMat, nT);   // loin de la piste : couronne simple
+    const pine = new THREE.InstancedMesh(firGeo, L({ map: leafTex, color: 0x8fae8c, vertexColors: true, side: THREE.DoubleSide }), nT);
+    const pineFar = new THREE.InstancedMesh(shade(new THREE.ConeGeometry(0.8, 1, 7).translate(0, 0.05, 0), -0.45, 0.55, 0.4), pine.material, nT);
+    // palmier : 9 palmes arquées (bandes effilées qui retombent)
+    const palmGeo = (() => {
+      const pos = [], uv = [], S = 5;
+      for (let f = 0; f < 9; f++) {
+        const a = f / 9 * Math.PI * 2 + (f % 2) * 0.2, ca = Math.cos(a), sa = Math.sin(a), lift = f % 2 ? 0.35 : 0.15;
+        const P = (t, side) => { const wd = 0.16 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.08)) * side, r = t; return [ca * r - sa * wd, lift * Math.sin(t * 2.2) - 0.9 * t * t + 0.25, sa * r + ca * wd]; };
+        for (let k = 0; k < S; k++) {
+          const t0 = k / S, t1 = (k + 1) / S, A = P(t0, -1), B = P(t0, 1), C = P(t1, -1), D = P(t1, 1);
+          pos.push(...A, ...B, ...C, ...B, ...D, ...C); uv.push(0, t0, 1, t0, 0, t1, 1, t0, 1, t1, 0, t1);
+        }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.computeVertexNormals(); return shade(g, -0.7, 0.4, 0.5);
+    })();
+    const palm = new THREE.InstancedMesh(palmGeo, L({ map: leafTex, color: 0xd8f0b0, vertexColors: true, side: THREE.DoubleSide }), nT);
     const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.4, 1, 5), L({ color: 0x5b4330 }), nT * 2);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color();
     const V3 = (a, b, c) => new THREE.Vector3(a, b, c);
-    let nc = 0, np = 0, nl = 0, nt = 0, tries = 0;
-    while (nc + np + nl < nT && tries++ < nT * 30) {
+    let nc = 0, nf = 0, np = 0, npf = 0, nl = 0, nt = 0, tries = 0;
+    while (nc + nf + np + npf + nl < nT && tries++ < nT * 30) {
       const x = minX - 400 + rnd() * (maxX - minX + 800), z = minZ - 400 + rnd() * (maxZ - minZ + 800);
       if (inSea(z)) continue;
       const [d, i] = nearest(x, z);
@@ -415,18 +461,19 @@ export function buildTrackMeshes(track, scene) {
       const r = rnd();
       const k = kind === 'pine' ? (r < 0.85 ? 'p' : 'c') : kind === 'palm' ? 'l' : kind === 'palmmix' ? (r < 0.55 ? 'l' : 'c') : (r < 0.62 ? 'c' : 'p');
       if (k === 'c') {
-        m.compose(V3(x, y + 6.5 * sc, z), q, V3(4.2 * sc, 4.6 * sc, 4.2 * sc)); crown.setMatrixAt(nc, m); crown.setColorAt(nc++, col);
+        m.compose(V3(x, y + 6.5 * sc, z), q, V3(4.2 * sc, 4.6 * sc, 4.2 * sc));
+        if (d < 160) { crown.setMatrixAt(nc, m); crown.setColorAt(nc++, col); } else { crownFar.setMatrixAt(nf, m); crownFar.setColorAt(nf++, col); }
         m.compose(V3(x, y + 1.6 * sc, z), q, V3(sc, 3.2 * sc, sc)); trunk.setMatrixAt(nt++, m);
       } else if (k === 'p') {
-        m.compose(V3(x, y + 8 * sc, z), q, V3(3.2 * sc, 13 * sc, 3.2 * sc)); pine.setMatrixAt(np, m); pine.setColorAt(np++, col);
+        m.compose(V3(x, y + 8 * sc, z), q, V3(3.2 * sc, 13 * sc, 3.2 * sc)); if (d < 160) { pine.setMatrixAt(np, m); pine.setColorAt(np++, col); } else { pineFar.setMatrixAt(npf, m); pineFar.setColorAt(npf++, col); }
         m.compose(V3(x, y + 1 * sc, z), q, V3(sc, 2 * sc, sc)); trunk.setMatrixAt(nt++, m);
       } else {
-        m.compose(V3(x, y + 10.5 * sc, z), q, V3(4.5 * sc, 2.2 * sc, 4.5 * sc)); palm.setMatrixAt(nl, m); palm.setColorAt(nl++, col);
+        m.compose(V3(x, y + 10.3 * sc, z), q, V3(4.2 * sc, 2.6 * sc, 4.2 * sc)); palm.setMatrixAt(nl, m); palm.setColorAt(nl++, col);
         m.compose(V3(x, y + 5 * sc, z), q, V3(0.7 * sc, 10.5 * sc, 0.7 * sc)); trunk.setMatrixAt(nt++, m);
       }
     }
-    crown.count = nc; pine.count = np; palm.count = nl; trunk.count = nt;
-    for (const im of [crown, pine, palm, trunk]) if (im.count) group.add(im);
+    crown.count = nc; crownFar.count = nf; pine.count = np; pineFar.count = npf; palm.count = nl; trunk.count = nt;
+    for (const im of [crown, crownFar, pine, pineFar, palm, trunk]) if (im.count) group.add(im);
 
     // Montagnes à l'horizon (non affectées par le brouillard, couleurs déjà « brumeuses »)
     const ridge = (R, hMin, hMax, cBase, cTop, seed) => {

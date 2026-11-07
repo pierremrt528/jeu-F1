@@ -1,5 +1,6 @@
-// Modèle 3D de monoplace (design original) : carrosserie fusionnée en une géométrie à couleurs par sommet,
-// roues fusionnées (bande de roulement + flancs texturés), ombre douce. 3 appels de rendu par voiture.
+// Modèle 3D de monoplace (design original) : carrosserie lissée par sections (coque, nez, pontons, capot),
+// ailerons à profils d'aile, halo tubulaire, suspensions, livrée par sommet. Tout est fusionné en une géométrie
+// à couleurs par sommet ; roues (pneus arrondis + flancs/jantes texturés) ; ombre douce. 3 appels de rendu par voiture.
 import * as THREE from '../lib/three.module.min.js';
 import * as TX from './textures.js';
 import { merge } from './scenery.js';
@@ -8,23 +9,86 @@ let M = null;
 function mats() {
   if (M) return M;
   M = {
-    body: new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.35, roughness: 0.32 }),
-    tread: new THREE.MeshLambertMaterial({ map: TX.tyreTread() }),
-    side: new THREE.MeshStandardMaterial({ map: TX.tyreSide(), roughness: 0.7, metalness: 0.1 }),
-    blob: new THREE.MeshBasicMaterial({ map: TX.blob(), transparent: true, depthWrite: false, opacity: 0.8, polygonOffset: true, polygonOffsetFactor: -4 }),
+    body: new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.38, clearcoat: 0.8, clearcoatRoughness: 0.15, envMapIntensity: 0.85 }),
+    tread: new THREE.MeshStandardMaterial({ map: TX.tyreTread(), roughness: 0.92, metalness: 0 }),
+    side: new THREE.MeshStandardMaterial({ map: TX.tyreSide(), roughness: 0.55, metalness: 0.35 }),
+    blob: new THREE.MeshBasicMaterial({ map: TX.blob(), transparent: true, depthWrite: false, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -4 }),
   };
   return M;
 }
 
-// boîte effilée : avant (z>0) et arrière (z<0) réduits / décalés
-function tbox(w, h, l, f = {}) {
-  const g = new THREE.BoxGeometry(w, h, l).toNonIndexed(), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const front = p.getZ(i) > 0;
-    const sw = front ? (f.fw ?? 1) : (f.bw ?? 1), sh = front ? (f.fh ?? 1) : (f.bh ?? 1), dy = front ? (f.fy ?? 0) : (f.by ?? 0);
-    p.setX(i, p.getX(i) * sw); p.setY(i, p.getY(i) * sh + dy);
+// puissance signée (sections « superellipse » : n grand = plus carré)
+const sp = (v, e) => Math.sign(v) * Math.abs(v) ** e;
+
+// Corps lissé : sections transversales le long de z.
+// s = { z, x (centre), y0 (bas), y1 (haut), ym (ligne de plus grande largeur), w (largeur), wb (largeur du bas), n }
+function loft(secs, seg = 20) {
+  const pos = [], idx = [];
+  for (const s of secs) {
+    const n = s.n ?? 2.6, e = 2 / n, ym = s.ym ?? (s.y0 + s.y1) / 2, cx = s.x ?? 0;
+    for (let k = 0; k <= seg; k++) {
+      const a = k / seg * Math.PI * 2, c = Math.cos(a), si = Math.sin(a);
+      const top = si >= 0;
+      const x = cx + (top ? s.w : (s.wb ?? s.w)) / 2 * sp(c, e);
+      const y = top ? ym + (s.y1 - ym) * sp(si, e) : ym + (ym - s.y0) * sp(si, e);
+      pos.push(x, y, s.z);
+    }
   }
-  g.computeVertexNormals();
+  const R = seg + 1;
+  for (let i = 0; i < secs.length - 1; i++) for (let k = 0; k < seg; k++) {
+    const a = i * R + k, b = a + 1, c = a + R, d = c + 1;
+    // z décroît d'une section à l'autre : faces orientées vers l'extérieur
+    if (secs[i + 1].z < secs[i].z) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+// bouchon plat d'une section (entrée d'air, arrière)
+function cap(s, front, seg = 20) {
+  const n = s.n ?? 2.6, e = 2 / n, ym = s.ym ?? (s.y0 + s.y1) / 2, cx = s.x ?? 0;
+  const pos = [], ring = [];
+  for (let k = 0; k <= seg; k++) {
+    const a = k / seg * Math.PI * 2, c = Math.cos(a), si = Math.sin(a), top = si >= 0;
+    ring.push([cx + (top ? s.w : (s.wb ?? s.w)) / 2 * sp(c, e), top ? ym + (s.y1 - ym) * sp(si, e) : ym + (ym - s.y0) * sp(si, e)]);
+  }
+  for (let k = 0; k < seg; k++) {
+    const A = ring[k], B = ring[k + 1];
+    if (front) pos.push(cx, ym, s.z, A[0], A[1], s.z, B[0], B[1], s.z); else pos.push(cx, ym, s.z, B[0], B[1], s.z, A[0], A[1], s.z);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  return g;
+}
+// profil d'aile cambré (corde c, épaisseur t), extrudé sur l'envergure (axe x), bord d'attaque vers l'avant
+function airfoil(c, t, span, camber = 0.06) {
+  const sh = new THREE.Shape(), N = 10, up = [], lo = [];
+  for (let i = 0; i <= N; i++) {
+    const u = (1 - Math.cos(i / N * Math.PI)) / 2;   // points resserrés aux bords
+    const th = 5 * t * (0.2969 * Math.sqrt(u) - 0.126 * u - 0.3516 * u * u + 0.2843 * u ** 3 - 0.1036 * u ** 4);
+    const cm = camber * 4 * u * (1 - u);
+    up.push([u * c, (cm + th) * c]); lo.push([u * c, (cm - th) * c]);
+  }
+  sh.moveTo(...up[0]); for (const p of up.slice(1)) sh.lineTo(...p);
+  for (const p of lo.reverse().slice(1)) sh.lineTo(...p);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: span, bevelEnabled: false, curveSegments: 1 });
+  g.rotateY(Math.PI / 2); g.translate(-span / 2, 0, 0);   // corde vers -z, envergure centrée sur x
+  return g;
+}
+// plaque découpée (dérive, plaques latérales) dans le plan z-y, épaisseur sur x
+function plate(pts, th) {
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (const p of pts.slice(1)) sh.lineTo(p[0], p[1]);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: th, bevelEnabled: false });
+  g.rotateY(-Math.PI / 2); g.translate(th / 2, 0, 0);   // (u, v) → (z = u, y = v)
+  return g;
+}
+// tube entre deux points (bras de suspension)
+const UP = new THREE.Vector3(0, 1, 0);
+function rod(a, b, r = 0.016) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A);
+  const g = new THREE.CylinderGeometry(r, r, d.length(), 4, 1, true);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, d.normalize()));
+  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
   return g;
 }
 
@@ -32,103 +96,189 @@ export function buildCarMesh(color, accent, helmet) {
   const m = mats();
   const parts = [];
   let tag = null;   // 'fw' / 'rw' : ailerons avant / arrière (peuvent se tordre ou se détacher, voir debris.js)
-  const add = (geo, hex, x, y, z, rx = 0, ry = 0) => {
+  const add = (geo, col, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
     if (geo.index) geo = geo.toNonIndexed();
-    geo.rotateX(rx); geo.rotateY(ry); geo.translate(x, y, z); parts.push([geo, hex, tag]);
+    geo.deleteAttribute('uv');
+    if (rx) geo.rotateX(rx); if (ry) geo.rotateY(ry); if (rz) geo.rotateZ(rz);
+    geo.translate(x, y, z); parts.push([geo, col, tag]);
   };
-  const B = (w, h, l) => new THREE.BoxGeometry(w, h, l);
-  const carbon = 0x1c1e22, black = 0x0b0b0c;
-  // fond plat, coque, nez
-  add(tbox(1.8, 0.05, 3.5, { fw: 0.7 }), carbon, 0, 0.09, -0.35);
-  add(tbox(0.84, 0.5, 2.2, { fw: 0.74, fh: 0.82, fy: -0.04 }), color, 0, 0.43, 0.6);
-  add(tbox(0.6, 0.38, 1.95, { fw: 0.42, fh: 0.5, fy: -0.1 }), color, 0, 0.37, 2.55);
-  add(tbox(0.26, 0.19, 0.3, { fw: 0.7, fh: 0.8 }), accent, 0, 0.26, 3.6);
-  // aileron avant
-  tag = 'fw';
-  add(B(1.96, 0.035, 0.52), carbon, 0, 0.1, 3.2);
-  add(B(1.72, 0.03, 0.22), accent, 0, 0.18, 3.1, -0.38);
-  add(B(1.5, 0.03, 0.16), accent, 0, 0.24, 3.0, -0.6);
-  for (const s of [-1, 1]) add(B(0.03, 0.3, 0.64), color, s * 0.98, 0.21, 3.15);
-  tag = null;
-  // pontons, entrées d'air
-  add(tbox(1.56, 0.5, 1.95, { fh: 0.92, bw: 0.42, bh: 0.5, by: -0.06 }), color, 0, 0.42, -0.3);
-  for (const s of [-1, 1]) add(B(0.3, 0.3, 0.04), black, s * 0.6, 0.48, 0.66);
-  // capot moteur, prise d'air, aileron de requin
-  add(tbox(0.62, 0.62, 2.5, { fw: 0.9, bw: 0.28, bh: 0.42, by: -0.12 }), color, 0, 0.78, -1.15);
-  add(tbox(0.34, 0.34, 0.55, { bw: 0.8, bh: 0.7 }), accent, 0, 1.13, -0.62);
-  add(B(0.24, 0.18, 0.02), black, 0, 1.16, -0.34);
-  add(tbox(0.025, 0.32, 1.1, { fh: 0.2, fy: -0.12 }), color, 0, 1.05, -1.5);
-  // habitacle, casque, volant
-  add(B(0.56, 0.04, 0.92), black, 0, 0.69, 0.62);
-  add(new THREE.SphereGeometry(0.155, 14, 10), helmet, 0, 0.86, 0.3);
-  add(B(0.24, 0.07, 0.05), 0x15151a, 0, 0.88, 0.44);
-  add(B(0.29, 0.13, 0.04), carbon, 0, 0.79, 0.8);
-  add(B(0.11, 0.055, 0.012), 0x2cd36a, 0, 0.8, 0.775);
-  // halo
-  add(B(0.06, 0.06, 0.6), black, 0, 0.92, 0.98, 0.42);
-  for (const s of [-1, 1]) add(B(0.05, 0.05, 0.62), black, s * 0.27, 1.01, 0.44, 0, s * 0.12);
-  add(B(0.58, 0.05, 0.05), black, 0, 1.0, 0.13);
-  add(B(0.32, 0.05, 0.05), black, 0, 1.0, 0.76);
-  // rétroviseurs
-  for (const s of [-1, 1]) {
-    add(B(0.16, 0.03, 0.03), carbon, s * 0.48, 0.77, 0.98);
-    add(B(0.21, 0.1, 0.06), color, s * 0.62, 0.8, 0.98);
-    add(B(0.18, 0.075, 0.01), 0xa9b6c4, s * 0.62, 0.8, 0.948);
+  const carbon = 0x17191d, black = 0x08090a, dark = 0x2a2d33;
+  // livrée : bas de caisse en carbone, bandeau de couleur d'accent sur l'arête du capot
+  const livery = (x, y, z) => y < 0.235 ? carbon : (Math.abs(x) < 0.07 && y > 0.62 && z < 0.2 && z > -1.9) ? accent : color;
+  const nose = (x, y, z) => z > 3.38 ? accent : y < 0.21 ? carbon : color;
+
+  // fond plat (contour vu de dessus) + bords relevés
+  {
+    const sh = new THREE.Shape(), o = [[0.25, 1.45], [0.62, 0.95], [0.82, 0.62], [0.84, -1.2], [0.6, -1.5], [0.55, -2.2], [-0.55, -2.2], [-0.6, -1.5], [-0.84, -1.2], [-0.82, 0.62], [-0.62, 0.95], [-0.25, 1.45]];
+    sh.moveTo(o[0][0], o[0][1]); for (const p of o.slice(1)) sh.lineTo(p[0], p[1]);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.035, bevelEnabled: false }); g.rotateX(Math.PI / 2);
+    add(g, carbon, 0, 0.115, 0);
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.018, 0.07, 1.8), carbon, s * 0.835, 0.13, -0.3);
   }
-  // aileron arrière, diffuseur, feu de pluie
-  tag = 'rw';
-  add(B(1.02, 0.04, 0.38), carbon, 0, 0.93, -2.48);
-  add(B(1.02, 0.035, 0.25), accent, 0, 1.05, -2.44, 0.3);
-  for (const s of [-1, 1]) add(tbox(0.035, 0.64, 0.8, { fh: 0.8, fy: -0.06 }), color, s * 0.52, 0.83, -2.44);
-  add(B(0.06, 0.5, 0.1), carbon, 0, 0.66, -2.36);
-  tag = null;
-  add(tbox(1.0, 0.2, 0.5, { fh: 0.6, fy: -0.04 }), carbon, 0, 0.2, -2.3);
-  add(B(0.1, 0.08, 0.03), 0xff2020, 0, 0.36, -2.58);
-  // suspensions
+  // diffuseur
+  add(new THREE.BoxGeometry(1.08, 0.025, 0.5), carbon, 0, 0.15, -2.35, -0.32);
+  for (const x of [-0.5, -0.25, 0, 0.25, 0.5]) add(new THREE.BoxGeometry(0.014, 0.18, 0.5), carbon, x, 0.17, -2.33);
+
+  // coque et nez
+  const tub = [
+    { z: 3.74, y0: 0.2, y1: 0.27, w: 0.1, n: 2.2 },
+    { z: 3.62, y0: 0.18, y1: 0.31, w: 0.2, n: 2.4 },
+    { z: 3.3, y0: 0.18, y1: 0.37, w: 0.27, wb: 0.22 },
+    { z: 2.7, y0: 0.21, y1: 0.47, w: 0.33, wb: 0.25 },
+    { z: 2.1, y0: 0.24, y1: 0.58, w: 0.42, wb: 0.32 },
+    { z: 1.55, y0: 0.2, y1: 0.66, ym: 0.48, w: 0.56, wb: 0.42 },
+    { z: 1.05, y0: 0.14, y1: 0.7, ym: 0.46, w: 0.7, wb: 0.5 },
+    { z: 0.4, y0: 0.13, y1: 0.7, ym: 0.44, w: 0.8, wb: 0.56 },
+    { z: -0.25, y0: 0.13, y1: 0.66, ym: 0.42, w: 0.78, wb: 0.56, n: 2.8 },
+  ];
+  add(loft(tub, 18).toNonIndexed(), nose); add(cap(tub[0], true), accent);
+  // ouverture du cockpit + appuie-tête
+  {
+    const g = new THREE.CircleGeometry(1, 24); g.rotateX(-Math.PI / 2); g.scale(0.25, 1, 0.5);
+    g.scale(0.9, 1, 1); add(g, black, 0, 0.685, 0.45);
+    add(loft([{ z: 0.05, y0: 0.62, y1: 0.76, w: 0.56 }, { z: -0.12, y0: 0.62, y1: 0.78, w: 0.6 }, { z: -0.3, y0: 0.62, y1: 0.72, w: 0.5 }], 14), carbon);
+  }
+  // capot moteur et boîte à air
+  const cover = [
+    { z: 0.12, y0: 0.4, y1: 1.06, ym: 0.72, w: 0.42, n: 2.2 },
+    { z: -0.12, y0: 0.36, y1: 1.13, ym: 0.7, w: 0.52, n: 2.4 },
+    { z: -0.55, y0: 0.3, y1: 0.99, ym: 0.6, w: 0.58 },
+    { z: -1.1, y0: 0.25, y1: 0.8, ym: 0.48, w: 0.52 },
+    { z: -1.7, y0: 0.22, y1: 0.6, ym: 0.4, w: 0.36 },
+    { z: -2.2, y0: 0.24, y1: 0.5, ym: 0.36, w: 0.2 },
+    { z: -2.42, y0: 0.29, y1: 0.43, ym: 0.36, w: 0.08, n: 2 },
+  ];
+  add(loft(cover, 18).toNonIndexed(), livery);
+  add(cap({ z: 0.125, y0: 0.9, y1: 1.03, w: 0.26, n: 2.4 }, true), black);   // prise d'air
+  for (const s of [-1, 1]) add(cap({ z: 0.122, x: s * 0.13, y0: 0.62, y1: 0.78, w: 0.1, n: 2 }, true), black);
+  // dérive (aileron de requin)
+  add(plate([[-0.3, 1.02], [-1.6, 0.66], [-2.1, 0.55], [-2.1, 0.72], [-1.4, 0.9], [-0.6, 1.04]], 0.016), color);
+  // pontons avec contre-dépouille
   for (const s of [-1, 1]) {
-    for (const [z, y] of [[1.75, 0.46], [1.75, 0.3], [-1.6, 0.48], [-1.6, 0.3]]) add(B(0.5, 0.028, 0.045), carbon, s * 0.58, y, z, 0, s * 0.18);
+    const pod = [
+      { z: 0.88, x: s * 0.56, y0: 0.27, y1: 0.6, ym: 0.48, w: 0.38, wb: 0.22, n: 3.4 },
+      { z: 0.72, x: s * 0.58, y0: 0.2, y1: 0.62, ym: 0.5, w: 0.48, wb: 0.24, n: 3.4 },
+      { z: 0.2, x: s * 0.6, y0: 0.15, y1: 0.6, ym: 0.48, w: 0.5, wb: 0.22, n: 3.2 },
+      { z: -0.5, x: s * 0.55, y0: 0.15, y1: 0.52, ym: 0.42, w: 0.42, wb: 0.2 },
+      { z: -1.2, x: s * 0.44, y0: 0.15, y1: 0.4, ym: 0.32, w: 0.3, wb: 0.18 },
+      { z: -1.85, x: s * 0.3, y0: 0.16, y1: 0.28, ym: 0.24, w: 0.14, wb: 0.1, n: 2.2 },
+    ];
+    add(loft(pod, 14).toNonIndexed(), livery);
+    add(cap({ ...pod[0], z: 0.885, w: 0.3, y0: 0.31, y1: 0.57 }, true), black);
   }
 
+  // halo (tube) et pilier central
+  {
+    const loop = new THREE.CatmullRomCurve3([[-0.29, 0.7, -0.02], [-0.29, 0.92, 0.22], [-0.24, 1.0, 0.55], [0, 1.03, 0.78], [0.24, 1.0, 0.55], [0.29, 0.92, 0.22], [0.29, 0.7, -0.02]].map(p => new THREE.Vector3(...p)));
+    add(new THREE.TubeGeometry(loop, 16, 0.032, 5), carbon);
+    const pil = new THREE.CatmullRomCurve3([[0, 1.03, 0.78], [0, 0.92, 0.98], [0, 0.72, 1.12]].map(p => new THREE.Vector3(...p)));
+    add(new THREE.TubeGeometry(pil, 4, 0.028, 5), carbon);
+  }
+  // pilote : casque, visière, volant
+  {
+    const h = new THREE.SphereGeometry(0.15, 12, 8); h.scale(1, 1.05, 1.12); add(h, helmet, 0, 0.84, 0.3);
+    const v = new THREE.SphereGeometry(0.153, 10, 3, Math.PI / 2 - 0.9, 1.8, 1.25, 0.42); v.scale(1, 1.05, 1.12); add(v, 0x0d1013, 0, 0.84, 0.3);
+    add(new THREE.BoxGeometry(0.25, 0.1, 0.03), carbon, 0, 0.74, 0.8, 0.25);
+    add(new THREE.BoxGeometry(0.07, 0.035, 0.01), 0x1f9e55, 0, 0.745, 0.783, 0.25);
+  }
+  // rétroviseurs
+  for (const s of [-1, 1]) {
+    add(rod([s * 0.34, 0.68, 0.95], [s * 0.55, 0.79, 0.98], 0.012), carbon);
+    const g = new THREE.SphereGeometry(0.1, 8, 5); g.scale(1.1, 0.5, 0.45); add(g, color, s * 0.6, 0.8, 0.98);
+    add(new THREE.CircleGeometry(0.075, 12).scale(1.2, 0.45, 1), 0x5d6c7c, s * 0.6, 0.8, 0.93, 0, Math.PI);
+  }
+  // caméra embarquée (« T » au-dessus de la boîte à air)
+  add(new THREE.BoxGeometry(0.2, 0.035, 0.06), accent, 0, 1.17, -0.12);
+
+  // aileron avant : 3 éléments, plaques latérales
+  tag = 'fw';
+  add(airfoil(0.42, 0.09, 1.92, -0.05), carbon, 0, 0.1, 3.66, 0.06);
+  add(airfoil(0.26, 0.09, 1.78, -0.08), color, 0, 0.15, 3.3, 0.35);
+  add(airfoil(0.18, 0.09, 1.6, -0.08), accent, 0, 0.22, 3.12, 0.7);
+  for (const s of [-1, 1]) {
+    add(plate([[3.72, 0.08], [3.72, 0.2], [3.45, 0.33], [2.98, 0.34], [2.92, 0.08]], 0.02), color, s * 0.97, 0, 0);
+    add(new THREE.BoxGeometry(0.05, 0.02, 0.5), carbon, s * 0.94, 0.08, 3.3);
+  }
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.14, 0.32), carbon, s * 0.09, 0.15, 3.42);   // supports sous le nez
+  tag = null;
+
+  // aileron arrière : plan principal, volet, plaques latérales, aileron de poutre, support central
+  tag = 'rw';
+  add(airfoil(0.38, 0.1, 1.0, -0.07), carbon, 0, 0.88, -2.2, 0.15);
+  add(airfoil(0.24, 0.09, 1.0, -0.08), accent, 0, 1.0, -2.52, 0.7);
+  for (const s of [-1, 1]) {
+    add(plate([[-2.18, 0.5], [-2.12, 0.98], [-2.22, 1.18], [-2.72, 1.18], [-2.76, 0.86], [-2.6, 0.5]], 0.022), color, s * 0.51, 0, 0);
+  }
+  add(airfoil(0.2, 0.1, 0.88, -0.05), carbon, 0, 0.5, -2.32, 0.1);
+  add(plate([[-2.32, 0.4], [-2.4, 0.95], [-2.55, 0.95], [-2.55, 0.4]], 0.04), carbon);
+  tag = null;
+  add(new THREE.BoxGeometry(0.11, 0.07, 0.03), 0xff2a2a, 0, 0.33, -2.62);   // feu de pluie
+
+  // suspensions (triangles + biellettes) et porte-moyeux
+  for (const s of [-1, 1]) {
+    for (const [zf, zr, yy, wz, wx] of [[1.95, 1.55, 0.44, 1.75, 0.72], [1.95, 1.55, 0.27, 1.75, 0.72], [-1.3, -1.75, 0.44, -1.6, 0.68], [-1.3, -1.75, 0.25, -1.6, 0.68]]) {
+      add(rod([s * 0.2, yy + 0.04, zf], [s * wx, yy, wz]), carbon);
+      add(rod([s * 0.22, yy + 0.04, zr], [s * wx, yy, wz]), carbon);
+    }
+    add(rod([s * 0.22, 0.56, 1.7], [s * 0.7, 0.29, 1.75], 0.014), carbon);
+    add(rod([s * 0.4, 0.5, -1.55], [s * 0.66, 0.27, -1.6], 0.014), carbon);
+    for (const [z, r] of [[1.75, 0.33], [-1.6, 0.36]]) {
+      const hub = new THREE.CylinderGeometry(0.1, 0.1, 0.12, 8, 1, true); hub.rotateZ(Math.PI / 2); add(hub, dark, s * 0.66, r, z);
+    }
+  }
+
+  // assemblage en une géométrie à couleurs par sommet
   let n = 0; for (const [g] of parts) n += g.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
   const c = new THREE.Color(); let o = 0;
   const ranges = {};
-  for (const [g, hex, t] of parts) {
-    if (t) { const r = ranges[t] || (ranges[t] = [o, 0]); r[1] = o + g.attributes.position.count - r[0]; }
-    pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
-    c.setHex(hex);
-    for (let k = 0; k < g.attributes.position.count; k++) col.set([c.r, c.g, c.b], (o + k) * 3);
-    o += g.attributes.position.count;
+  for (const [g, spec, t] of parts) {
+    const cnt = g.attributes.position.count, P = g.attributes.position.array;
+    if (t) { const r = ranges[t] || (ranges[t] = [o, 0]); r[1] = o + cnt - r[0]; }
+    pos.set(P, o * 3); nor.set(g.attributes.normal.array, o * 3);
+    if (typeof spec !== 'function') c.setHex(spec);
+    for (let k = 0; k < cnt; k++) {
+      if (typeof spec === 'function') c.setHex(spec(P[k * 3], P[k * 3 + 1], P[k * 3 + 2]));
+      col.set([c.r, c.g, c.b], (o + k) * 3);
+    }
+    o += cnt;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeBoundingSphere();
 
   const group = new THREE.Group();
   group.rotation.order = 'YXZ';
   group.add(new THREE.Mesh(geo, m.body));
   group.userData = { ranges, base: pos.slice() };
   group.add(new THREE.Mesh(wheels(), [m.tread, m.side]));
-  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 5.8), m.blob);
-  sh.rotation.x = -Math.PI / 2; sh.position.set(0, 0.03, -0.1); sh.renderOrder = 1;
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 5.9), m.blob);
+  sh.rotation.x = -Math.PI / 2; sh.position.set(0, 0.03, 0.1); sh.renderOrder = 1;
   group.add(sh);
   return group;
 }
 
+// Roues : pneu arrondi (révolution) + flancs/jantes texturés
 let WHEELS = null;
 function wheels() {
   if (WHEELS) return WHEELS;
   const treads = [], sides = [];
   for (const [x, z, r, w] of [[0.83, 1.75, 0.33, 0.35], [-0.83, 1.75, 0.33, 0.35], [0.8, -1.6, 0.36, 0.43], [-0.8, -1.6, 0.36, 0.43]]) {
-    const t = new THREE.CylinderGeometry(r, r, w, 22, 1, true); t.rotateZ(Math.PI / 2); t.translate(x, r, z); treads.push(t);
+    const ri = r * 0.66, b = 0.05, h = w / 2, prof = [];
+    prof.push(new THREE.Vector2(ri, -h));
+    for (let k = 0; k <= 2; k++) prof.push(new THREE.Vector2(r - b + b * Math.sin(Math.PI / 4 * k), -h + b - b * Math.cos(Math.PI / 4 * k)));
+    for (let k = 0; k <= 2; k++) prof.push(new THREE.Vector2(r - b + b * Math.cos(Math.PI / 4 * k), h - b + b * Math.sin(Math.PI / 4 * k)));
+    prof.push(new THREE.Vector2(ri, h));
+    const t = new THREE.LatheGeometry(prof, 20); t.rotateZ(Math.PI / 2); t.translate(x, r, z); treads.push(t);
     for (const s of [-1, 1]) {
-      const c = new THREE.CircleGeometry(r, 22); c.rotateY(s * Math.PI / 2); c.translate(x + s * w / 2, r, z); sides.push(c);
+      const c = new THREE.CircleGeometry(r - b * 0.6, 20); c.rotateY(s * Math.PI / 2); c.translate(x + s * (h - 0.004), r, z); sides.push(c);
     }
   }
-  const a = merge(treads), b = merge(sides);
-  const g = merge([a, b]);
+  const a = merge(treads), bb = merge(sides);
+  const g = merge([a, bb]);
   g.addGroup(0, a.attributes.position.count, 0);
-  g.addGroup(a.attributes.position.count, b.attributes.position.count, 1);
+  g.addGroup(a.attributes.position.count, bb.attributes.position.count, 1);
   return (WHEELS = g);
 }

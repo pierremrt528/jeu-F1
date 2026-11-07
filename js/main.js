@@ -123,7 +123,7 @@ function raceFormat() {
   return { lapTime, laps: +params.get('tours') || lapsFor(lapTime, fmtKey()) };
 }
 let raceOpts = {};
-if (params.has('debug')) window.gpm = () => R;   // tests : accès à la course en cours
+if (params.has('debug')) { window.gpm = () => R; window.gpmCam = camera; window.gpmTrack = () => track; }   // tests : accès à la course, caméra et circuit
 function startRace(opts = raceOpts) {
   raceOpts = opts;
   initAudio(settings.sound);
@@ -162,8 +162,8 @@ function updateCamera(dt) {
   const p = R.player;
   if (settings.cam === 'cockpit') {
     p.mesh.updateMatrixWorld();
-    camera.position.copy(tmp.set(0, 1.3, -0.2).applyMatrix4(p.mesh.matrixWorld));
-    camera.lookAt(tmp.set(0, 0.2, 10).applyMatrix4(p.mesh.matrixWorld));
+    camera.position.copy(tmp.set(0, 0.9, 0.32).applyMatrix4(p.mesh.matrixWorld));
+    camera.lookAt(tmp.set(0, 0.62, 10).applyMatrix4(p.mesh.matrixWorld));
     shake(p);
     return;
   }

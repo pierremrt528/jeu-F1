@@ -108,24 +108,35 @@ export const adBoards = () => make(2048, 128, (c, w, h) => {
   });
 });
 
-// Grillage (transparence par alphaTest)
-export const fence = () => make(64, 64, (c, w, h) => {
-  c.clearRect(0, 0, w, h); c.strokeStyle = 'rgba(200,205,210,1)'; c.lineWidth = 2;
-  c.beginPath(); c.moveTo(0, 0); c.lineTo(w, h); c.moveTo(w, 0); c.lineTo(0, h); c.stroke();
-  c.fillStyle = '#9aa0a6'; c.fillRect(0, 0, w, 3);
+// Grillage (transparence par alphaTest) : mailles fines, poteau tous les 3 m, lisse en haut
+export const fence = () => make(128, 128, (c, w, h) => {
+  c.clearRect(0, 0, w, h); c.strokeStyle = 'rgba(190,196,202,1)'; c.lineWidth = 1.6;
+  c.beginPath();
+  for (let k = -w; k <= w; k += w / 6) { c.moveTo(k, 0); c.lineTo(k + h, h); c.moveTo(k + h, 0); c.lineTo(k, h); }
+  c.stroke();
+  c.fillStyle = '#8d949b'; c.fillRect(0, 0, w, 4); c.fillRect(0, h - 3, w, 3); c.fillRect(0, 0, 5, h);
 });
 
-// Public des tribunes
-export const crowd = () => make(512, 256, (c, w, h) => {
-  const r = mulberry(11);
-  c.fillStyle = '#2a2d33'; c.fillRect(0, 0, w, h);
-  const cols = ['#d33', '#36c', '#eee', '#fc3', '#2a2', '#f80', '#a3d', '#333', '#f6c', '#1bb', '#c96', '#888'];
-  for (let row = 0; row < 16; row++) {
-    c.fillStyle = 'rgba(255,255,255,.08)'; c.fillRect(0, row * 16 + 13, w, 3);
-    for (let x = 0; x < w; x += 6) {
+// Public des tribunes : rangées de spectateurs (tête, buste aux couleurs variées) et sièges vides
+export const crowd = () => make(1024, 512, (c, w, h) => {
+  const r = mulberry(11), rows = 16, rh = h / rows;
+  const shirts = ['#c8242b', '#1f4fa8', '#eeeeee', '#f2c230', '#2d8a3e', '#e8731c', '#20242b', '#7d8590', '#c43d7a', '#159fb0', '#f4f4f0', '#a32020', '#203a6b', '#dcd6c8'];
+  const skins = ['#f1c7a3', '#e0ac85', '#c68b5f', '#8d5a3b', '#5e3b26'], hairs = ['#2a1d14', '#4a3222', '#121212', '#8a6a3a', '#bfbfbf'];
+  c.fillStyle = '#3b4048'; c.fillRect(0, 0, w, h);
+  for (let row = 0; row < rows; row++) {
+    const y0 = row * rh;
+    c.fillStyle = '#9da3aa'; c.fillRect(0, y0 + rh - 5, w, 5);   // marche en béton
+    c.fillStyle = '#5a6068'; c.fillRect(0, y0 + rh - 6, w, 1);
+    for (let x = 0; x < w; x += 21) {
+      c.fillStyle = '#1d4f9c'; c.fillRect(x + 3, y0 + 10, 15, rh - 16);   // siège
       if (r() < 0.12) continue;
-      c.fillStyle = cols[(r() * cols.length) | 0]; c.fillRect(x + r() * 2, row * 16 + 5, 4, 8);
-      c.fillStyle = r() < 0.5 ? '#e0b48f' : '#8a5a3c'; c.fillRect(x + 1 + r(), row * 16 + 1, 3, 4);
+      const px = x + 10 + (r() - 0.5) * 5, sh = shirts[(r() * shirts.length) | 0];
+      c.fillStyle = sh; c.beginPath(); c.roundRect(px - 8, y0 + 13, 16, rh - 17, 5); c.fill();
+      c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(px - 8, y0 + rh - 9, 16, 5);
+      if (r() < 0.12) { c.fillStyle = sh; c.fillRect(px - 9, y0 - 2, 3, 15); c.fillRect(px + 6, y0 - 2, 3, 15); }   // bras levés
+      c.fillStyle = skins[(r() * skins.length) | 0]; c.beginPath(); c.ellipse(px, y0 + 9, 5, 6, 0, 0, 7); c.fill();
+      if (r() < 0.3) { c.fillStyle = shirts[(r() * shirts.length) | 0]; c.fillRect(px - 6, y0 + 2, 12, 4); }   // casquette
+      else { c.fillStyle = hairs[(r() * hairs.length) | 0]; c.beginPath(); c.ellipse(px, y0 + 5, 5, 3, 0, Math.PI, 0); c.fill(); }
     }
   }
 });
