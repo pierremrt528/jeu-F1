@@ -11,19 +11,16 @@ import { SHAPES, logoSVG, autoAbbr, cleanAbbr } from './logo.js';
 import { frame, focus } from './showroom.js';
 import { SKINS, HAIRS, HAIR_COLS, HELMETS, DEFAULT_LOOK } from './pilot3d.js';
 import NATIONS from './config/nations.js';
+import ENGINES from './config/motoristes.js';
+import { offers, sponsorCard, spOf, MAX_SEC } from './sponsors.js';
 
 export const TIERS = [
   { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait, ni pièces ni bâtiments : tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
   { id: 'mid', name: 'Milieu de peloton', desc: 'Budget moyen, quelques pièces et bâtiments déjà en place. Objectif : les points.', budget: 70, perf: 0.96, parts: 1, infra: { rd: 1, hosp: 1, pitc: 1 }, rep: 50, moral: 60 },
   { id: 'top', name: 'Top team', desc: 'Énorme budget, voiture développée et usine moderne. Obligation de gagner.', budget: 140, perf: 0.97, parts: 2, infra: { rd: 2, wind: 1, hosp: 2, media: 1, acad: 1, pitc: 2 }, rep: 80, moral: 55 },
 ];
-// Motoristes inventés : perf et fiab sur 100, prix en M€ pour la saison
-export const ENGINES = [
-  { id: 'valdrin', name: 'Valdrin', perf: 94, fiab: 72, price: 40, color: '#e5483b' },
-  { id: 'orsetti', name: 'Orsetti Motori', perf: 88, fiab: 90, price: 34, color: '#3aa0ff' },
-  { id: 'hexadyne', name: 'Hexadyne', perf: 80, fiab: 82, price: 20, color: '#f2b632' },
-  { id: 'kiyora', name: 'Kiyora', perf: 70, fiab: 94, price: 10, color: '#3ddc84' },
-];
+// Motoristes inventés : config/motoristes.js (puissance, fiabilité, consommation, coût annuel)
+export { ENGINES };
 // Pilotes libres : vitesse, stratégie, gestion des pneus, potentiel (sur 100), salaire en M€ / saison
 export const MARKET = [
   { name: 'V. Kessler', from: 'Vétéran', spd: 90, strat: 88, tyre: 85, pot: 40 },
@@ -108,6 +105,7 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
   const c0 = career?.colors || DEFAULT_COLORS;
   const pick = { tier: null, mate: null, engine: null, k: null, cost: 0, name: TEAMS[0].name, abbr: '', logo: { ...(career?.logo || DEFAULT_LOGO) }, colors: { ...c0 },
     opts: { races: 22, diff: 'normal', abs: aids.abs ?? true, tc: aids.tc ?? true, line: aids.line || 0 },
+    sp: { main: null, sec: [] },
     player: { name: '', nat: 'fr', num: 7, look: { ...DEFAULT_LOOK }, helmet: { m: 1, p: 'jaune', s: 'carbone' } } };
   const year = season ? season.year + 1 : 2027, talks = {};
   const STEPS = [
@@ -116,6 +114,7 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
     ['ident', 'Identité', 'Identité', 'Le nom, l’abréviation de 3 lettres (classements, chronos) et le logo de ton écurie.'],
     ['cols', 'Couleurs', 'Couleurs', 'Couleur primaire et secondaire : livrée, combinaison, QG et menus. Une paire déjà portée par une écurie rivale n’est pas proposée.'],
     ['moteur', 'Moteur', 'Motoriste', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse. Prix payé chaque saison.'],
+    ['spons', 'Sponsors', 'Sponsors', 'Un sponsor principal et jusqu’à 3 secondaires : prime à la signature, versement après chaque GP et bonus si l’objectif de la course est atteint.'],
     ['equip', 'Équipier', 'Équipier', 'Touche un pilote pour négocier avec son agent : salaire, durée, statut, prime. Les meilleurs boudent les petites écuries.'],
   ];
   let step = 0;
@@ -125,6 +124,7 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
     let b = pick.tier ? TIERS.find(t => t.id === pick.tier).budget : 0;
     if (pick.mate) b -= pick.cost;
     if (pick.engine) b -= ENGINES.find(e => e.id === pick.engine).price;
+    for (const id of [pick.sp.main, ...pick.sp.sec]) if (id) b += spOf(id).sign;
     return Math.round(b * 10) / 10;
   };
   const abbr = () => cleanAbbr(pick.abbr) || autoAbbr(pick.name);
@@ -148,16 +148,18 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
       const v = preview(subOf(d), nctx());
       return driverCard(d, { k, from: d.from, disabled: v.off, price: (v.sal < 0 ? `apporte ${fmtM(-v.sal)} M€` : v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + previewHTML(v) });
     }).join('');
+    if (c === 'spons') h = sponsorsHTML();
     if (c === 'moteur') h = ENGINES.map(e => {
       const can = e.price <= left() + (pick.engine ? ENGINES.find(x => x.id === pick.engine).price : 0) + (pick.mate ? pick.cost : 0);
       return engineCard(e, { pick: pick.engine === e.id, disabled: !can });
     }).join('');
     $('#suList').innerHTML = h;
-    $('#suList').className = 'clist ' + { carr: 'ident', pilote: 'ident', ident: 'ident', cols: 'cols', moteur: 'engs', equip: 'drvs' }[c];
+    $('#suList').className = 'clist ' + { carr: 'ident', pilote: 'ident', ident: 'ident', cols: 'cols', spons: 'ident', moteur: 'engs', equip: 'drvs' }[c];
     if (c === 'carr') bindCareer();
     if (c === 'pilote') bindPilot();
     if (c === 'ident') bindIdentity();
     if (c === 'cols') bindColors();
+    if (c === 'spons') bindSponsors();
     if (c === 'moteur' || c === 'equip') el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
       const v = b.dataset.v;
       if (c === 'equip') {
@@ -168,7 +170,7 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
       if (c === 'moteur') { pick.engine = v; if (left() < 0) { pick.mate = null; pick.k = null; pick.cost = 0; } }
       render();
     });
-    const ok = { carr: !!pick.tier, pilote: pname().length >= 2, ident: idOk(), cols: !clash(pick.colors.p, pick.colors.s), moteur: !!pick.engine, equip: !!pick.mate }[c];
+    const ok = { carr: !!pick.tier, pilote: pname().length >= 2, ident: idOk(), cols: !clash(pick.colors.p, pick.colors.s), moteur: !!pick.engine, spons: !!pick.sp.main, equip: !!pick.mate }[c];
     $('#suNext').disabled = !ok;
     $('#suNext').textContent = step < STEPS.length - 1 ? 'Suivant →' : 'Arriver au QG →';
     $('#suBack').textContent = step ? '← Retour' : 'Annuler';
@@ -180,6 +182,7 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
     const P = pick.player;
     career = { v: 2, name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, colors: { ...pick.colors }, opts: { ...pick.opts },
       player: { name: pname(), nat: P.nat, num: P.num, look: { ...P.look }, helmet: { ...P.helmet } },
+      sponsors: { main: pick.sp.main, sec: [...pick.sp.sec] },
       tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
     saveCareer(); applyCareer();
     Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam();
@@ -200,7 +203,22 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
     el.querySelectorAll('[data-races]').forEach(b => b.onclick = () => { O.races = +b.dataset.races; render(); });
     el.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { O.diff = b.dataset.diff; render(); });
     el.querySelectorAll('[data-aid]').forEach(b => b.onclick = () => { const a = b.dataset.aid; if (a === 'line') O.line = (O.line + 1) % 3; else O[a] = !O[a]; render(); });
-    el.querySelectorAll('.tiers [data-v]').forEach(b => b.onclick = () => { pick.tier = b.dataset.v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; render(); });
+    el.querySelectorAll('.tiers [data-v]').forEach(b => b.onclick = () => { pick.tier = b.dataset.v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; pick.sp = { main: null, sec: [] }; render(); });
+  }
+  // ---- étape Sponsors : un principal (obligatoire), jusqu'à 3 secondaires ----
+  function sponsorsHTML() {
+    const rep = TIERS.find(t => t.id === pick.tier)?.rep ?? 30, n = pick.opts.races, S = pick.sp;
+    return `<div class="idsec"><h4>Sponsor principal <small>${S.main ? spOf(S.main).name : 'à choisir'}</small></h4><div class="clist spns">${offers('main', rep).map(s => sponsorCard(s, n, { pick: S.main === s.id })).join('')}</div></div>
+      <div class="idsec"><h4>Sponsors secondaires <small>${S.sec.length}/${MAX_SEC}</small></h4><div class="clist spns">${offers('sec', rep).map(s => sponsorCard(s, n, { pick: S.sec.includes(s.id), disabled: !S.sec.includes(s.id) && S.sec.length >= MAX_SEC })).join('')}</div></div>
+      <p class="cnote">Les marques les plus prestigieuses attendent une écurie réputée : ta réputation de départ est de ${rep}.</p>`;
+  }
+  function bindSponsors() {
+    el.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => {
+      const s = spOf(b.dataset.sp), S = pick.sp;
+      if (s.kind === 'main') S.main = s.id;
+      else S.sec = S.sec.includes(s.id) ? S.sec.filter(x => x !== s.id) : [...S.sec, s.id].slice(0, MAX_SEC);
+      render();
+    });
   }
   // ---- étape Pilote : nom, nationalité, numéro, apparence (3D), casque ----
   const dots = (key, list, val, title) => `<div class="sws dots">${list.map((c, k) => `<button class="sw ${val === k ? 'pick' : ''}" data-${key}="${k}" style="--sw:#${c.toString(16).padStart(6, '0')}" aria-label="${title} ${k + 1}"><i></i></button>`).join('')}</div>`;

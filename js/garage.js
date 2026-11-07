@@ -101,7 +101,7 @@ export function carUpgrades() {
     const fx = NODES[id]?.fx || {};
     for (const k in fx) up[k] += fx[k];
   }
-  const e = engineOf(); if (e) up.rel += e.fiab - 50;   // fiabilité du motoriste
+  const e = engineOf(); if (e) { up.rel += e.fiab - 50; up.fuel += ((e.conso || 100) - 100) / 100; }   // fiabilité et consommation du motoriste
   up.pit += pitBonus();                                  // centre des mécaniciens
   return up;
 }

@@ -19,6 +19,7 @@ import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard, startScene } from './cine.js';
 import { renderRoom } from './showroom.js';
 import { logoSVG } from './logo.js';
+import { paySponsors, sponsorGoalsHTML } from './sponsors.js';
 import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
 import { makeQuali } from './qsession.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
@@ -313,6 +314,9 @@ function showResults() {
       }
       S.mission = null;
       R.deals = payDeals();
+      // contrats de sponsors : versement de la course et bonus des objectifs
+      R.spons = career ? paySponsors(career, { pos: me.pos, dnf: me.dnf, gained: me.grid - me.pos, fastest, matePos: mate && !mate.dnf ? mate.pos : 99 }, SZ.nRounds()) : null;
+      if (R.spons) { team.budget = Math.round((team.budget + R.spons.total) * 10) / 10; saveTeam(); }
       if (S.done) R.review = seasonReview();
       else S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
       SZ.saveSeason();
@@ -322,13 +326,14 @@ function showResults() {
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
   $('resGarageBtn').classList.toggle('hidden', R.free);
-  $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+  $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Partenaires : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
     (R.regNews ? `<br>📜 <b>Annonce officielle</b> : nouveau règlement ${SZ.season.year + 1} pour <b>${R.regNews}</b>. Tes pièces ${R.regN > 1 ? 'de ces domaines' : 'de ce domaine'} repartiront de zéro l’an prochain.` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
     (R.season ? `<br>📅 ${SZ.season?.done ? `Fin de saison dans <b>${R.days} jours</b> (31 déc.), puis pré-saison` : `Prochain GP dans <b>${R.days} jours</b>`} : l’usine travaille pendant ce temps.` : '') +
     devNews(R.parts, R.built) +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '') +
     (R.mis ? `<br>🤝 Mission ${R.mis.sp} (${R.mis.txt.toLowerCase()}) : ${R.mis.ok ? `<b>réussie, +${R.mis.gain.toFixed(1)} M€</b>` : '<b class="bad">ratée, réputation −3</b>'}` : '') +
+    (R.spons ? `<br>🤝 Contrats de sponsors : <b>+${R.spons.total.toFixed(1)} M€</b> · objectifs ${R.spons.met}/${R.spons.n}${R.spons.lines.map(l => ` <small class="${l.ok ? 'good' : 'bad'}">${l.ok ? '✓' : '✗'} ${l.name}</small>`).join('')}` : '') +
     (R.deals ? `<br>💼 Sponsors ponctuels : <b>+${R.deals.toFixed(1)} M€</b>` : '') +
     (R.conf != null && !R.free ? `<br>🏛️ Direction : confiance ${R.conf > 0 ? '+' : ''}${R.conf} → <b>${Math.round(team.conf)} %</b>` : '') +
     (R.review ? `<br>🏁 Bilan de la direction : ${R.review.met}/${R.review.n} objectifs atteints (${R.review.d > 0 ? '+' : ''}${R.review.d})${R.review.bonus ? ` · bonus <b>+${R.review.bonus} M€</b>` : ''}${R.review.fired ? ' · <b class="bad">la direction veut te remplacer…</b>' : ''}` : '');
@@ -439,7 +444,7 @@ function openSeason() {
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
     if (career && !S.mission && !S.grid) { const ds = SZ.driverStandings(), k = ds.findIndex(d => d.player); S.mission = makeMission(ds[k ? k - 1 : 1]?.name); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (!S.round ? S.preLog || '' : '') + (career ? boardHTML() + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (!S.round ? S.preLog || '' : '') + (career ? boardHTML() + sponsorGoalsHTML(career) + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
     const mid = S.round === SZ.midRound() && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`

@@ -21,6 +21,7 @@ export function engineCard(e, { pick, disabled, cur, price } = {}) {
   return `<button class="copt eng ${pick ? 'pick' : ''}" data-v="${e.id}" ${disabled ? 'disabled' : ''} style="--c:${e.color}">
     <span class="eband"><b>${e.name}</b>${cur ? '<small>contrat actuel</small>' : ''}</span>
     <span class="ebig"><span><small>Performance</small><b>${e.perf}</b><i><em style="width:${e.perf}%"></em></i></span><span><small>Fiabilité</small><b>${e.fiab}</b><i><em style="width:${e.fiab}%"></em></i></span></span>
+    ${e.conso ? `<span class="econ">⛽ Consommation <b class="${e.conso > 100 ? 'bad' : e.conso < 100 ? 'good' : ''}">${e.conso === 100 ? 'moyenne' : (e.conso > 100 ? '+' : '−') + Math.abs(e.conso - 100) + ' %'}</b></span>` : ''}
     <em class="price">${price ?? e.price + ' M€ / saison'}</em></button>`;
 }
 

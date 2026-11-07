@@ -1158,3 +1158,14 @@ body.quali .tl { display: none; }
 #setup.scene { background: none; } #setup.scene .setup { display: none; }
 .cine.qg .ctitle { opacity: 0; animation: fadeIn .7s 5.2s forwards; }
 .cine.qg .lb { animation: lbIn .7s cubic-bezier(.2,.8,.2,1) both; }
+/* sponsors et consommation moteur */
+.clist.spns { overflow: visible; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.copt.spn { gap: 6px; } .spt { display: flex; flex-direction: column; } .spt b { font-size: 15px; } .spt small { font-size: 11px; color: var(--mut); }
+.spk { display: flex; gap: 6px; } .spk span { flex: 1; display: flex; flex-direction: column; padding: 4px 6px; border-radius: 5px; background: rgba(255,255,255,.05); }
+.spk small { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); } .spk b { font-size: 14px; }
+.spg { font-size: 11.5px; color: #c9d0d8; } .spg b { color: #7ee2a8; }
+.econ { font-size: 12px; color: #c3cad3; } .econ b.good { color: #7ee2a8; } .econ b.bad { color: #ff8a7a; }
+.spgoals { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+.spgoals h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); margin-bottom: 4px; }
+.spgoals p { font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin: 2px 0; } .spgoals i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; } .spgoals small { margin-left: auto; color: #7ee2a8; }
+#rdGain small.good { color: #7ee2a8; } #rdGain small.bad { color: #ff8a7a; }
