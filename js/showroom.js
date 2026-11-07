@@ -4,6 +4,8 @@
 import * as THREE from '../lib/three.module.min.js';
 import { buildCarMesh } from './carmodel.js';
 import { TEAMS } from './data.js';
+import { onTheme } from './theme.js';
+import { logoImage } from './logo.js';
 
 let W = null;
 const hex = c => '#' + c.toString(16).padStart(6, '0');
@@ -41,7 +43,7 @@ function glowTex(acc) {
   return tex(cv);
 }
 // fond : mur sombre, rampes verticales, plinthe lumineuse et nom de l'écurie (mur de 16 m : y monde = 14,5 − 16 × v)
-function wallTex(name, acc) {
+function wallTex(name, acc, logo, abbr) {
   const [cv, g] = canvas(2048, 512), Y = y => (14.5 - y) / 16 * 512;
   const gr = g.createLinearGradient(0, 0, 0, 512);
   gr.addColorStop(0, '#040507'); gr.addColorStop(0.5, '#0d1016'); gr.addColorStop(0.86, '#141820'); gr.addColorStop(1, '#07090c');
@@ -64,12 +66,18 @@ function wallTex(name, acc) {
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = 'rgba(255,255,255,.1)'; g.fillText(name.toUpperCase(), 1024, Y(3.9));
   g.fillStyle = acc; g.fillRect(1024 - 70, Y(2.3), 140, 5);
-  const t = tex(cv); t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1;   // vu de l'intérieur du cylindre
+  const t = tex(cv);
+  // logo et abréviation au-dessus du nom (image SVG chargée à part)
+  if (logo) logoImage(logo, img => {
+    g.globalAlpha = 0.9; g.drawImage(img, 1024 - 50, Y(9.6), 100, 100); g.globalAlpha = 1;
+    if (abbr) { g.font = 'italic 900 34px "Roboto Condensed", "Arial Narrow", sans-serif'; g.fillStyle = 'rgba(255,255,255,.28)'; g.fillText(abbr, 1024, Y(5.7)); }
+    t.needsUpdate = true;
+  }); t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1;   // vu de l'intérieur du cylindre
   return t;
 }
 
 function build(renderer) {
-  const t0 = TEAMS[0], acc = hex(t0.color);
+  const t0 = TEAMS[0], acc = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || hex(t0.color);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x06080b);
   scene.fog = new THREE.Fog(0x06080b, 30, 75);
@@ -101,20 +109,30 @@ function build(renderer) {
   table.rotation.x = -Math.PI / 2; table.position.y = 0.012; table.renderOrder = 2; spin.add(table);
   const glow = new THREE.Mesh(new THREE.RingGeometry(3.66, 4.9, 96), new THREE.MeshBasicMaterial({ map: glowTex(acc), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
   glow.rotation.x = -Math.PI / 2; glow.position.y = 0.014; glow.renderOrder = 3; scene.add(glow);
-  const car = buildCarMesh(t0.color, t0.accent, 0xffc21a); spin.add(car);
-  const mirror = buildCarMesh(t0.color, t0.accent, 0xffc21a);
+  const car = buildCarMesh(t0.color, t0.accent, t0.helmet || 0xffc21a); spin.add(car);
+  const mirror = buildCarMesh(t0.color, t0.accent, t0.helmet || 0xffc21a);
   mirror.remove(mirror.children[2]); mirror.scale.y = -1; spin.add(mirror);
 
   // mur du fond
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(26, 26, 16, 48, 1, true, Math.PI * 0.55, Math.PI * 0.9), new THREE.MeshBasicMaterial({ map: wallTex(t0.name, acc), side: THREE.BackSide }));
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(26, 26, 16, 48, 1, true, Math.PI * 0.55, Math.PI * 0.9), new THREE.MeshBasicMaterial({ map: wallTex(t0.name, acc, t0.logo, t0.abbr), side: THREE.BackSide }));
   wall.position.y = 6.5; scene.add(wall);
 
   const view = { d: 14, cx: 0.7, cy: 0.5, k: 0 };
-  return { scene, camera, spin, view, rot: 0.6 };
+  return { scene, camera, spin, view, rot: rot0 };
 }
 
 // zone de l'écran (fractions 0-1) où la voiture doit apparaître ; transition douce entre deux cadrages
 let box = [0.45, 1, 0.1, 0.9];
+// couleurs, nom ou logo changés : la scène est reconstruite au prochain affichage (même angle du plateau)
+let rot0 = 0.6;
+function refreshRoom() {
+  if (!W) return;
+  rot0 = W.rot;
+  W.scene.traverse(o => { o.geometry?.dispose(); [].concat(o.material || []).forEach(m => { m.map?.dispose(); m.dispose(); }); });
+  W.scene.environment?.dispose();
+  W = null;
+}
+onTheme(refreshRoom);
 export function frame(x0, x1, y0, y1) { box = [x0, x1, y0, y1]; }
 
 export function renderRoom(renderer, dt) {

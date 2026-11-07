@@ -1,18 +1,19 @@
 // Données du jeu : tout est fictif (écuries, pilotes, circuits).
 
 // perf : performance de la voiture (vitesse de pointe, accélération)
+// pal : couleurs de la palette (config/couleurs.js) proches de la primaire et de la secondaire : le joueur ne peut pas reprendre la même paire
 // skill : niveau de chaque pilote IA (fraction de la vitesse limite qu'il ose prendre)
 export const TEAMS = [
   { name: 'Écurie Martel',       color: 0xd81e1e, accent: 0xffffff, perf: 0.975, drivers: [{ name: 'Toi', player: true }, { name: 'A. Rivière', skill: 0.935 }] },
-  { name: 'Volta GP',            color: 0x1e5bff, accent: 0xffd400, perf: 0.99,  drivers: [{ name: 'L. Ferrand', skill: 0.975 }, { name: 'T. Mbeki', skill: 0.955 }] },
-  { name: 'Aurora Racing',       color: 0x00b89c, accent: 0x111111, perf: 0.985, drivers: [{ name: 'K. Lindqvist', skill: 0.97 }, { name: 'R. Okonkwo', skill: 0.95 }] },
-  { name: 'Fulmine Corse',       color: 0xffc400, accent: 0x1a1a1a, perf: 0.98,  drivers: [{ name: 'M. Bellandi', skill: 0.965 }, { name: 'S. Varga', skill: 0.94 }] },
-  { name: 'Nordwind Motorsport', color: 0xff7a00, accent: 0x0d1b3d, perf: 0.975, drivers: [{ name: 'J. Halvorsen', skill: 0.96 }, { name: 'E. Duval', skill: 0.935 }] },
-  { name: 'Kestrel Engineering', color: 0x8e44ff, accent: 0xffffff, perf: 0.97,  drivers: [{ name: 'D. Okafor', skill: 0.955 }, { name: 'P. Navarro', skill: 0.93 }] },
-  { name: 'Halcyon Racing',      color: 0x0f6b3a, accent: 0xe8c547, perf: 0.965, drivers: [{ name: 'Y. Tanabe', skill: 0.95 }, { name: 'C. Moreau', skill: 0.925 }] },
-  { name: 'Meridia GP',          color: 0xff4fa3, accent: 0x14306b, perf: 0.96,  drivers: [{ name: 'I. Petrov', skill: 0.945 }, { name: 'B. Achterberg', skill: 0.92 }] },
-  { name: 'Atlas Velocity',      color: 0xb8bec6, accent: 0x111111, perf: 0.955, drivers: [{ name: 'G. Castellano', skill: 0.94 }, { name: 'N. Haddad', skill: 0.915 }] },
-  { name: 'Tempesta Racing',     color: 0x0b2a5b, accent: 0x35e0ff, perf: 0.95,  drivers: [{ name: 'F. Lemaire', skill: 0.935 }, { name: 'O. Brandt', skill: 0.91 }] },
+  { name: 'Volta GP',            color: 0x1e5bff, accent: 0xffd400, pal: [['ciel', 'nuit'], ['jaune']], perf: 0.99,  drivers: [{ name: 'L. Ferrand', skill: 0.975 }, { name: 'T. Mbeki', skill: 0.955 }] },
+  { name: 'Aurora Racing',       color: 0x00b89c, accent: 0x111111, pal: [['anglais', 'ciel'], ['carbone']], perf: 0.985, drivers: [{ name: 'K. Lindqvist', skill: 0.97 }, { name: 'R. Okonkwo', skill: 0.95 }] },
+  { name: 'Fulmine Corse',       color: 0xffc400, accent: 0x1a1a1a, pal: [['jaune'], ['carbone']], perf: 0.98,  drivers: [{ name: 'M. Bellandi', skill: 0.965 }, { name: 'S. Varga', skill: 0.94 }] },
+  { name: 'Nordwind Motorsport', color: 0xff7a00, accent: 0x0d1b3d, pal: [['papaye'], ['nuit']], perf: 0.975, drivers: [{ name: 'J. Halvorsen', skill: 0.96 }, { name: 'E. Duval', skill: 0.935 }] },
+  { name: 'Kestrel Engineering', color: 0x8e44ff, accent: 0xffffff, pal: [['violet'], ['blanc']], perf: 0.97,  drivers: [{ name: 'D. Okafor', skill: 0.955 }, { name: 'P. Navarro', skill: 0.93 }] },
+  { name: 'Halcyon Racing',      color: 0x0f6b3a, accent: 0xe8c547, pal: [['anglais'], ['jaune']], perf: 0.965, drivers: [{ name: 'Y. Tanabe', skill: 0.95 }, { name: 'C. Moreau', skill: 0.925 }] },
+  { name: 'Meridia GP',          color: 0xff4fa3, accent: 0x14306b, pal: [['rouge', 'violet'], ['nuit']], perf: 0.96,  drivers: [{ name: 'I. Petrov', skill: 0.945 }, { name: 'B. Achterberg', skill: 0.92 }] },
+  { name: 'Atlas Velocity',      color: 0xb8bec6, accent: 0x111111, pal: [['argent', 'blanc'], ['carbone']], perf: 0.955, drivers: [{ name: 'G. Castellano', skill: 0.94 }, { name: 'N. Haddad', skill: 0.915 }] },
+  { name: 'Tempesta Racing',     color: 0x0b2a5b, accent: 0x35e0ff, pal: [['nuit'], ['ciel']], perf: 0.95,  drivers: [{ name: 'F. Lemaire', skill: 0.935 }, { name: 'O. Brandt', skill: 0.91 }] },
 ];
 
 // Thèmes de décor (ciel, sol, végétation, relief à l'horizon, ville, mer)

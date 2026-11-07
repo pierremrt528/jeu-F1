@@ -9,6 +9,7 @@ import { openNego, preview, previewHTML, fmtM } from './nego.js';
 import { teamPos } from './market.js';
 import { season, preStep } from './season.js';
 import { TEAMS } from './data.js';
+import { logoSVG } from './logo.js';
 import { art, DEPT_ART } from './art.js';
 import { frame } from './showroom.js';
 
@@ -238,6 +239,7 @@ function render() {
   $('#gPts').textContent = team.budget.toFixed(1);
   if (!ZONES[zone].tabs.includes(tab)) tab = ZONES[zone].tabs[0];
   $('#gTitle').textContent = ZONES[zone].title;
+  $('#gLogo').innerHTML = logoSVG(TEAMS[0].logo) + `<b>${TEAMS[0].abbr}</b>`;
   $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${garage.owned.length}/${TREES.reduce((s, t) => s + t.nodes.length, 0)} pièces installées` : '');
   $('#gZones').innerHTML = Object.entries(ZONES).map(([k, z]) => `<button data-zone="${k}" class="${k === zone ? 'sel' : ''}">${z.name}</button>`).join('');
   root.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { zone = b.dataset.zone; tab = ZONES[zone].tabs[0]; sel = null; render(); });

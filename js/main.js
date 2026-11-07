@@ -18,6 +18,7 @@ import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, 
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
 import { renderRoom } from './showroom.js';
+import { logoSVG } from './logo.js';
 import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
 import { makeQuali } from './qsession.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
@@ -214,7 +215,7 @@ const maxRatio = Math.min(devicePixelRatio, 1.5);
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (roomOn) {
+  if (roomOn || $('setup').classList.contains('room')) {
     if (now - menuDraw < 32) return;
     renderRoom(renderer, Math.min(0.1, (now - menuDraw) / 1000)); menuDraw = now; return;
   }
@@ -415,6 +416,7 @@ function openSeason() {
     $('szFired').onclick = resetAll;
     return show('season');
   }
+  $('szLogo').innerHTML = career ? logoSVG(TEAMS[0].logo) + `<b>${TEAMS[0].abbr}</b>` : '';
   $('szCal').innerHTML = SZ.calendarHTML();
   $('szState').innerHTML = teamLine();
   const me = SZ.driverStandings().findIndex(d => d.player) + 1, myPts = S.pts['Toi'] || 0;
