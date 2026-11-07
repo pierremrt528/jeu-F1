@@ -7,6 +7,8 @@ const OUTLETS = [
   ['Claire Fontanel', 'Le Paddock', '#e5483b'], ['Hugo Marchetti', 'Vitesse Hebdo', '#3aa0ff'],
   ['Inès Rouvière', 'Gazette des Circuits', '#f2b632'], ['Mats Elling', 'Radio Grand Tour', '#3ddc84'],
   ['Sofia Lindgren', 'Grille de Départ TV', '#b06cff'], ['Bastien Kerloc\'h', 'Moteur & Passion', '#ff8a3d'],
+  ['Nadia Belkacem', 'L’Écho des Stands', '#00c2c7'], ['Tomás Ibarra', 'Pole Position Mag', '#ff5fa2'],
+  ['Elsa Dumont', 'Radio Chicane', '#9bd13d'], ['Viktor Haas', 'Le Quotidien du Sport', '#6f8cff'],
 ];
 
 // q(ctx) renvoie le texte ; when(ctx) filtre ; a = réponses [texte, effets]
@@ -208,14 +210,171 @@ const Q = [
     ["Je n'ai pas de pression, c'est aux autres d'en avoir.", { rep: -3, moral: 3, perf: { acc: 0.008 } }],
     ['Je fais de la méditation et je visualise chaque virage.', { moral: 3, perf: { steer: 0.03 } }],
   ] },
+  // ---- questions supplémentaires : contexte du week-end ----
+  { when: c => c.grid === 1, q: c => c.pos === 1 ? 'De la pole à la victoire : un week-end parfait ?' : `Parti de la pole, arrivé P${c.pos}. Que s’est-il passé ?`, a: [
+    ['La qualification, c’était le plus dur. Le reste a suivi.', { moral: 3, rep: 2 }],
+    [c => c.pos === 1 ? 'Parfait ? Il reste des dixièmes à trouver.' : 'Le rythme de course n’était pas celui des qualifs.', { moral: 1, perf: { mu: 0.006 } }],
+    ['Une pole, c’est un message envoyé aux autres.', { moral: 3, rep: -2 }],
+  ] },
+  { when: c => c.grid >= 15 && !c.dnf, q: c => `Parti P${c.grid} : la qualification est-elle votre point faible ?`, a: [
+    ['Oui, il faut que je trouve plus de confiance sur un tour.', { moral: -1, perf: { steer: 0.02 } }],
+    ['La course, c’est le dimanche. Le samedi ne paie pas.', { moral: 2, rep: -1 }],
+    ['La voiture est difficile à exploiter sur un tour lancé.', { moral: 1, conf: -1 }],
+  ] },
+  { when: c => c.winner && c.winner !== 'Toi' && c.pos > 3, q: c => `${c.winner} s’impose aujourd’hui. Est-il le favori pour le titre ?`, a: [
+    [c => `${c.winner} est en forme, mais la saison est longue.`, { rep: 2 }],
+    ['Personne n’est imbattable. On le prouvera.', { moral: 2, perf: { acc: 0.005 } }],
+    ['Je ne parle pas des autres pilotes.', { moral: 1 }],
+  ] },
+  { when: c => c.mate && c.mateAhead && !c.dnf, q: c => `${c.mate} vous a battu aujourd’hui. Est-ce une sonnette d’alarme ?`, a: [
+    [c => `Bravo à ${c.mate}, il a mérité. Je reviendrai.`, { moral: 3, rep: 2 }],
+    ['Il a eu la meilleure voiture ce week-end.', { moral: -3, rep: -1 }],
+    ['Un jour sans, ça arrive à tout le monde.', { moral: 1 }],
+  ] },
+  { when: c => c.gained > 0 && c.gained < 4 && !c.dnf, q: c => `${c.gained} place${c.gained > 1 ? 's' : ''} gagnée${c.gained > 1 ? 's' : ''} en course. Une course solide mais discrète ?`, a: [
+    ['Discrète, mais sans erreur. C’est comme ça qu’on gagne des titres.', { moral: 2, conf: 1 }],
+    ['On voulait plus, la voiture était difficile à suivre dans l’air sale.', { moral: -1, perf: { kd: 0.02 } }],
+    ['Le travail des mécaniciens a fait la différence.', { moral: 3 }],
+  ] },
+  { when: c => c.stops === 1 && !c.dnf, q: c => 'Un seul arrêt : le muret a-t-il visé juste ?', a: [
+    ['Parfaitement, le timing était idéal.', { moral: 2, conf: 1 }],
+    ['On aurait pu tenter un arrêt de plus.', { moral: -1, perf: { mu: 0.005 } }],
+    ['Je gérais les pneus, le muret gérait le reste.', { moral: 2, rep: 1 }],
+  ] },
+  { when: c => c.wet && c.pos <= 6 && !c.dnf, q: c => 'Brillant sous la pluie. Vous êtes un spécialiste des conditions difficiles ?', a: [
+    ['J’ai grandi en roulant sous la pluie, ça aide.', { rep: 3, moral: 2 }],
+    ['Le choix des pneus du muret était parfait.', { moral: 3, conf: 1 }],
+    ['La pluie ne fait pas peur aux vrais pilotes.', { rep: -2, moral: 3 }],
+  ] },
+  { when: c => c.sc && c.pos <= 3, q: c => 'Sans la voiture de sécurité, seriez-vous sur le podium ?', a: [
+    ['Le rythme était là, la voiture de sécurité n’a rien changé.', { moral: 2, rep: -1 }],
+    ['Elle nous a aidés, il faut le reconnaître.', { rep: 3 }],
+    ['On ne refait pas la course avec des « si ».', { moral: 1 }],
+  ] },
+  { when: c => c.round === 1, q: c => 'Premier Grand Prix de la saison. Premières impressions sur la voiture ?', a: [
+    ['Prometteuse, on n’a pas tout montré.', { moral: 3, rep: 1 }],
+    ['Il y a du travail, l’usine le sait.', { moral: -1, perf: { acc: 0.005 } }],
+    ['Je préfère juger après cinq courses.', { moral: 1, conf: 1 }],
+  ] },
+  { when: c => c.champ >= 8 && c.round > 4, q: c => `P${c.champ} au championnat : quel est l’objectif réaliste ?`, a: [
+    ['Marquer des points régulièrement et grimper.', { moral: 2, conf: 1 }],
+    ['Un podium cette saison, je le veux.', { moral: 3, rep: 1 }],
+    ['Construire pour la saison prochaine.', { moral: -1, conf: 2 }],
+  ] },
+  { when: c => c.conf != null && c.conf >= 80, q: c => 'La direction ne tarit pas d’éloges à votre sujet. Une prolongation en vue ?', a: [
+    ['Je suis bien ici, on en parlera au bon moment.', { conf: 2, moral: 1 }],
+    ['Mon prix a augmenté, ils le savent.', { conf: -2, budget: 0.6 }],
+    ['Je ne pense qu’à la prochaine course.', { moral: 2 }],
+  ] },
+  { when: c => c.pos > 3 && c.pos <= 6, res: true, q: c => `P${c.pos}, aux portes du podium à ${c.circuit}. Que manquait-il ?`, a: [
+    ['Un peu de vitesse en ligne droite.', { perf: { vtop: 0.005 }, moral: 1 }],
+    ['Un meilleur départ, j’ai perdu du temps au premier virage.', { perf: { acc: 0.005 }, moral: 1 }],
+    ['Rien, c’était notre place aujourd’hui.', { moral: 2, conf: 1 }],
+  ] },
+  { when: c => c.pos > 6 && c.pos <= 10, res: true, q: c => `P${c.pos} à ${c.circuit}. Des points, mais loin des meilleurs ?`, a: [
+    ['Chaque point compte au classement des écuries.', { moral: 2, conf: 1 }],
+    ['On doit accélérer le développement.', { moral: -1, perf: { kd: 0.02 } }],
+    ['Le milieu de peloton est très serré, on le savait.', { moral: 1, rep: 1 }],
+  ] },
+  // ---- questions générales (paddock, vie de pilote) ----
+  { q: c => 'Quel pilote du plateau vous impressionne le plus ?', a: [
+    ['Les jeunes qui arrivent de Formule B, ils n’ont peur de rien.', { rep: 2, moral: 1 }],
+    ['Moi-même, et je ne plaisante qu’à moitié.', { rep: -2, moral: 3 }],
+    ['Mon équipier, on apprend beaucoup ensemble.', { moral: 3 }],
+  ] },
+  { q: c => 'Les réseaux sociaux : un plaisir ou une corvée ?', a: [
+    ['Un vrai lien avec les fans, j’adore.', { rep: 3, moral: 1 }],
+    ['Une corvée, je laisse ça à mon équipe.', { rep: -1, moral: 2 }],
+    ['Nos partenaires y tiennent, alors je joue le jeu.', { budget: 0.5, moral: -1 }],
+  ] },
+  { q: c => 'Le prochain circuit vous convient-il ?', a: [
+    ['Oui, c’est un de mes préférés.', { moral: 3 }],
+    ['Pas vraiment, mais on va travailler les réglages.', { moral: -1, perf: { mu: 0.005 } }],
+    ['Tous les circuits se gagnent.', { moral: 1, rep: 1 }],
+  ] },
+  { q: c => 'Faut-il plus de dépassements dans ce sport ?', a: [
+    ['Oui, l’aspiration devrait être plus forte.', { rep: 2 }],
+    ['Un dépassement rare a plus de valeur.', { rep: 1, moral: 1 }],
+    ['Moi, je dépasse déjà assez.', { rep: -2, moral: 2 }],
+  ] },
+  { q: c => 'Comment se passe le travail avec votre ingénieur de course ?', a: [
+    ['Il me connaît par cœur, un regard suffit.', { moral: 4 }],
+    ['On se dispute parfois, c’est bon signe.', { moral: 1, perf: { brake: 0.006 } }],
+    ['Il doit encore apprendre à m’écouter.', { moral: -3, rep: -1 }],
+  ] },
+  { q: c => 'L’usine travaille-t-elle sur la voiture de l’an prochain ?', a: [
+    ['Un peu, mais la priorité reste cette saison.', { conf: 1, moral: 1 }],
+    ['Oui, et elle sera spectaculaire.', { rep: 2, moral: 1 }],
+    ['Secret industriel.', { moral: 1 }],
+  ] },
+  { q: c => 'Un pilote de réserve frappe-t-il à votre porte ?', a: [
+    ['La concurrence interne nous rend meilleurs.', { moral: 1, rep: 1 }],
+    ['Personne ne prendra ma place.', { moral: 3, rep: -1 }],
+    ['C’est le travail de la direction, pas le mien.', { moral: 1 }],
+  ] },
+  { q: c => 'Les essais privés manquent-ils aux écuries ?', a: [
+    ['Énormément, on apprend tout le week-end.', { rep: 1, perf: { mu: 0.004 } }],
+    ['Non, le simulateur fait le travail.', { moral: 1, perf: { steer: 0.015 } }],
+    ['Moins d’essais, moins de dépenses.', { budget: 0.4 }],
+  ] },
+  { q: c => 'Quelle a été la clé du week-end pour les mécaniciens ?', a: [
+    ['Des arrêts rapides et zéro erreur.', { moral: 3, conf: 1 }],
+    ['Ils ont travaillé toute la nuit sur la voiture.', { moral: 4, rep: 1 }],
+    ['Il faut encore gagner quelques dixièmes au stand.', { moral: -1, perf: { acc: 0.004 } }],
+  ] },
+  { q: c => 'Un rival affirme que votre écurie copie ses idées. Que répondez-vous ?', a: [
+    ['Ça prouve qu’on fait peur.', { moral: 3, rep: -1 }],
+    ['Nos ingénieurs n’ont besoin de copier personne.', { rep: 2, moral: 1 }],
+    ['Pas de commentaire.', {}],
+  ] },
+  { q: c => 'Préférez-vous les circuits urbains ou les grands circuits rapides ?', a: [
+    ['Les urbains : aucune erreur permise.', { moral: 2, perf: { brake: 0.005 } }],
+    ['Les rapides : la vitesse pure, rien de tel.', { moral: 2, perf: { vtop: 0.004 } }],
+    ['Peu importe, tant que je gagne.', { rep: 1, moral: 1 }],
+  ] },
+  { q: c => 'Les fans réclament une livrée spéciale pour une course. Partant ?', a: [
+    ['Avec plaisir, c’est pour eux qu’on court.', { rep: 3, budget: -0.3 }],
+    ['Si un sponsor la finance, pourquoi pas.', { budget: 0.6 }],
+    ['La livrée actuelle est parfaite.', { moral: 1 }],
+  ] },
+  { q: c => 'Que faites-vous entre deux Grands Prix ?', a: [
+    ['Je passe du temps à l’usine avec les ingénieurs.', { moral: 3, conf: 1 }],
+    ['Du sport, beaucoup de sport.', { moral: 2, perf: { steer: 0.01 } }],
+    ['Je déconnecte totalement, c’est vital.', { moral: 2, conf: -1 }],
+  ] },
+  { q: c => 'La sécurité des circuits est-elle suffisante ?', a: [
+    ['On a beaucoup progressé, mais il reste à faire.', { rep: 2 }],
+    ['Certains dégagements sont trop petits.', { rep: 1, moral: 1 }],
+    ['Le danger fait partie de ce sport.', { rep: -2, moral: 2 }],
+  ] },
+  { q: c => 'Votre écurie est-elle trop prudente en stratégie ?', a: [
+    ['Prudente, peut-être. Efficace, sûrement.', { conf: 1, moral: 1 }],
+    ['Oui, il faudra prendre plus de risques.', { moral: 1, perf: { acc: 0.004 } }],
+    ['Je fais confiance au muret.', { moral: 2 }],
+  ] },
+  { q: c => 'On parle d’un nouveau partenaire technique pour l’écurie. Vrai ?', a: [
+    ['Des discussions ont lieu, je ne peux rien dire.', { rep: 2 }],
+    ['Oui, et ça va changer beaucoup de choses.', { rep: 1, budget: 0.5, conf: -1 }],
+    ['Je n’en sais pas plus que vous.', {}],
+  ] },
+  { q: c => 'Quel souvenir gardez-vous de votre première course ?', a: [
+    ['La peur au départ, puis le bonheur à l’arrivée.', { rep: 2, moral: 2 }],
+    ['Un abandon au premier tour, ça forge le caractère.', { moral: 2 }],
+    ['Aucun, je regarde devant.', { moral: 1, rep: -1 }],
+  ] },
 ];
 
 const pick = a => a[(Math.random() * a.length) | 0];
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
+// questions déjà posées récemment (mémorisées d'une course à l'autre) : on évite de les reposer
+const SEEN = 'gpm-press-seen';
+const recent = () => { try { return JSON.parse(localStorage.getItem(SEEN)) || []; } catch { return []; } };
 export function buildQuestions(ctx, n = 3) {
-  const special = shuffle(Q.filter(q => q.when && q.when(ctx)));
-  const general = shuffle(Q.filter(q => !q.when));
+  const old = recent(), fresh = q => !old.includes(Q.indexOf(q));
+  const byAge = a => a.sort((x, y) => fresh(y) - fresh(x));   // les questions jamais posées récemment d'abord
+  const special = byAge(shuffle(Q.filter(q => q.when && q.when(ctx))));
+  const general = byAge(shuffle(Q.filter(q => !q.when)));
   const list = [];
   // une question sur le résultat d'abord, puis du contexte et du général
   const res = special.find(q => q.res);
@@ -223,7 +382,8 @@ export function buildQuestions(ctx, n = 3) {
   for (const q of special) if (list.length < n - 1 && !list.includes(q) && !q.res) list.push(q);
   for (const q of general) if (list.length < n) list.push(q);
   const people = shuffle(OUTLETS.slice());
-  return list.map((q, k) => ({ text: q.q(ctx), who: people[k], answers: q.a.map(([t, fx]) => [typeof t === 'function' ? t(ctx) : t, fx]) }));
+  try { localStorage.setItem(SEEN, JSON.stringify([...list.map(q => Q.indexOf(q)), ...old].slice(0, 36))); } catch {}
+  return list.map((q, k) => ({ text: q.q(ctx), who: people[k], answers: shuffle(q.a.map(([t, fx]) => [typeof t === 'function' ? t(ctx) : t, fx])) }));
 }
 
 export const fxText = fx => {

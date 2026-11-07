@@ -135,12 +135,27 @@ export function makePlans(laps, lapKm, lapTime, wet, pitLoss) {
   for (const c of cands) if (pick.length < 3 && !pick.includes(c) && !pick.some(p => p.stops === c.stops && p.stints[0].tyre === c.stints[0].tyre)) pick.push(c);
   for (const c of cands) if (pick.length < 3 && !pick.includes(c)) pick.push(c);
   pick.sort((a, b) => a.time - b.time);
-  return pick.map((p, k) => ({ ...p, name: NAMES[k], desc: descOf(p.stints), best: !k }));
+  const out = pick.map((p, k) => ({ ...p, name: NAMES[k], desc: descOf(p.stints), best: !k }));
+  // réserve des IA : toutes les stratégies à moins de ~1,2 % de la meilleure (variées mais efficaces)
+  out.pool = cands.filter(c => c.time <= cands[0].time * 1.012).slice(0, 12);
+  return out;
 }
 function split(t, laps) {   // repli : relais égaux d'une même gomme
   const n = Math.max(1, Math.ceil(laps * TYRES[t].wpl * KPLAN / 0.7)), out = [];
   for (let i = 0; i < n; i++) out.push({ tyre: t, laps: Math.floor(laps / n) + (i < laps % n ? 1 : 0) });
   return out;
+}
+
+// variante d'une stratégie efficace : gommes dans un autre ordre, arrêts avancés ou retardés d'un ou deux tours
+function varyPlan(stints, laps, lapKm) {
+  const st = stints.map(s => ({ ...s }));
+  if (st.length > 1 && Math.random() < 0.45) st.reverse();
+  if (st.length > 1) for (let k = 0; k < 2; k++) {
+    const i = (Math.random() * (st.length - 1)) | 0, d = (Math.random() < 0.5 ? -1 : 1) * (1 + ((Math.random() * Math.max(1, laps / 12)) | 0));
+    const a = st[i].laps + d, b = st[i + 1].laps - d;
+    if (a >= 1 && b >= 1 && [a, b].every((n, j) => n * TYRES[st[i + j].tyre].wpl * KPLAN <= 0.75 && fuelFor(n, lapKm) <= TANK)) { st[i].laps = a; st[i + 1].laps = b; }
+  }
+  return st;
 }
 
 // stratégies risquées ou à contre-pied, tentées par 1 ou 2 IA à chaque course
@@ -152,6 +167,8 @@ function riskyPlan(plans, laps, wet, lapKm) {
     if (t && fuelFor(laps, lapKm) <= TANK) opts.push({ txt: `sans arrêt en ${TYRES[t].name.toLowerCase()}s`, stints: [{ tyre: t, laps }] });
     const n = Math.max(1, Math.ceil(w('S') / 0.92));
     if (n <= 4) opts.push({ txt: 'tendres poussés jusqu’à la corde', stints: Array.from({ length: n }, (_, i) => ({ tyre: 'S', laps: Math.floor(laps / n) + (i < laps % n ? 1 : 0) })) });
+    if (laps >= 8) { const a = Math.max(2, Math.round(laps * 0.18)); if ((laps - a) * TYRES.H.wpl * KPLAN <= 0.8) opts.push({ txt: 'arrêt très tôt pour l’undercut', stints: [{ tyre: 'S', laps: a }, { tyre: 'H', laps: laps - a }] }); }
+    if (laps >= 6) { const b = Math.max(2, Math.round(laps * 0.3)); if ((laps - b) * TYRES.H.wpl * KPLAN <= 0.85) opts.push({ txt: 'départ en durs, sprint final en tendres', stints: [{ tyre: 'H', laps: laps - b }, { tyre: 'S', laps: b }] }); }
     if (laps >= 6) opts.push({ txt: 'trois arrêts en tendres', stints: Array.from({ length: 4 }, (_, i) => ({ tyre: 'S', laps: Math.floor(laps / 4) + (i < laps % 4 ? 1 : 0) })) });
   }
   if (best.length > 1) {
@@ -176,8 +193,12 @@ export function setupStrategy(R, track, wx, plan) {
     c.strat = c.stats?.strat ?? 70; c.tyreSkill = c.stats?.tyre ?? 75;
     if (R.solo) { c.tyre = R.wet > 0.4 ? 'W' : 'S'; c.fuel = 15; c.plan = null; continue; }
     // plan : celui du joueur, sinon un des trois au hasard (les bons stratèges choisissent mieux)
-    const pick = c.player && plan ? plan : plans[Math.random() < 0.3 + c.strat / 250 ? 0 : Math.floor(Math.random() * plans.length)];
-    c.plan = pick.stints.map(s => ({ ...s }));
+    // IA : une stratégie efficace de la réserve (les bons stratèges restent plus près de la meilleure), légèrement personnalisée
+    const pool = plans.pool?.length ? plans.pool : plans;
+    const pick = c.player && plan ? plan : Math.random() < 0.15 + c.strat / 400 ? plans[0] : pool[Math.floor(Math.random() * Math.min(pool.length, 3 + (100 - c.strat) / 8))];
+    c.plan = c.player && plan ? pick.stints.map(s => ({ ...s })) : varyPlan(pick.stints, R.laps, R.lapKm);
+    // forme du jour : ±0,3 % de rythme, les pilotes IA ne sont pas des métronomes
+    if (!c.player) c.skill *= 1 + (Math.random() - 0.5) * 0.006;
     c.tyre = c.plan[0].tyre;
     c.fuel = c.player && plan ? plan.fuel : Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) + 1);
     c.fail = Math.random() < failP(c) * Math.min(1.5, R.laps / 10) ? { at: 0.1 + Math.random() * 0.8, kind: Math.random() < 0.5 ? 'dnf' : 'power' } : null;
@@ -189,7 +210,7 @@ export function setupStrategy(R, track, wx, plan) {
     const rp = riskyPlan(plans, R.laps, R.wet > 0.4, R.lapKm);
     if (!rp) continue;
     c.risky = true; c.plan = rp.stints.map(s => ({ ...s })); c.tyre = c.plan[0].tyre;
-    c.fuel = Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) + 1);
+    c.fuel = Math.min(TANK, fuelFor(c.plan[0].laps, R.lapKm) * 1.06 + 1);   // un peu plus d'essence pour attaquer
     told.push(`${c.name} (${rp.txt})`);
   }
   if (told.length) say(R, `📻 Muret : stratégie risquée chez ${told.join(' et ')}.`);
@@ -341,6 +362,8 @@ export function updateStrategy(R, dt) {
     if (!c.player || R.autopilot) {
       const need = plannedStop(c) ? plannedStop(c) - (c.lap - 1) - c.idx / N : lapsLeft(R, c);
       c.mode = fuelLaps(R, { ...c, mode: 'norm' }) < need + 0.15 ? 'save' : 'norm';
+      // stratégie risquée : attaque tant que les pneus et l'essence le permettent (peut payer… ou casser les pneus)
+      if (c.risky && !c.player && c.mode === 'norm' && 1 - c.wear > 0.45 && fuelLaps(R, { ...c, mode: 'push' }) > need + 0.3) c.mode = 'push';
     }
     // décision d'arrêt avant l'entrée des stands
     const k0 = P.k(c.idx, N), zone = k0 > P.e0 - 30 && k0 < P.e0 - 10;

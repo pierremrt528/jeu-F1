@@ -312,7 +312,7 @@ function showResults() {
       S.mission = null;
       R.deals = payDeals();
       if (S.done) R.review = seasonReview();
-      else if (Math.random() < 0.65) S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
+      else S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
       SZ.saveSeason();
       Object.assign(R.pressCtx, { champ: ahead.findIndex(d => d.player) + 1, round: S.round, n: SZ.nRounds(), mid: S.round === SZ.midRound(), last: S.done,
         role: career?.contract?.role, conf: team.conf, tier: career?.tier, reg: !!S.reg?.length });

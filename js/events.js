@@ -1,6 +1,6 @@
 // Vie de l'écurie entre les Grands Prix : événements à choix annoncés en « flash info », objectifs de
 // la direction (confiance, licenciement possible), missions proposées par les sponsors avant chaque course.
-import { TEAMS } from './data.js';
+import { TEAMS, CIRCUITS } from './data.js';
 import { team, applyFx, saveTeam } from './team.js';
 import { career, saveCareer, applyCareer, mateContract } from './career.js';
 import { chiefOf, chiefContract, DEPTS, loseChief } from './staff.js';
@@ -36,7 +36,7 @@ const EVENTS = [
     { t: 'Refuser : un contrat est un contrat', fx: { moral: -8, mate: { spd: -1 } }, out: 'Il boude et perd un peu de motivation.' },
   ] },
   { id: 'spy', icon: '🕵️', title: 'Des plans à vendre', text: () => 'Un ingénieur d’une écurie rivale propose de te vendre les plans de leur nouvel aileron.', ch: [
-    { t: 'Acheter les plans (3 M€)', fx: { budget: -3, perf: { kd: 0.05 } }, out: 'L’aileron copié sera prêt pour le prochain GP.',
+    { t: 'Acheter les plans (3 M€)', fx: { budget: -3, perf: { kd: 0.05 }, flag: 'spied' }, out: 'L’aileron copié sera prêt pour le prochain GP.',
       risk: { p: 0.35, fx: { budget: -3, rep: -12, conf: -12 }, out: 'Scandale ! La fédération l’apprend : amende de 3 M€ et réputation au plus bas.' } },
     { t: 'Refuser et prévenir la fédération', fx: { rep: 8, conf: 3 }, out: 'Ton intégrité est saluée dans tout le paddock.' },
     { t: 'Refuser discrètement', fx: { moral: 1 }, out: 'L’affaire en reste là.' },
@@ -57,8 +57,8 @@ const EVENTS = [
     { t: 'Refuser', fx: { moral: -10, perf: { acc: -0.012 } }, out: 'Les mécaniciens traînent des pieds : le prochain GP sera compliqué.' },
   ] },
   { id: 'docu', icon: '🎬', title: 'Un documentaire', text: () => 'Une plateforme de streaming veut filmer l’écurie pendant toute la saison, coulisses comprises.', ch: [
-    { t: 'Accepter : tout filmer', fx: { budget: 4, rep: 6, moral: -6 }, out: 'Les caméras sont partout, même à la cantine.' },
-    { t: 'Accepter avec des zones interdites', fx: { budget: 2, rep: 3 }, out: 'Un compromis qui convient à tout le monde.' },
+    { t: 'Accepter : tout filmer', fx: { budget: 4, rep: 6, moral: -6, flag: 'docu' }, out: 'Les caméras sont partout, même à la cantine.' },
+    { t: 'Accepter avec des zones interdites', fx: { budget: 2, rep: 3, flag: 'docu' }, out: 'Un compromis qui convient à tout le monde.' },
     { t: 'Refuser', fx: { moral: 3 }, out: 'L’équipe garde ses secrets.' },
   ] },
   { id: 'engine', icon: '⚙️', title: 'Moteur fatigué', text: () => 'Le motoriste prévient : ton moteur arrive en fin de vie. En monter un neuf coûte une pénalité sur la grille.', ch: [
@@ -67,7 +67,7 @@ const EVENTS = [
     { t: 'Payer un moteur de rechange hors quota (4 M€)', fx: { budget: -4, conf: -2 }, out: 'Problème réglé, à prix d’or.' },
   ] },
   { id: 'prodigy', icon: '🎓', title: 'Un prodige frappe à la porte', text: () => 'Un jeune champion de karting cherche un volant d’essai et une place à l’académie.', ch: [
-    { t: 'L’accueillir comme réserviste (1 M€)', fx: { budget: -1, rep: 3, mate: { spd: 1 } }, out: 'Son énergie pousse ton équipier à se dépasser.' },
+    { t: 'L’accueillir comme réserviste (1 M€)', fx: { budget: -1, rep: 3, mate: { spd: 1 }, flag: 'prodigy' }, out: 'Son énergie pousse ton équipier à se dépasser.' },
     { t: 'Le recommander à une autre écurie', fx: { rep: 2 }, out: 'Le paddock apprécie le geste.' },
     { t: 'Ignorer sa demande', fx: {}, out: 'Il ira voir ailleurs.' },
   ] },
@@ -141,6 +141,183 @@ const EVENTS = [
     { t: 'Réglages vitesse', fx: { perf: { vtop: 0.008, mu: -0.006 } }, out: 'Taillée pour les lignes droites.' },
     { t: 'Garder un réglage équilibré', fx: {}, out: 'Pas de pari.' },
   ] },
+  // ---- brèves : petits événements à effet marginal, c'est leur cumul qui compte ----
+  { id: 'cantine', lite: true, icon: '🍝', title: 'Révolution à la cantine', text: () => 'Le nouveau chef cuisinier de l’usine veut imposer un menu « performance » sans dessert.', ch: [
+    { t: 'Menu performance pour tous', fx: { moral: -2, perf: { mu: 0.003 } }, out: 'Les ingénieurs râlent, les pilotes s’affûtent.' },
+    { t: 'Garder les desserts le vendredi', fx: { moral: 2 }, out: 'Compromis sucré, tout le monde est content.' },
+    { t: 'Laisser chacun choisir', fx: { moral: 1, budget: -0.2 }, out: 'Deux menus, un peu plus cher.' },
+  ] },
+  { id: 'influ', lite: true, icon: '📱', title: 'Un influenceur au garage', text: c => `${c.star}, star des réseaux avec des millions d’abonnés, veut tourner une vidéo dans ton garage pendant le prochain Grand Prix.`, ch: [
+    { t: 'Accès total au garage', fx: { rep: 3, moral: -2, flag: 'influ' }, out: 'La vidéo cartonne… et montre un peu trop de choses.' },
+    { t: 'Une interview dans le motorhome', fx: { rep: 1, budget: 0.3 }, out: 'Une vidéo sympa, sans risque.' },
+    { t: 'Refuser', fx: { moral: 1 }, out: 'Les mécaniciens travaillent tranquilles.' },
+  ] },
+  { id: 'influbad', lite: true, icon: '🙈', when: c => c.flags.influ, title: 'La vidéo fait jaser', text: c => `Dans la vidéo de ${c.star}, on aperçoit un écran avec des données de télémétrie. Les rivaux se frottent les mains.`, ch: [
+    { t: 'Demander de flouter l’image', fx: { rep: -1, dev: 1 }, out: 'Trop tard pour certains, mais l’essentiel est caché.' },
+    { t: 'En rire publiquement', fx: { rep: 2, moral: 1 }, out: '« Ce ne sont que des données d’il y a un mois ! » Le paddock sourit.' },
+    { t: 'Changer tous les mots de passe', fx: { dev: 2, moral: -1 }, out: 'Une journée perdue en informatique, mais l’usine est blindée.' },
+  ] },
+  { id: 'livery', lite: true, icon: '🎨', title: 'Livrée spéciale', text: c => `Les fans votent pour une livrée spéciale au Grand Prix de ${c.next}. Le design gagnant est… très original.`, ch: [
+    { t: 'L’adopter (0,4 M€)', fx: { budget: -0.4, rep: 3 }, out: 'Les fans adorent, les photos font le tour du monde.' },
+    { t: 'L’adapter aux couleurs du sponsor', fx: { budget: 0.4, rep: 1 }, out: 'Tout le monde y trouve son compte.' },
+    { t: 'Garder notre livrée', fx: { rep: -1, moral: 1 }, out: 'Fidèle à l’identité de l’écurie.' },
+  ] },
+  { id: 'storm', lite: true, icon: '🌪️', title: 'Tempête sur le fret', text: () => 'Une tempête retarde l’avion qui transporte les caisses de pièces de rechange.', ch: [
+    { t: 'Affréter un camion express (0,6 M€)', fx: { budget: -0.6 }, out: 'Les caisses arrivent à temps.' },
+    { t: 'Faire avec les pièces sur place', fx: { perf: { kd: -0.004 }, moral: -1 }, out: 'On roulera avec l’ancien aileron.' },
+    { t: 'Fabriquer sur place avec les mécaniciens', fx: { moral: 2, dev: 1 }, out: 'Nuit blanche, mais l’équipe en sort soudée.' },
+  ] },
+  { id: 'interns', lite: true, icon: '🧑‍🎓', title: 'Stagiaires ingénieurs', text: () => 'Une école d’ingénieurs propose cinq stagiaires brillants pour la saison.', ch: [
+    { t: 'Les accueillir', fx: { dev: -2, moral: -1 }, out: 'Ils apportent des idées fraîches… et quelques erreurs.' },
+    { t: 'En prendre un seul', fx: { dev: -1 }, out: 'Le meilleur des cinq rejoint l’usine.' },
+    { t: 'Pas cette année', fx: {}, out: 'L’école ira voir ailleurs.' },
+  ] },
+  { id: 'coffee', lite: true, icon: '☕', title: 'Panne de machine à café', text: () => 'La machine à café de l’usine a rendu l’âme. Les ingénieurs sont au bord de la crise.', ch: [
+    { t: 'Machine haut de gamme (0,1 M€)', fx: { budget: -0.1, moral: 3 }, out: 'Le meilleur café du paddock !' },
+    { t: 'Une cafetière en attendant', fx: { moral: -1 }, out: 'Le café est tiède, l’ambiance aussi.' },
+    { t: 'Une boîte de thé', fx: { moral: -2, perf: { steer: 0.004 } }, out: 'Zénitude forcée…' },
+  ] },
+  { id: 'radioleak', lite: true, icon: '🎙️', title: 'Message radio diffusé', text: c => `Un message radio un peu vif de ${c.mate || 'ton équipier'} a été diffusé à la télévision.`, ch: [
+    { t: 'L’excuser : la tension de la course', fx: { moral: 2, rep: -1 }, out: 'L’équipier apprécie ton soutien.' },
+    { t: 'Le recadrer en interne', fx: { moral: -1, conf: 1 }, out: 'Le message est passé, discrètement.' },
+    { t: 'En faire un produit dérivé', fx: { budget: 0.5, rep: 1 }, out: 'Les t-shirts se vendent comme des petits pains.' },
+  ] },
+  { id: 'kart', lite: true, icon: '🏎️', title: 'Course de karting caritative', text: () => 'Les pilotes du plateau organisent une course de karting au profit d’une association.', ch: [
+    { t: 'Participer à fond', fx: { rep: 2, moral: 2 }, out: 'Victoire au karting et sourires partout.',
+      risk: { p: 0.15, fx: { rep: 1, moral: -2, perf: { steer: -0.004 } }, out: 'Petite chute : une épaule douloureuse pour le prochain GP.' } },
+    { t: 'Faire un don (0,2 M€)', fx: { budget: -0.2, rep: 2 }, out: 'Un geste apprécié.' },
+    { t: 'Décliner', fx: { rep: -1 }, out: 'Repos bien mérité.' },
+  ] },
+  { id: 'gym', lite: true, icon: '🏋️', title: 'Nouveau préparateur physique', text: () => 'Un préparateur physique réputé propose un programme intensif.', ch: [
+    { t: 'Programme intensif', fx: { moral: -1, perf: { steer: 0.006 } }, out: 'Courbatures, mais des réflexes affûtés.' },
+    { t: 'Programme doux', fx: { moral: 1, perf: { steer: 0.002 } }, out: 'Progrès tranquilles.' },
+    { t: 'Garder l’ancien', fx: {}, out: 'On ne change pas une équipe qui roule.' },
+  ] },
+  { id: 'merch', lite: true, icon: '🧢', title: 'Ruée sur la boutique', text: () => 'Les casquettes de l’écurie sont en rupture de stock.', ch: [
+    { t: 'Commander en urgence (0,2 M€)', fx: { budget: 0.4, rep: 1 }, out: 'Stock refait : les ventes repartent.' },
+    { t: 'Édition limitée numérotée', fx: { budget: 0.6, rep: -1 }, out: 'Les collectionneurs paient cher, certains fans râlent.' },
+    { t: 'Attendre la prochaine production', fx: { rep: -1 }, out: 'Les fans patienteront.' },
+  ] },
+  { id: 'heat', lite: true, icon: '🌡️', title: 'Canicule annoncée', text: c => `Une vague de chaleur est attendue au Grand Prix de ${c.next}.`, ch: [
+    { t: 'Refroidissement renforcé', fx: { perf: { vtop: -0.003, mu: 0.004 } }, out: 'Moins de vitesse, mais les pneus et le moteur respirent.' },
+    { t: 'Garder le réglage standard', fx: {}, out: 'On verra sur place.' },
+    { t: 'Gilets réfrigérants pour l’équipe (0,1 M€)', fx: { budget: -0.1, moral: 2 }, out: 'L’équipe garde la tête froide.' },
+  ] },
+  { id: 'rookieday', lite: true, icon: '🔰', title: 'Journée des jeunes pilotes', text: () => 'La fédération demande à chaque écurie de faire rouler un jeune pilote lors des essais libres.', ch: [
+    { t: 'Faire rouler un jeune prometteur', fx: { rep: 2, perf: { mu: -0.002 } }, out: 'Il impressionne, mais tu perds une séance de réglages.' },
+    { t: 'Faire rouler le pilote de réserve', fx: { moral: 1 }, out: 'Séance tranquille.' },
+    { t: 'Le jeune d’un sponsor (+0,5 M€)', fx: { budget: 0.5, rep: -1 }, out: 'Il paie bien… et part en tête-à-queue.' },
+  ] },
+  { id: 'paint', lite: true, icon: '🖌️', title: 'Peinture plus légère', text: () => 'Le fournisseur propose une nouvelle peinture qui allège la voiture de quelques centaines de grammes.', ch: [
+    { t: 'L’essayer (0,3 M€)', fx: { budget: -0.3, perf: { acc: 0.004 } }, out: 'Quelques grammes de gagnés : chaque millième compte.' },
+    { t: 'Peindre seulement les ailerons', fx: { budget: -0.1, perf: { acc: 0.002 } }, out: 'Petit gain, petit prix.' },
+    { t: 'Non merci', fx: {}, out: 'La livrée reste comme elle est.' },
+  ] },
+  { id: 'podcast', lite: true, icon: '🎧', title: 'Invitation dans un podcast', text: () => 'Un podcast très écouté veut t’interviewer sur ta vision de l’écurie.', ch: [
+    { t: 'Tout raconter, sans filtre', fx: { rep: 3, conf: -2 }, out: 'Interview passionnante… la direction a moins aimé certains passages.' },
+    { t: 'Langue de bois', fx: { conf: 1 }, out: 'Rien à signaler.' },
+    { t: 'Envoyer le chef technique', fx: { rep: 1, dev: 1 }, out: 'Le chef parle aéro pendant deux heures.' },
+  ] },
+  { id: 'scout', lite: true, icon: '🔭', title: 'Rapport d’espionnage légal', text: c => `Tes ingénieurs ont analysé les photos de la voiture de ${c.rivalTeam}. Ils pensent avoir compris une astuce.`, ch: [
+    { t: 'Essayer l’idée à l’usine', fx: { dev: 2, perf: { kd: 0.004 } }, out: 'L’idée marche à moitié, mais ça valait le coup.' },
+    { t: 'Garder l’idée pour plus tard', fx: { dev: -1 }, out: 'Les ingénieurs restent concentrés sur leur plan.' },
+    { t: 'Signaler un doute à la fédération', fx: { rep: -1, conf: 1 }, out: 'La fédération jettera un œil.' },
+  ] },
+  { id: 'hotel', lite: true, icon: '🏨', title: 'Hôtel surbooké', text: c => `L’hôtel de l’équipe à ${c.next} a vendu les chambres deux fois.`, ch: [
+    { t: 'Hôtel de luxe en urgence (0,4 M€)', fx: { budget: -0.4, moral: 2 }, out: 'Piscine et spa pour tout le monde.' },
+    { t: 'Camping-cars au paddock', fx: { moral: -2, budget: 0.1 }, out: 'Ambiance colonie de vacances…' },
+    { t: 'Dormir chez les fans', fx: { rep: 2, moral: -1 }, out: 'Les fans n’en reviennent pas !' },
+  ] },
+  { id: 'tyrebet', lite: true, icon: '🎲', title: 'Allocation de pneus', text: () => 'Le manufacturier propose une allocation de pneus différente pour le prochain GP : plus de tendres ou plus de durs.', ch: [
+    { t: 'Plus de tendres', fx: { perf: { mu: 0.004, vtop: -0.002 } }, out: 'De quoi attaquer en qualifications.' },
+    { t: 'Plus de durs', fx: { perf: { vtop: 0.003 } }, out: 'Une course plus sereine.' },
+    { t: 'L’allocation standard', fx: {}, out: 'Pas de surprise.' },
+  ] },
+  { id: 'mechbday', lite: true, icon: '🎂', title: 'Anniversaire au garage', text: () => 'Le chef mécanicien fête ses 30 ans de carrière dans l’écurie.', ch: [
+    { t: 'Fête surprise à l’usine (0,1 M€)', fx: { budget: -0.1, moral: 4, dev: 1 }, out: 'Émotion et gâteau géant.' },
+    { t: 'Un cadeau de toute l’équipe', fx: { moral: 2 }, out: 'Il a la larme à l’œil.' },
+    { t: 'Un simple message', fx: { moral: -1 }, out: 'Il aurait aimé un peu plus.' },
+  ] },
+  { id: 'eco', lite: true, icon: '🌱', title: 'Bilan carbone', text: () => 'Une association pointe l’empreinte carbone de l’écurie.', ch: [
+    { t: 'Panneaux solaires à l’usine (0,8 M€)', fx: { budget: -0.8, rep: 3, conf: 1 }, out: 'L’écurie se met au vert.' },
+    { t: 'Compenser par des plantations', fx: { budget: -0.2, rep: 1 }, out: 'Un geste symbolique.' },
+    { t: 'Ignorer', fx: { rep: -2 }, out: 'La polémique dure quelques jours.' },
+  ] },
+  { id: 'vip', lite: true, icon: '🎟️', title: 'Invités de marque', text: c => `Le patron de ${c.brand} veut visiter le garage pendant les qualifications.`, ch: [
+    { t: 'Visite VIP complète', fx: { budget: 0.6, moral: -1 }, out: 'Il repart conquis… les mécaniciens un peu moins.' },
+    { t: 'Visite après la séance', fx: { budget: 0.3 }, out: 'Tout le monde est content.' },
+    { t: 'Refuser poliment', fx: { moral: 1, rep: -1 }, out: 'Concentration maximale.' },
+  ] },
+  { id: 'fuelsup', lite: true, icon: '⛽', title: 'Nouveau carburant', text: () => 'Le pétrolier partenaire propose un carburant expérimental un peu plus énergétique.', ch: [
+    { t: 'L’utiliser dès le prochain GP', fx: { perf: { vtop: 0.004 } }, out: 'Quelques chevaux en plus.',
+      risk: { p: 0.15, fx: { perf: { vtop: -0.004 }, rep: -1 }, out: 'Le carburant encrasse le moteur : moins de puissance.' } },
+    { t: 'Le tester au banc d’abord', fx: { dev: 1 }, out: 'Prudence d’ingénieur.' },
+    { t: 'Garder le carburant actuel', fx: {}, out: 'On ne touche à rien.' },
+  ] },
+  { id: 'wind', lite: true, icon: '🌬️', title: 'Données de soufflerie faussées', text: () => 'Un capteur de la soufflerie était mal calibré depuis deux semaines.', ch: [
+    { t: 'Refaire tous les essais', fx: { dev: 3 }, out: 'Trois jours de retard, mais des données fiables.' },
+    { t: 'Corriger par calcul', fx: { dev: 1, perf: { kd: -0.002 } }, out: 'Presque juste.' },
+    { t: 'Faire venir un expert (0,3 M€)', fx: { budget: -0.3, dev: 1 }, out: 'Réglé en une journée.' },
+  ] },
+  { id: 'fanletter', lite: true, icon: '✉️', title: 'Lettre d’un jeune fan', text: () => 'Un enfant hospitalisé a écrit à l’écurie : son rêve est de voir la voiture de près.', ch: [
+    { t: 'Amener la voiture à l’hôpital', fx: { rep: 3, moral: 3, budget: -0.2 }, out: 'Un moment inoubliable pour tout le monde.' },
+    { t: 'L’inviter au prochain GP', fx: { rep: 2, moral: 2 }, out: 'Il a passé la journée au muret.' },
+    { t: 'Envoyer un casque dédicacé', fx: { rep: 1 }, out: 'Il ne le quitte plus.' },
+  ] },
+  { id: 'gearbox', lite: true, icon: '🔩', title: 'Boîte de vitesses suspecte', text: () => 'La télémétrie montre des vibrations anormales sur la boîte de vitesses.', ch: [
+    { t: 'La changer (0,5 M€)', fx: { budget: -0.5 }, out: 'Boîte neuve, esprit tranquille.' },
+    { t: 'Ménager les passages de rapports', fx: { perf: { acc: -0.004 } }, out: 'Un peu moins vif au prochain GP.' },
+    { t: 'Croiser les doigts', fx: {}, out: 'Ça devrait tenir…',
+      risk: { p: 0.3, fx: { perf: { acc: -0.008 }, moral: -2 }, out: 'Elle accroche les rapports : prochain GP compliqué.' } },
+  ] },
+  { id: 'rivalpraise', lite: true, icon: '👏', when: c => c.pos <= 8 && !c.dnf, title: 'Compliments d’un rival', text: c => `Le directeur de ${c.rivalTeam} a salué publiquement les progrès de ton écurie.`, ch: [
+    { t: 'Le remercier chaleureusement', fx: { rep: 2 }, out: 'Le paddock apprécie la classe des deux camps.' },
+    { t: '« Il a raison d’avoir peur »', fx: { moral: 2, rep: -1 }, out: 'Les mécaniciens adorent la réplique.' },
+    { t: 'Se méfier : il prépare quelque chose', fx: { conf: 1 }, out: 'Prudence, prudence…' },
+  ] },
+  { id: 'nightshift', lite: true, when: c => c.dev, icon: '🌙', title: 'Équipe de nuit', text: () => 'Le chef de l’usine propose de faire tourner une équipe de nuit cette semaine.', ch: [
+    { t: 'Oui (0,5 M€)', fx: { budget: -0.5, dev: -2, moral: -1 }, out: 'Les pièces avancent, les yeux se ferment.' },
+    { t: 'Seulement deux nuits', fx: { budget: -0.2, dev: -1 }, out: 'Un petit coup d’accélérateur.' },
+    { t: 'Non, on respecte les horaires', fx: { moral: 2 }, out: 'Les ingénieurs dorment bien.' },
+  ] },
+  { id: 'photo', lite: true, icon: '📸', title: 'Photo virale', text: () => 'Une photo de ta voiture prise au coucher du soleil devient virale.', ch: [
+    { t: 'En faire une affiche officielle', fx: { budget: 0.3, rep: 2 }, out: 'L’affiche se vend partout.' },
+    { t: 'Retrouver et créditer le photographe', fx: { rep: 3 }, out: 'Le photographe devient un ami de l’écurie.' },
+    { t: 'Ne rien faire', fx: {}, out: 'Le buzz retombe.' },
+  ] },
+  { id: 'simrace', lite: true, icon: '🎮', title: 'Course virtuelle', text: () => 'Une ligue de course virtuelle veut créer une équipe à tes couleurs.', ch: [
+    { t: 'Créer l’équipe officielle (0,3 M€)', fx: { budget: -0.3, rep: 3 }, out: 'Des milliers de jeunes fans découvrent l’écurie.' },
+    { t: 'Prêter seulement le nom (+0,3 M€)', fx: { budget: 0.3, rep: 1 }, out: 'Facile et rentable.' },
+    { t: 'Refuser', fx: {}, out: 'Les jeux vidéo, ce n’est pas pour nous.' },
+  ] },
+  { id: 'brakes', lite: true, icon: '🛑', title: 'Nouveaux disques de frein', text: () => 'Un fournisseur propose des disques de frein plus endurants à tester.', ch: [
+    { t: 'Les monter au prochain GP', fx: { perf: { brake: 0.006 } }, out: 'Freinages plus tardifs en vue.',
+      risk: { p: 0.2, fx: { perf: { brake: -0.004 } }, out: 'Ils chauffent trop : il faudra freiner plus tôt.' } },
+    { t: 'Les tester en essais libres seulement', fx: { perf: { brake: 0.002 } }, out: 'Un petit gain sans risque.' },
+    { t: 'Garder nos freins', fx: {}, out: 'On reste sur du connu.' },
+  ] },
+  { id: 'umbrella', lite: true, icon: '☂️', title: 'Parapluies pour les fans', text: () => 'Pluie annoncée dans les tribunes : un sponsor propose d’offrir des parapluies aux couleurs de l’écurie.', ch: [
+    { t: 'Accepter (+0,3 M€)', fx: { budget: 0.3, rep: 2 }, out: 'Une marée de parapluies à tes couleurs.' },
+    { t: 'Les payer nous-mêmes (0,2 M€)', fx: { budget: -0.2, rep: 3 }, out: 'Les fans s’en souviendront.' },
+    { t: 'Non', fx: {}, out: 'Ils ont des capuches.' },
+  ] },
+  // suites d'événements (débloquées par un choix précédent)
+  { id: 'docuair', lite: true, icon: '📺', when: c => c.flags.docu, title: 'Le documentaire est diffusé', text: () => 'Le premier épisode du documentaire sur l’écurie vient de sortir. Une scène de dispute au muret fait beaucoup parler.', ch: [
+    { t: 'Assumer : c’est la passion', fx: { rep: 3, moral: -1 }, out: 'Le public adore cette sincérité.' },
+    { t: 'Demander de couper la scène', fx: { rep: -1, moral: 2 }, out: 'L’équipe apprécie, la plateforme beaucoup moins.' },
+    { t: 'Organiser une avant-première', fx: { budget: 0.5, rep: 2 }, out: 'Tapis rouge et partenaires ravis.' },
+  ] },
+  { id: 'prodigywin', lite: true, icon: '🏆', when: c => c.flags.prodigy, title: 'Ton protégé gagne', text: () => 'Le jeune pilote accueilli à l’académie a remporté sa première course en Formule B !', ch: [
+    { t: 'Le féliciter publiquement', fx: { rep: 3, moral: 2 }, out: 'L’académie de l’écurie gagne en prestige.' },
+    { t: 'Lui offrir un roulage en essais (0,3 M€)', fx: { budget: -0.3, rep: 2, mate: { spd: 1 } }, out: 'Il pousse ton équipier dans ses retranchements.' },
+    { t: 'Garder ça discret', fx: { conf: 1 }, out: 'Pas de pression sur ses épaules.' },
+  ] },
+  { id: 'spyprobe', lite: true, icon: '🔎', when: c => c.flags.spied, title: 'Questions gênantes', text: () => 'Un journaliste enquête sur l’origine de ton nouvel aileron.', ch: [
+    { t: 'Nier en bloc', fx: { rep: -1 }, out: 'L’affaire s’essouffle… pour l’instant.',
+      risk: { p: 0.25, fx: { rep: -4, conf: -3 }, out: 'L’article sort : le paddock murmure.' } },
+    { t: 'Offrir une exclusivité sur un autre sujet', fx: { budget: -0.2, rep: 1 }, out: 'Le journaliste change de piste.' },
+    { t: 'Retirer discrètement l’aileron', fx: { perf: { kd: -0.004 }, rep: 1 }, out: 'Plus de preuve, un peu moins d’appui.' },
+  ] },
   // pré-saison (jamais tirés au hasard) : présentation de la voiture, puis essais hivernaux
   { id: 'launch', pre: true, icon: '🚗', title: 'Présentation de la voiture', text: () => `La nouvelle monoplace de ${TEAMS[0].name} est dévoilée devant la presse et les partenaires. Quel message veux-tu faire passer pour la saison ?`, ch: [
     { t: 'Grand show devant les fans (2 M€)', fx: { budget: -2, rep: 5, moral: 4 }, out: 'Jeux de lumière, pilotes sur scène : la livrée fait le tour des réseaux.' },
@@ -160,16 +337,32 @@ const EVENTS = [
 // contexte d'un événement (résultat de la course qui vient d'avoir lieu)
 export function eventCtx(res) {
   const depts = Object.keys(DEPTS).filter(d => chiefOf(d)), d = depts.length ? pick(depts) : null, c = d && chiefOf(d);
+  const rivals = TEAMS.slice(1), nx = CIRCUITS.find(x => x.id === (season?.cal || [])[season?.round]);
   return { pos: res.pos, dnf: res.dnf, rival: res.rival, mate: career?.mate?.name, conf: team.conf ?? 60, dev: devCount() > 0,
+    flags: { ...(season?.evFlags || {}) }, star: pick(STARS), brand: pick(SPONSORS), rivalTeam: pick(rivals).name, next: nx?.name || 'la prochaine manche',
     chief: c ? { name: c.name } : null, chiefKey: d, chiefDept: d ? DEPTS[d] : '', chiefFee: c ? r1(Math.max(1, chiefContract(d).sal * 0.8)) : 0 };
 }
-export function pickEvent(ctx) {
+// après chaque GP : un événement presque toujours, parfois une brève en plus (enchaînées dans la même fenêtre).
+// Les suites débloquées par un choix précédent passent en priorité ; les gros événements restent plus rares.
+export function pickEvent(ctx, n = Math.random() < 0.4 ? 2 : 1) {
   const seen = season.seenEv || [];
-  const pool = EVENTS.filter(e => !e.pre && !seen.includes(e.id) && (!e.when || e.when(ctx)));
+  let pool = EVENTS.filter(e => !e.pre && !seen.includes(e.id) && (!e.when || e.when(ctx)));
   if (!pool.length) return null;
-  const e = pick(pool);
+  const follow = pool.filter(e => e.when && /flags\./.test(e.when.toString()));
+  const e = follow.length && Math.random() < 0.6 ? pick(follow) : pick(pool.flatMap(x => x.lite ? [x, x] : [x]));
   season.seenEv = [...seen, e.id];
-  return { id: e.id, ctx };
+  const ev = { id: e.id, ctx, k: jit() };
+  if (n > 1) { pool = pool.filter(x => x.lite && x !== e); if (pool.length) { const f = pick(pool); season.seenEv.push(f.id); ev.next = { id: f.id, ctx, k: jit() }; } }
+  return ev;
+}
+// chaque partie est différente : l'ampleur des effets varie de ±25 % (moral, réputation, confiance, performance)
+const jit = () => r1(0.75 + Math.random() * 0.5) || 1;
+function jitter(fx, k) {
+  if (!k || k === 1) return fx;
+  const o = { ...fx }, rd = v => Math.sign(v) * Math.max(1, Math.round(Math.abs(v) * k));
+  for (const key of ['moral', 'rep', 'conf']) if (o[key]) o[key] = rd(o[key]);
+  if (o.perf) { o.perf = { ...o.perf }; for (const p in o.perf) o.perf[p] = Math.round(o.perf[p] * k * 1e4) / 1e4; }
+  return o;
 }
 const val = (v, c) => typeof v === 'function' ? v(c) : v;
 
@@ -186,6 +379,7 @@ export function applyEvent(fx) {
   if (fx.deal) (team.deals = team.deals || []).push({ ...fx.deal });
   if (fx.chief) loseChief(fx.chief);
   if (fx.grid && season) { season.gridPen = (season.gridPen || 0) + fx.grid; saveSeason(); }
+  if (fx.flag && season) { (season.evFlags = season.evFlags || {})[fx.flag] = season.round; saveSeason(); }
   saveTeam();
 }
 export function evFxText(fx) {
@@ -206,21 +400,21 @@ export function showEvent(ev, onDone) {
   const E = EVENTS.find(e => e.id === ev.id), c = ev.ctx, el = document.getElementById('nego');
   if (!E) return onDone();
   el.innerHTML = `<div class="ncard evc in" style="--c:#ff3d2e">
-    <div class="flash"><b>Flash info</b><span>${E.title}</span></div>
+    <div class="flash"><b>${E.lite ? 'En bref' : 'Flash info'}</b><span>${E.title}</span></div>
     <div class="evb"><span class="evi">${E.icon}</span><p>${E.text(c)}</p></div>
     <div class="evch">${E.ch.map((x, i) => `<button data-c="${i}">${val(x.t, c)}</button>`).join('')}</div>
     <div class="evout hidden"></div></div>`;
   el.classList.remove('hidden');
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => {
     const x = E.ch[+b.dataset.c], bad = x.risk && Math.random() < x.risk.p;
-    const fx = val(bad ? x.risk.fx : x.fx, c), out = val(bad ? x.risk.out : x.out, c);
+    const fx = jitter(val(bad ? x.risk.fx : x.fx, c), ev.k), out = val(bad ? x.risk.out : x.out, c);
     applyEvent(fx);
     el.querySelectorAll('[data-c]').forEach(y => { y.disabled = true; if (y !== b) y.classList.add('off'); });
     b.classList.add('chosen');
     const o = el.querySelector('.evout');
     o.innerHTML = `<p class="${bad ? 'bad' : ''}">${bad ? '⚠️ ' : ''}${out}</p><div class="pfx">${evFxText(fx) || '<span>Aucun effet</span>'}</div><button class="main" id="evOk">Continuer</button>`;
     o.classList.remove('hidden');
-    el.querySelector('#evOk').onclick = () => { el.classList.add('hidden'); el.innerHTML = ''; onDone(); };
+    el.querySelector('#evOk').onclick = () => { el.classList.add('hidden'); el.innerHTML = ''; ev.next ? showEvent(ev.next, onDone) : onDone(); };
   });
 }
 
@@ -264,6 +458,7 @@ export function boardHTML() {
 }
 
 // ---------- missions des sponsors (une par GP, à accepter ou non) ----------
+const STARS = ['Lily Vroom', 'TurboTom', 'Max Drift', 'Zoé Paddock', 'Kenji Apex', 'Nina Slipstream'];
 const SPONSORS = ['Lumora', 'Kestrel Tech', 'Novacel', 'Brisa Mobile', 'Atlasbank', 'Orvane', 'Pixalto', 'Verdania'];
 export function makeMission(rival) {
   const exp = EXPECT[career?.tier] || 9, sp = pick(SPONSORS), k = Math.random();
