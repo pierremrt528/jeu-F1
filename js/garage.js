@@ -9,6 +9,8 @@ import { openNego, preview, previewHTML, fmtM } from './nego.js';
 import { teamPos } from './market.js';
 import { season, preStep } from './season.js';
 import { TEAMS } from './data.js';
+import { art, DEPT_ART } from './art.js';
+import { frame } from './showroom.js';
 
 // fx : bonus additionnels (0.02 = +2 %). rel : fiabilité. tyre/fuel : usure et consommation (-0.05 = −5 %). pit : secondes à l'arrêt.
 // req : toutes les pièces requises ; reqAny : au moins une.
@@ -128,8 +130,7 @@ export function applyRegulation(ids) {
   save();
 }
 // indice de performance de la voiture du joueur (même échelle que la « perf » des écuries IA)
-export function perfFactor() {
-  const u = carUpgrades();
+export function perfFactor(u = carUpgrades()) {
   return 1 + 0.6 * (u.vtop - 1) + 0.15 * (u.acc - 1) + 0.08 * (u.kd - 1) + 0.25 * (u.mu - 1) + 0.04 * (u.brake - 1) + 0.04 * (u.steer - 1);
 }
 // Entre deux GP : les recherches avancent du nombre de jours écoulés. À la fin des essais, une pièce
@@ -141,7 +142,7 @@ export function tickDevelopment(days) {
     d.left -= days;
     while (d.left <= 0) {
       const r = risk(n);
-      if (!d.rolled && Math.random() * 100 < r.late) { const x = 8 + Math.floor(Math.random() * 17); d.left += x; d.rolled = true; out.late.push(`${n.name} (+${x} j)`); continue; }
+      if (!d.rolled && Math.random() * 100 < r.late) { const x = 8 + Math.floor(Math.random() * 17); d.left += x; if (d.tot) d.tot += x; d.rolled = true; out.late.push(`${n.name} (+${x} j)`); continue; }
       if (Math.random() * 100 < r.fail) out.fail.push(n.name); else { garage.owned.push(d.id); out.done.push(n.name); }
       delete garage.dev[k]; break;
     }
@@ -152,7 +153,7 @@ export function tickDevelopment(days) {
 
 // événements : retard (+) ou avance (−) de toutes les recherches en cours, en jours
 export function shiftDev(days) {
-  for (const k in garage.dev) garage.dev[k].left = Math.max(1, garage.dev[k].left + days);
+  for (const k in garage.dev) { const d = garage.dev[k]; d.left = Math.max(1, d.left + days); if (d.tot && days > 0) d.tot += days; }
   save();
 }
 export const devCount = () => Object.keys(garage.dev).length;
@@ -169,17 +170,63 @@ const FXN = { vtop: 'vitesse de pointe', acc: 'accélération', kd: 'appui', mu:
 const slots = t => [t.id, t.id + '#2'].slice(0, parallelParts());
 const devOf = id => Object.values(garage.dev).find(d => d.id === id);
 
-let zone = 'usine', tab = 'moteur', sel = null, root = null;
+let zone = 'usine', tab = 'apercu', sel = null, root = null;
 const ICONS = { moteur: '⚡', aero: '🌀', chassis: '🔩', fiab: '🛡️', stand: '🔧', infra: '🏗️' };
 const ZONES = {
-  usine: { name: 'Usine', tabs: ['moteur', 'aero', 'chassis', 'fiab'] },
-  inst: { name: 'Installations', tabs: ['infra', 'stand'] },
-  chefs: { name: 'Chefs', tabs: Object.keys(DEPTS) },
+  usine: { name: 'Usine', title: 'Recherche', tabs: ['apercu', 'moteur', 'aero', 'chassis', 'fiab', 'stand'] },
+  inst: { name: 'Installations', title: 'Installations', tabs: ['infra'] },
+  chefs: { name: 'Chefs', title: 'Chefs de pôle', tabs: Object.keys(DEPTS) },
 };
+const DESC = { moteur: 'Puissance et relances', aero: 'Appui et traînée', chassis: 'Adhérence, freins, direction', fiab: 'Casse, chocs, hors-piste', stand: 'Arrêts, pneus, carburant' };
 const treeById = id => TREES.find(t => t.id === id);
+const tname = t => t.id === 'stand' ? 'Pit stop' : t.name;
 // un effet est-il favorable ? (usure, consommation et temps d'arrêt : plus bas = mieux)
 const infraBusy = () => !!infra.build;
 const good = (k, v) => ['tyre', 'fuel', 'pit', 'wall'].includes(k) ? v < 0 : v > 0;
+const fr = v => String(v).replace('.', ',');
+const hex = c => '#' + c.toString(16).padStart(6, '0');
+const tall = () => innerHeight > innerWidth;
+const left = d => Math.max(0, d.left);
+const prog = d => Math.max(0.04, Math.min(1, 1 - d.left / (d.tot || Math.max(d.left, delay(NODES[d.id])))));
+const nodeState = n => owned(n.id) ? 'own' : devOf(n.id) ? 'wip' : unlocked(n) ? 'ok' : 'lock';
+const ORDER = t => t.nodes.slice().sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
+const chain = t => `<span class="chain" style="--c:${t.color}">${ORDER(t).map(n => `<i class="${nodeState(n)}"></i>`).join('')}</span>`;
+const ring = (t, f) => `<span class="ring"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26"/><circle class="pg" cx="30" cy="30" r="26" stroke-dasharray="${(163.4 * f).toFixed(1)} 200"/></svg>${art(DEPT_ART[t.id])}</span>`;
+const moraleTxt = m => m < 35 ? ['Bas', 'bad'] : m < 55 ? ['Normal', ''] : m < 75 ? ['Bon', 'ok'] : ['Excellent', 'ok'];
+
+// hiérarchie des écuries (indice de performance), avec la voiture du joueur éventuellement améliorée (u2)
+function perfTable(u2) {
+  const rows = TEAMS.map((t, k) => ({ name: t.name, color: t.color, me: !k, v: k ? t.perf + (season?.dev?.[t.name] || 0) : t.perf * perfFactor() }));
+  if (u2) rows[0].v2 = TEAMS[0].perf * perfFactor(u2);
+  return rows.sort((a, b) => b.v - a.v);
+}
+function cmpHTML() {
+  const rows = perfTable(), lo = Math.min(...rows.map(r => r.v)) - 0.004, hi = Math.max(...rows.map(r => r.v)) + 0.001;
+  const me = rows.findIndex(r => r.me), keep = k => k === 0 || Math.abs(k - Math.max(2, me)) <= 2;
+  return `<h4>Comparaison des performances</h4>` + rows.map((r, k) => `<div class="cr ${r.me ? 'me' : ''} ${keep(k) ? '' : 'far'}"><small>${k + 1}</small><i style="background:${hex(r.color)}"></i><span>${r.name}</span><em><u style="width:${6 + 94 * (r.v - lo) / (hi - lo)}%"></u></em><b>${(r.v * 100).toFixed(1).replace('.', ',')}</b></div>`).join('');
+}
+// effet d'une pièce sur la place de la voiture dans la hiérarchie
+function impactHTML(u2) {
+  const rows = perfTable(u2), me = rows.find(r => r.me), p1 = rows.indexOf(me) + 1, p2 = rows.filter(r => !r.me && r.v > me.v2).length + 1;
+  const d = (me.v2 - me.v) * 100;
+  return `<p class="impact"><small>Performance</small><b>${(me.v * 100).toFixed(1).replace('.', ',')} → ${(me.v2 * 100).toFixed(1).replace('.', ',')}</b><em class="${d > 0.005 ? 'up' : ''}">${d > 0.005 ? '+' + d.toFixed(2).replace('.', ',') : '='}</em><span>P${p1}${p2 < p1 ? ` → <b>P${p2}</b>` : ''} du plateau</span></p>`;
+}
+// barres « Ta voiture » (u2 : avec la pièce sélectionnée)
+function statsHTML(u, u2) {
+  const bw = (f, max) => Math.max(0, Math.min(100, 100 * f / max));
+  return `<h4>Ta voiture${u2 ? ' <small>▲ avec cette pièce</small>' : ''}</h4>` + STATS.map(([name, f, max]) => {
+    const v = f(u), w = bw(v, max), g = u2 ? Math.max(0, bw(f(u2), max) - w) : 0;
+    const val = name === 'Fiabilité' ? 50 + u.rel : name === 'Arrêt au stand' ? (v ? '−' + v.toFixed(1) + ' s' : '0 s') : (name === 'Usure des pneus' || name === 'Consommation' ? (v ? '−' : '') : v >= 0 ? '+' : '') + (v * 100).toFixed(1) + ' %';
+    return `<div class="${g ? 'up' : ''}"><span>${name}</span><i><em style="width:${w}%"></em>${g ? `<u style="left:${w}%;width:${g}%"></u>` : ''}</i><small>${val}</small></div>`;
+  }).join('');
+}
+// la voiture de l'atelier 3D se place dans la partie libre de l'écran
+function frameCar() {
+  const ov = zone === 'usine' && tab === 'apercu';
+  if (ov) tall() ? frame(0.02, 0.98, 0.27, 0.52) : frame(0.62, 0.99, 0.22, 0.66);
+  else tall() ? frame(0.1, 0.9, 0.62, 0.9) : frame(0.5, 0.98, 0.3, 0.9);
+}
+
 export function openGarage(el, onClose) {
   root = el; root.querySelector('#garageClose').onclick = onClose;
   render();
@@ -187,63 +234,104 @@ export function openGarage(el, onClose) {
 
 function render() {
   const $ = s => root.querySelector(s);
+  lastTall = tall();
   $('#gPts').textContent = team.budget.toFixed(1);
   if (!ZONES[zone].tabs.includes(tab)) tab = ZONES[zone].tabs[0];
+  $('#gTitle').textContent = ZONES[zone].title;
+  $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${garage.owned.length}/${TREES.reduce((s, t) => s + t.nodes.length, 0)} pièces installées` : '');
   $('#gZones').innerHTML = Object.entries(ZONES).map(([k, z]) => `<button data-zone="${k}" class="${k === zone ? 'sel' : ''}">${z.name}</button>`).join('');
   root.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { zone = b.dataset.zone; tab = ZONES[zone].tabs[0]; sel = null; render(); });
+  const rd = zone === 'usine', ov = rd && tab === 'apercu', card = root.querySelector('.garage');
+  card.classList.toggle('rd', rd); card.classList.toggle('one', ZONES[zone].tabs.length < 2);
+  root.classList.toggle('isov', ov);
+  $('#gRD').classList.toggle('hidden', !ov); $('.gbody').classList.toggle('hidden', ov); $('#gInfo').classList.toggle('hidden', !rd || ov);
+  frameCar();
+  if (rd) return renderRD($, ov);
   $('#gTabs').innerHTML = ZONES[zone].tabs.map(id => {
     if (zone === 'chefs') { const c = chiefOf(id), t = treeById(id); return `<button data-tab="${id}" class="${id === tab ? 'sel' : ''}" style="--c:${t.color}"><span class="ti">${ICONS[id]}</span><span class="tn">${t.name}</span><small>${c ? c.name : 'poste vacant'}</small><i class="tp"></i></button>`; }
-    if (id === 'infra') return `<button data-tab="infra" class="${tab === 'infra' ? 'sel' : ''}" style="--c:#c06cff"><span class="ti">🏗️</span><span class="tn">Bâtiments</span><small>${infraBusy() ? '⏳ chantier' : '6 bâtiments'}</small><i class="tp"></i></button>`;
-    const tr = treeById(id), n = tr.nodes.filter(x => owned(x.id)).length, d = slots(tr).some(k => garage.dev[k]);
-    return `<button data-tab="${id}" class="${id === tab ? 'sel' : ''}" style="--c:${tr.color}"><span class="ti">${ICONS[id]}</span><span class="tn">${id === 'stand' ? 'Pit stop' : tr.name}</span><small>${d ? '⏳ ' : ''}${n}/${tr.nodes.length}</small><i class="tp"><em style="width:${100 * n / tr.nodes.length}%"></em></i></button>`;
+    return `<button data-tab="infra" class="${tab === 'infra' ? 'sel' : ''}" style="--c:#c06cff"><span class="ti">🏗️</span><span class="tn">Bâtiments</span><small>${infraBusy() ? '⏳ chantier' : '6 bâtiments'}</small><i class="tp"></i></button>`;
   }).join('');
   root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sel = null; render(); });
-  root.querySelector('.garage').classList.toggle('infra', tab === 'infra' || zone === 'chefs');
+  card.classList.toggle('infra', true);
   if (tab === 'infra') return renderInfra(root, sel, id => { sel = id; render(); }, render);
-  if (zone === 'chefs') return renderChefs($);
-  const t = treeById(tab), chief = chiefOf(tab);
-  const free = slots(t).find(k => !garage.dev[k]), money = n => team.budget >= price(n);
-  const N = t.nodes;
-  $('#gTree').innerHTML = `<svg id="gLines"></svg>` + N.map(n => {
-    const w = devOf(n.id);
-    const st = owned(n.id) ? 'own' : w ? 'wip' : unlocked(n) ? (free && money(n) ? 'ok' : 'poor') : 'lock';
-    const tag = `<span class="pr">${price(n)} M€</span><span>${delay(n)} j</span>`;
-    return `<button class="node ${st} ${sel === n.id ? 'pick' : ''}" data-node="${n.id}" style="--c:${t.color};grid-row:${n.at[0]};grid-column:${n.at[1]}">
-      <span class="nst">${st === 'own' ? '✓' : st === 'wip' ? '⏳' : st === 'lock' ? '🔒' : '+'}</span><b>${n.name}</b><small>${st === 'own' ? 'Installée' : st === 'wip' ? `prête dans ${Math.max(0, w.left)} j` : tag}</small></button>`;
+  return renderChefs($);
+}
+
+// ---------- usine : vue d'ensemble des pôles, puis arbre de chaque pôle ----------
+function renderRD($, ov) {
+  root.querySelector('.garage').classList.remove('infra');
+  $('#gTabs').innerHTML = ZONES.usine.tabs.map(id => {
+    if (id === 'apercu') return `<button data-tab="apercu" class="${tab === id ? 'sel' : ''}" style="--c:var(--acc)">Aperçu</button>`;
+    const t = treeById(id), n = t.nodes.filter(x => owned(x.id)).length;
+    return `<button data-tab="${id}" class="${tab === id ? 'sel' : ''}" style="--c:${t.color}">${art(DEPT_ART[id])}${tname(t)}<small>${slots(t).some(k => garage.dev[k]) ? '⏳' : ''}${n}/${t.nodes.length}</small></button>`;
   }).join('');
-  root.querySelectorAll('[data-node]').forEach(b => b.onclick = () => { sel = b.dataset.node; render(); });
+  root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sel = null; render(); });
+  return ov ? renderOverview($) : renderTree($);
+}
+
+function renderOverview($) {
+  const total = TREES.reduce((s, t) => s + t.nodes.length, 0), [mt, mc] = moraleTxt(team.moral);
+  const cap = TREES.length * parallelParts(), used = devCount();
+  const eff = [partDiscount() < 1 ? `coûts −${Math.round((1 - partDiscount()) * 100)} %` : '', partDelay(100) < 100 ? `délais −${100 - Math.round(partDelay(100))} %` : ''].filter(Boolean).join(' · ') || 'coûts et délais standard';
+  const cards = TREES.map(t => {
+    const n = t.nodes.filter(x => owned(x.id)).length, w = slots(t).map(k => garage.dev[k]).filter(Boolean), c = chiefOf(t.id);
+    return `<button class="dcard" data-go="${t.id}" style="--c:${t.color}"><span class="dn">${tname(t)}</span><span class="dd">${DESC[t.id]}</span>${ring(t, n / t.nodes.length)}` +
+      `<span class="dc"><b>${n}</b>/${t.nodes.length} pièces</span>${chain(t)}` +
+      (w.length ? w.map(d => `<span class="dw"><span>⏳ ${NODES[d.id].name}</span><i><em style="width:${prog(d) * 100}%"></em></i><small>prête dans ${left(d)} j</small></span>`).join('')
+        : `<span class="dw free">${n === t.nodes.length ? '✓ Pôle complet' : '● Pôle libre : lance une pièce'}</span>`) +
+      `<span class="dch">${c ? '👤 ' + c.name : '👤 Pas de chef'}</span></button>`;
+  }).join('');
+  const all = Object.values(garage.dev).sort((a, b) => a.left - b.left);
+  const next = `<div class="dcard next"><span class="dn">Usine</span><span class="dd">Moral <b class="${mc}">${mt}</b> · ${eff}</span>` +
+    `<span class="slots"><small>Recherches</small>${Array.from({ length: cap }, (_, k) => `<i class="${k < used ? 'on' : ''}"></i>`).join('')}<i class="n">${used}/${cap}</i></span>` +
+    (all.length ? '<div class="nxl">' + all.slice(0, 3).map(d => `<span class="nx" style="--c:${treeById(TREE_OF[d.id]).color}">${art(d.id)}<b>${NODES[d.id].name}</b><em>${left(d)} j</em></span>`).join('') + '</div>'
+      : '<p class="hint">Aucune recherche en cours : touche un pôle pour lancer une pièce.</p>') + '</div>';
+  $('#gRD').innerHTML = `<div class="ov"><div class="ovcards">${cards}${next}</div><div class="ovside"><div class="cmp">${cmpHTML()}</div></div></div>`;
+  root.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { tab = b.dataset.go; sel = null; render(); });
+}
+
+function renderTree($) {
+  const t = treeById(tab), chief = chiefOf(tab), T = tall();
+  const free = slots(t).find(k => !garage.dev[k]), money = n => team.budget >= price(n);
+  const n0 = t.nodes.filter(x => owned(x.id)).length, lv = Math.max(...t.nodes.map(n => n.at[0]));
+  $('#gInfo').innerHTML = `<span class="st"><small>${tname(t)}</small><b>${n0}<i>/${t.nodes.length}</i>${chain(t)}</b></span><span class="st"><small>Chef de pôle</small><b>${chief ? chief.name : '—'}</b></span>` +
+    `<span class="st"><small>Recherches</small><b class="slots">${slots(t).map(k => `<i class="${garage.dev[k] ? 'on' : ''}"></i>`).join('')}<i class="n">${free ? 'libre' : 'occupé'}</i></b></span>`;
+  const tree = $('#gTree');
+  tree.style.setProperty('--lv', lv);
+  tree.innerHTML = `<svg id="gLines"></svg>` + t.nodes.map(n => {
+    const w = devOf(n.id), st = owned(n.id) ? 'own' : w ? 'wip' : unlocked(n) ? (free && money(n) ? 'ok' : 'poor') : 'lock';
+    const [r, c] = T ? n.at : [n.at[1], n.at[0]];
+    const foot = st === 'own' ? 'Installée' : st === 'wip' ? `<i class="pb"><em style="width:${prog(w) * 100}%"></em></i>${left(w)} j` : `<span class="pr">${fr(price(n))} M€</span>${delay(n)} j`;
+    return `<button class="pc ${st} ${sel === n.id ? 'pick' : ''}" data-node="${n.id}" style="--c:${t.color};grid-row:${r};grid-column:${c}"><span class="pcode">${n.id.toUpperCase()}</span><span class="pst">${{ own: '✓', wip: '⏳', ok: '+', poor: '+', lock: '🔒' }[st]}</span>${art(n.id)}<b>${n.name}</b><small>${foot}</small></button>`;
+  }).join('');
+  root.querySelectorAll('[data-node]').forEach(b => b.onclick = () => { sel = b.dataset.node; render(); if (tall()) $('#gDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
   requestAnimationFrame(drawLines);
   // détail de la pièce sélectionnée
-  const n = sel && NODES[sel];
+  const n = sel && NODES[sel], D = $('#gDetail');
+  if (!T) root.querySelector('.gside').scrollTop = 0;
+  D.style.setProperty('--c', t.color);
+  const u = carUpgrades(), u2 = { ...u };
+  if (n && !owned(n.id)) for (const k in n.fx) u2[k] += n.fx[k];
   if (n) {
-    const reqTxt = n.req ? n.req.map(r => NODES[r].name).join(' + ') : n.reqAny ? n.reqAny.map(r => NODES[r].name).join(' ou ') : '';
     const w = devOf(n.id), can = !owned(n.id) && !w && unlocked(n) && free && money(n), rk = risk(n);
-    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${(price(n) - team.budget).toFixed(1)} M€.` : '';
+    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${fr((price(n) - team.budget).toFixed(1))} M€.` : '';
     const reqs = (n.req || n.reqAny || []).map(r => `<span class="${owned(r) ? 'ok' : ''}">${owned(r) ? '✓' : '○'} ${NODES[r].name}</span>`).join(n.reqAny ? '<em>ou</em>' : '');
-    $('#gDetail').style.setProperty('--c', t.color);
-    $('#gDetail').innerHTML = `<div class="dhead"><span class="dk">${ICONS[tab] || ''} Pôle ${t.name}</span><b>${n.name}</b></div><p class="desc">${n.desc}</p>` +
+    D.innerHTML = `<div class="ph"><span class="pimg">${art(n.id)}</span><span class="pt"><small>Pôle ${tname(t)} · ${n.id.toUpperCase()}</small><b>${n.name}</b></span></div><p class="desc">${n.desc}</p>` +
       `<p class="fx">${Object.entries(n.fx).map(([k, v]) => `<span class="${good(k, v) ? '' : 'bad'}">${good(k, v) ? '▲' : '▼'} ${pct(k, v)} ${FXN[k]}</span>`).join('')}</p>` +
-      (reqTxt ? `<p class="reqs"><small>Requiert</small>${reqs}</p>` : '') +
-      (owned(n.id) ? `<p class="state done">✓ Pièce installée sur la voiture</p>` : w ? `<p class="state wip">⏳ En recherche · prête dans ${Math.max(0, w.left)} jours${w.rolled ? ' (retardée)' : ''}</p>` :
-        `<div class="dcost three"><span><small>Coût</small><b>${price(n)} M€</b></span><span><small>Délai</small><b>${delay(n)} j</b></span><span class="rk"><small>Échec</small><b>${rk.fail} %</b></span></div>` +
-        `<p class="chief">👤 ${chief ? `Chef ${t.name} : <b>${chief.name}</b>` : 'Pas de chef pour ce pôle'} · risque de retard ${rk.late} %</p>` +
+      (reqs ? `<p class="reqs"><small>Requiert</small>${reqs}</p>` : '') +
+      (owned(n.id) ? `<p class="state done">✓ Pièce installée sur la voiture</p>` : w ? `<p class="state wip">⏳ En recherche · prête dans ${left(w)} jours${w.rolled ? ' (retardée)' : ''}</p>` + impactHTML(u2) :
+        `<div class="dcost three"><span><small>Coût</small><b>${fr(price(n))} M€</b></span><span><small>Délai</small><b>${delay(n)} j</b></span><span class="rk"><small>Échec</small><b>${rk.fail} %</b></span></div>` +
+        impactHTML(u2) + `<p class="chief">👤 ${chief ? `Chef ${t.name} : <b>${chief.name}</b>` : 'Pas de chef pour ce pôle'} · risque de retard ${rk.late} %</p>` +
         (why ? `<p class="why">${why}</p>` : '') + `<button id="gBuy" class="main" ${can ? '' : 'disabled'}>Lancer la recherche</button>`);
     const buy = $('#gBuy');
     if (buy) buy.onclick = () => {
       if (!can) return;
       team.budget = Math.round((team.budget - price(n)) * 10) / 10; saveTeam();
-      garage.dev[free] = { id: n.id, left: delay(n), days: 1 }; save(); render();
+      garage.dev[free] = { id: n.id, left: delay(n), tot: delay(n), days: 1 }; save(); render();
     };
-  } else $('#gDetail').innerHTML = `<p class="hint">Touche une pièce pour voir ses effets. La recherche est payée tout de suite et dure de 20 à 56 jours : elle avance avec le calendrier, pendant la pré-saison (du 1er janvier au premier GP) puis entre les Grands Prix (une semaine entre deux courses enchaînées, plus pendant les pauses). À la fin des essais, une pièce peut prendre du retard ou échouer : un bon chef de département réduit ces risques.</p>`;
-  // statistiques de la voiture
-  const u = carUpgrades(), u2 = { ...u };
-  if (n && !owned(n.id)) for (const k in n.fx) u2[k] += n.fx[k];
-  const bw = (f, max) => Math.max(0, Math.min(100, 100 * f / max));
-  $('#gStats').innerHTML = `<h4>Ta voiture${n && !owned(n.id) ? ' <small>▲ avec cette pièce</small>' : ''}</h4>` + STATS.map(([name, f, max]) => {
-    const v = f(u), w = bw(v, max), g = Math.max(0, bw(f(u2), max) - w);
-    const val = name === 'Fiabilité' ? 50 + u.rel : name === 'Arrêt au stand' ? (v ? '−' + v.toFixed(1) + ' s' : '0 s') : (name === 'Usure des pneus' || name === 'Consommation' ? (v ? '−' : '') : v >= 0 ? '+' : '') + (v * 100).toFixed(1) + ' %';
-    return `<div class="${g ? 'up' : ''}"><span>${name}</span><i><em style="width:${w}%"></em>${g ? `<u style="left:${w}%;width:${g}%"></u>` : ''}</i><small>${val}</small></div>`;
-  }).join('');
+  } else D.innerHTML = `<div class="ph"><span class="pimg">${art(DEPT_ART[t.id])}</span><span class="pt"><small>${n0}/${t.nodes.length} pièces · ${chief ? 'chef ' + chief.name : 'pas de chef'}</small><b>${tname(t)}</b></span></div>` +
+    `<p class="hint">Touche une pièce pour voir ses effets. Une recherche se paie tout de suite et dure 20 à 56 jours : elle avance avec le calendrier (pré-saison, puis entre les Grands Prix). À la fin des essais, elle peut prendre du retard ou échouer : un bon chef de pôle réduit ces risques.</p>`;
+  $('#gStats').innerHTML = statsHTML(u, n && !owned(n.id) ? u2 : null);
 }
 
 // ---------- mercato des chefs de département : candidats et négociation ----------
@@ -283,19 +371,26 @@ function renderChefs($) {
 }
 
 function drawLines() {
-  const tree = root.querySelector('#gTree'), svg = root.querySelector('#gLines');
-  if (!tree || !svg) return;
-  const R = tree.getBoundingClientRect();
-  svg.setAttribute('width', R.width); svg.setAttribute('height', tree.scrollHeight);
-  const pos = id => { const b = tree.querySelector(`[data-node="${id}"]`).getBoundingClientRect(); return [b.left - R.left + b.width / 2 + tree.scrollLeft, b.top - R.top + tree.scrollTop, b.bottom - R.top + tree.scrollTop]; };
+  const tree = root.querySelector('#gTree'), svg = root.querySelector('#gLines'), tr = treeById(tab);
+  if (!tree || !svg || !tr || !tr.nodes) return;
+  const R = tree.getBoundingClientRect(), T = tall();
+  svg.setAttribute('width', tree.scrollWidth); svg.setAttribute('height', tree.scrollHeight);
+  const box = id => { const b = tree.querySelector(`[data-node="${id}"]`).getBoundingClientRect(); return { l: b.left - R.left + tree.scrollLeft, r: b.right - R.left + tree.scrollLeft, t: b.top - R.top + tree.scrollTop, b: b.bottom - R.top + tree.scrollTop }; };
   let h = '';
-  const tr = treeById(tab); if (!tr) return;
-  svg.style.color = tr.color;
-  for (const n of tr.nodes) for (const r of (n.req || n.reqAny || [])) {
-    const [x1, , y1] = pos(r), [x2, y2] = pos(n.id), m = (y1 + y2) / 2;
-    const cls = owned(r) && owned(n.id) ? 'full' : owned(r) ? 'on' : '';
-    h += `<path d="M${x1} ${y1} C${x1} ${m} ${x2} ${m} ${x2} ${y2}" class="${cls}" ${n.reqAny ? 'stroke-dasharray="5 4"' : ''}/>`;
+  for (const n of tr.nodes) for (const q of (n.req || n.reqAny || [])) {
+    const a = box(q), b = box(n.id);
+    let d;
+    if (T) { const x1 = (a.l + a.r) / 2, y1 = a.b, x2 = (b.l + b.r) / 2, y2 = b.t, m = (y1 + y2) / 2; d = `M${x1} ${y1}C${x1} ${m} ${x2} ${m} ${x2} ${y2}`; }
+    else { const x1 = a.r, y1 = (a.t + a.b) / 2, x2 = b.l, y2 = (b.t + b.b) / 2, m = (x1 + x2) / 2; d = `M${x1} ${y1}C${m} ${y1} ${m} ${y2} ${x2} ${y2}`; }
+    const cls = owned(q) && owned(n.id) ? 'full' : owned(q) ? 'on' : '';
+    h += `<path d="${d}" class="${cls}" ${n.reqAny ? 'stroke-dasharray="5 4"' : ''}/>`;
   }
-  svg.innerHTML = h;
+  svg.style.color = tr.color; svg.innerHTML = h;
 }
-addEventListener('resize', () => root && !root.classList.contains('hidden') && drawLines());
+// rotation de l'écran : l'arbre change de sens
+let lastTall = null;
+addEventListener('resize', () => {
+  if (!root || root.classList.contains('hidden')) return;
+  if (tall() !== lastTall && zone === 'usine') { lastTall = tall(); return render(); }
+  drawLines(); frameCar();
+});

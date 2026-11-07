@@ -21,7 +21,7 @@
     <header class="hlogo">
       <div class="mark"><b>GP</b><i></i></div>
       <h1>Grand Prix<span>Manager</span></h1>
-      <p class="tag">Saison <b id="homeYear">2027</b> · 10 circuits · 20 pilotes</p>
+      <p class="tag">Saison <b id="homeYear">2027</b> · 22 Grands Prix · 20 pilotes</p>
     </header>
     <div class="hcards">
       <button id="careerBtn" class="hcard career" style="--k:0">
@@ -204,8 +204,10 @@
 
 <div id="garage" class="screen hidden">
   <div class="card wide garage">
-    <div class="ghead"><h2>QG</h2><div id="gZones" class="zones"></div><span class="pts"><small>Budget</small><b><span id="gPts">0</span> M€</b></span><button id="garageClose" class="back" aria-label="Fermer">✕</button></div>
+    <div class="ghead"><div class="gt"><h2 id="gTitle">QG</h2><small id="gTeam"></small></div><div id="gZones" class="zones"></div><span class="pts"><small>Budget</small><b><span id="gPts">0</span> M€</b></span><button id="garageClose" class="back" aria-label="Fermer">✕</button></div>
     <div id="gTabs" class="gtabs"></div>
+    <div id="gInfo" class="ginfo hidden"></div>
+    <div id="gRD" class="grd hidden"></div>
     <div class="gbody">
       <div id="gTree" class="gtree"></div>
       <div class="gside"><div id="gDetail" class="gdetail"></div><div id="gStats" class="gstats"></div></div>

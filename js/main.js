@@ -17,6 +17,7 @@ import * as SZ from './season.js';
 import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
+import { renderRoom } from './showroom.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
 // livraisons de l'usine et des chantiers (résultats d'une course, étapes de la pré-saison)
 const devNews = (p, built) => (built ? `<br>🏗️ Construction terminée : <b>${built}</b>` : '') +
@@ -205,11 +206,15 @@ function toggleCam() {
 let fpsAcc = 0, fpsN = 0, fps = 0, slowT = 0;
 const timeScale = +params.get('vitesse') || 1;
 // derrière les menus la scène est fixe : on la redessine 4 fois par seconde seulement (menus plus fluides, moins de batterie)
-let menuDraw = 0, upT = 0;
+let menuDraw = 0, upT = 0, roomOn = false;   // roomOn : atelier 3D derrière le QG et les réglages (30 i/s)
 const maxRatio = Math.min(devicePixelRatio, 1.5);
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (roomOn) {
+    if (now - menuDraw < 32) return;
+    renderRoom(renderer, Math.min(0.1, (now - menuDraw) / 1000)); menuDraw = now; return;
+  }
   if (!R || paused) {
     if (now - menuDraw < 250) return;
     dt = Math.min(0.25, (now - menuDraw) / 1000); menuDraw = now;
@@ -252,6 +257,7 @@ function loop(now) {
 function show(id) {
   if (id !== 'hud') endCine(false);
   for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace']) $(s).classList.toggle('hidden', s !== id);
+  roomOn = id === 'garage';
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
