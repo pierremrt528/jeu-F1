@@ -131,6 +131,7 @@ export function renderRoom(renderer, dt) {
   camera.position.set(0, 0.55 + Math.sin(el) * view.d, Math.cos(el) * view.d);
   camera.lookAt(0, 0.55, 0);
   camera.far = view.d + 60;
+  scene.fog.near = Math.max(30, view.d + 10); scene.fog.far = Math.max(75, view.d + 55);   // petite zone = caméra plus loin : le brouillard recule aussi
   camera.setViewOffset(v.x, v.y, (0.5 - view.cx) * v.x, (0.5 - view.cy) * v.y, v.x, v.y);
   camera.updateProjectionMatrix();
   W.rot += dt * 0.2; spin.rotation.y = W.rot;

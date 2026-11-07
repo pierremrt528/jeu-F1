@@ -8,6 +8,7 @@ import { carUpgrades } from './garage.js';
 import { raceModifiers } from './team.js';
 import { setupStrategy, updateStrategy, pitStep, addDamage } from './strategy.js';
 import { requestSafety, updateSafety } from './safety.js';
+import { applySetup } from './tuning.js';
 
 export function createRace(track, scene, laps, opts = {}) {
   const cars = [];
@@ -22,6 +23,7 @@ export function createRace(track, scene, laps, opts = {}) {
   player.up = carUpgrades();
   const mod = raceModifiers();
   for (const k in mod) player.up[k] = (player.up[k] ?? 1) + mod[k];
+  if (opts.setup != null) applySetup(player.up, opts.setup);   // réglage choisi avant les qualifs (appui / vitesse de pointe)
   player.rel = 50 + player.up.rel;
   if (opts.assist && !opts.autopilot) player.assist = { ...opts.assist, stab: opts.assist.tc };
   const wx = opts.wx || { rain: false, change: null };

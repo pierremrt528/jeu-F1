@@ -18,6 +18,7 @@ import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, 
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
 import { renderRoom } from './showroom.js';
+import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
 // livraisons de l'usine et des chantiers (résultats d'une course, étapes de la pré-saison)
 const devNews = (p, built) => (built ? `<br>🏗️ Construction terminée : <b>${built}</b>` : '') +
@@ -256,8 +257,8 @@ function loop(now) {
 // ---------- écrans ----------
 function show(id) {
   if (id !== 'hud') endCine(false);
-  for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace']) $(s).classList.toggle('hidden', s !== id);
-  roomOn = id === 'garage';
+  for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace', 'tuning']) $(s).classList.toggle('hidden', s !== id);
+  roomOn = id === 'garage' || id === 'tuning';
   document.body.classList.toggle('racing', id === 'hud');
 }
 function showResults() {
@@ -430,7 +431,7 @@ function openSeason() {
     const mid = S.round === SZ.midRound() && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
-      : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
+      : `<button class="main" id="szQuali">Qualifications : réglages de la voiture →</button>`) +
       `<button id="szSimGP">⏩ Simuler le Grand Prix${S.grid ? '' : ' (qualifs + course)'}</button><p id="szSimProg" class="dim small"></p>` +
       (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(indemnités ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
     document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
@@ -439,18 +440,19 @@ function openSeason() {
       show('setup');
       openMarket($('setup'), 'mid', name => { S.midSign = name || S.midSign; SZ.saveSeason(); openSeason(); }, () => openSeason());
     };
-    const q = $('szQuali'); if (q) q.onclick = async () => { await enableTilt(settings.tilt); startRace({ solo: true, wx: S.wx }); };
-    const sm = $('szSim'); if (sm) sm.onclick = () => showQuali(simLap(S.wx));
+    const q = $('szQuali'); if (q) q.onclick = () => openTuning(S.wx, openSeason);
     // tout simuler d'un coup : qualifications puis course avec la stratégie conseillée
     $('szSimGP').onclick = () => {
+      const k = curSetup(S.wx);
       if (!S.grid) {
-        const rows = SZ.qualifying(track, simLap(S.wx), S.wx?.rain);
+        S.setup = { round: S.round, k };
+        const rows = SZ.qualifying(track, simLap(S.wx, k), S.wx?.rain);
         S.quali = rows.map(r => ({ name: r.name, time: r.time })); S.grid = rows.map(r => r.name); SZ.saveSeason();
       }
       document.querySelectorAll('#szActions button').forEach(b => b.disabled = true);
-      startRace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: { ...S.wx }, sim: true, autopilot: true });
+      startRace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: { ...S.wx }, sim: true, autopilot: true, setup: k });
     };
-    const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx }); };
+    const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx, setup: curSetup(S.wx) }); };
   }
   show('season');
   // événement survenu depuis le dernier GP : il faut trancher avant de continuer
@@ -496,11 +498,12 @@ function showQuali(simTime) {
   $('qTable').innerHTML = SZ.qualiHTML(rows);
   show('quali');
 }
-$('qRace').onclick = () => ctx === 'solo' ? showPrerace({ gridOrder: soloQ.grid, wx: soloQ.wx }) : openSeason();
+$('qRace').onclick = () => ctx === 'solo' ? showPrerace({ gridOrder: soloQ.grid, wx: soloQ.wx, setup: curSetup(soloQ.wx) }) : openSeason();
 $('qRetry').onclick = async () => {
   const Q = ctx === 'solo' ? soloQ : SZ.season; Q.grid = null;
-  if (ctx === 'solo' && settings.soloQuali === 'sim') return showQuali(simLap(Q.wx));
-  startRace({ solo: true, wx: Q.wx });
+  const k = curSetup(Q.wx);
+  if (ctx === 'solo' && settings.soloQuali === 'sim') return showQuali(simLap(Q.wx, k));
+  startRace({ solo: true, wx: Q.wx, setup: k });
 };
 let stTab = 'drivers', stFrom = 'season';
 function showStandings(from) {
@@ -567,13 +570,37 @@ $('soloGo').onclick = async () => {
   const wx = params.get('meteo') ? wxParam() : w === 'dry' ? { rain: false, change: null } : w === 'rain' ? { rain: true, change: null } : forecast(def.theme);
   soloQ = { wx, grid: null };
   goFull();
-  if (settings.soloQuali === 'play') { await enableTilt(settings.tilt); startRace({ solo: true, wx }); }
-  else showQuali(simLap(wx));
+  openTuning(wx, showSolo);
 };
-const simLap = wx => {
-  const up = carUpgrades(), perf = TEAMS[0].perf * up.vtop;
-  return SZ.lapEstimate(track, 0.95, perf, up.acc) * (1 + 0.006 * Math.random()) * 0.985 * (wx.rain ? 1.12 : 1);
+// temps de qualification simulé, selon le réglage choisi (k)
+const simLap = (wx, k = 2) => {
+  const up = carUpgrades(), perf = TEAMS[0].perf * up.vtop, p0 = TEAMS[0].perf;
+  return SZ.lapEstimate(track, 0.95, perf, up.acc) * (1 + 0.006 * Math.random()) * 0.985 * (wx.rain ? 1.12 : 1) * setupLap(track, up, k, wx.rain, p0) / setupLap(track, up, 2, wx.rain, p0);
 };
+// réglage de la voiture pour ce week-end : celui choisi avant les qualifs (parc fermé), sinon le conseil de l'ingénieur
+function curSetup(wx) {
+  const S = SZ.season, k = ctx === 'career' ? (S?.setup?.round === S?.round ? S.setup.k : null) : soloQ?.setup;
+  return k ?? bestSetup(track, carUpgrades(), !!wx?.rain, TEAMS[0].perf);
+}
+const wxShort = wx => wx.change ? (wx.rain ? '🌦️ Éclaircie' : '🌦️ Averse') : wx.rain ? '🌧️ Pluie' : '☀️ Sec';
+// réglages avant les qualifications : 5 préréglages, conseil de l'ingénieur, bandeau de séance (atelier 3D en fond)
+function openTuning(wx, back) {
+  const S = ctx === 'career' ? SZ.season : null, up = carUpgrades(), perf = TEAMS[0].perf;
+  const date = S ? SZ.raceDate(S.round) : new Date(), temps = weekendTemps(def, date, wx.rain, S ? S.year * 100 + S.round : 0);
+  const keep = k => { if (S) { S.setup = { round: S.round, k }; SZ.saveSeason(); } else soloQ.setup = k; };
+  const play = async k => { keep(k); await enableTilt(settings.tilt); startRace({ solo: true, wx, setup: k }); };
+  const sim = k => { keep(k); showQuali(simLap(wx, k)); };
+  const simFirst = !S && settings.soloQuali === 'sim';
+  showTuning($, {
+    sub: `Qualifications · ${def.name} · ${S ? `${SZ.fmtDate(date)} ${S.year}` : 'course solo'}`,
+    track, up, perf, wet: !!wx.rain, parc: true, k: S ? (S.setup?.round === S.round ? S.setup.k : null) : soloQ.setup,
+    base: SZ.lapEstimate(track, 0.95, perf * up.vtop, up.acc) * 0.985 * (wx.rain ? 1.12 : 1),
+    info: [['Piste', `${temps.track} °C`, temps.track >= 45 ? 'hot' : temps.track <= 22 ? 'cold' : ''], ['Air', `${temps.air} °C`], ['Météo', wxShort(wx)],
+      ['État', wx.rain ? 'Mouillée' : 'Sèche', wx.rain ? 'bad' : 'ok'], [FORMATS[fmtKey()].name, `${raceFormat().laps} tours`], ['Arrêt', `≈ ${Math.round(pitLane(track).loss)} s`]],
+    goLabel: simFirst ? '⏩ Simuler les qualifs' : 'Tour chrono →', simLabel: simFirst ? 'Tour chrono' : '⏩ Simuler',
+  }, { go: simFirst ? sim : play, sim: simFirst ? play : sim, back });
+  show('tuning');
+}
 $('camBtn').onclick = toggleCam;
 
 // ---------- avant la course : météo, 3 stratégies proposées, réglage des pneus et du carburant ----------
@@ -581,7 +608,7 @@ const chip = t => `<b class="tchip" style="--c:${TYRES[t].color}">${t}</b>`;
 function showPrerace(opts) {
   const wx = opts.wx || (params.get('meteo') ? wxParam() : forecast(def.theme));
   const { laps, lapTime } = raceFormat();
-  showPreraceScreen($, { laps, lapKm: track.length / 1000, lapTime, wx, pitLoss: pitLane(track).loss, title: `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min` }, {
+  showPreraceScreen($, { laps, lapKm: track.length / 1000, lapTime, wx, pitLoss: pitLane(track).loss, setup: SETUPS[opts.setup ?? 2].name, title: `${FORMATS[fmtKey()].name} · ${laps} tours · ~${Math.round(laps * lapTime * 1.12 / 60)} min` }, {
     go: plan => startRace({ ...opts, wx: { ...wx }, plan }),
     sim: plan => startRace({ ...opts, wx: { ...wx }, plan, sim: true, autopilot: true }),
     back: () => opts.season ? openSeason() : showSolo(),

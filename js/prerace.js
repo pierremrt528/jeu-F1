@@ -52,7 +52,7 @@ export function showPreraceScreen($, race, cb) {
   function render() {
     const I = info(), need = fuelFor(cur[0].laps, lapKm), fuel = Math.max(10, Math.min(TANK, need + fOff));
     $('prTitle').textContent = race.title;
-    $('prWx').textContent = `Météo : ${wxText(wx)} · Arrêt au stand ≈ ${Math.round(race.pitLoss)} s`;
+    $('prWx').textContent = `Météo : ${wxText(wx)} · Arrêt au stand ≈ ${Math.round(race.pitLoss)} s` + (race.setup ? ` · 🔒 Réglage : ${race.setup}` : '');
     $('prPlans').innerHTML = plans.map((p, k) => `<button data-plan="${k}" class="${k === sel && !custom ? 'pick' : ''}">
       <span class="pn"><b>${p.best ? '★ ' : ''}${p.name}</b><small>${p.stops ? p.stops + ' arrêt' + (p.stops > 1 ? 's' : '') : 'Sans arrêt'} · ${p.best ? '≈ ' + mmss(p.time) : dt(p.time - ref)}</small></span>
       <span class="mbar">${barHTML(p.stints, -1, 'i')}</span></button>`).join('');
