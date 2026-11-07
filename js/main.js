@@ -21,7 +21,7 @@ import { initFx, updateFx } from './fx.js';
 import { initDebris, updateDebris, clearDebris } from './debris.js';
 import { resetCareer } from './career.js';
 import { resetTeam, saveTeam } from './team.js';
-import { resetStaff, staffWages } from './staff.js';
+import { resetStaff, renewStaff } from './staff.js';
 import { tickInfra, sponsorIncome, prizeBonus, resetInfra, grantInfra } from './infra.js';
 const playerPerf = () => TEAMS[0].perf * perfFactor();
 import { openMarket, aiMercato, MID_MULT } from './market.js';
@@ -333,7 +333,7 @@ function openSeason() {
   if (S.done) {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
     const tp = SZ.teamStandings().findIndex(t => t.player) + 1;
-    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, salaires des chefs de département, contrat moteur et transferts à prix normaux.</p>` + regHTML(S) + newsHTML(S);
+    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, salaires des chefs de département, contrat moteur, contrat de ton équipier et transferts sans surcoût.</p>` + regHTML(S) + newsHTML(S);
     $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
     $('szNew').onclick = () => offSeason(tp);
   } else {
@@ -346,7 +346,7 @@ function openSeason() {
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : tour chrono</button><button id="szSim">Simuler les qualifications</button>`) +
       `<button id="szSimGP">⏩ Simuler le Grand Prix${S.grid ? '' : ' (qualifs + course)'}</button><p id="szSimProg" class="dim small"></p>` +
-      (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(transferts ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
+      (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(indemnités ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
     document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
     const mk = $('szMarket'); if (mk) mk.onclick = () => {
       show('setup');
@@ -373,10 +373,13 @@ const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S
 function offSeason(tp) {
   const S = SZ.season;
   if (!career) return setupSeason();
+  career.lastPos = tp;
   if (S.bonus == null) {
     const tier = TIERS.find(t => t.id === career.tier);
     S.bonus = Math.round((tier.budget * 0.6 + (11 - tp) * 2.5) * 10) / 10;
-    S.wages = staffWages();   // contrats des chefs de département renouvelés
+    const w = renewStaff(S.year + 1);   // salaires des chefs encore sous contrat, départs des autres
+    S.wages = w.total;
+    S.offNote = w.gone.length ? `Fin de contrat : ${w.gone.join(', ')} quitte${w.gone.length > 1 ? 'nt' : ''} l’écurie, recrute au QG.` : '';
     team.budget = Math.round((team.budget + S.bonus - S.wages) * 10) / 10; saveTeam(); SZ.saveSeason();
   }
   show('setup');

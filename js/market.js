@@ -2,65 +2,57 @@
 // l'intersaison (prix normaux, on renouvelle aussi le contrat moteur). Utilise l'écran #setup.
 import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
-import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET } from './career.js';
+import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET, mateContract, untilOf, TIER_POS } from './career.js';
 import { salaryCut } from './infra.js';
-import { driverCard, engineCard, steps as stepBar } from './ui.js';
+import { driverCard, engineCard, steps as stepBar, rating } from './ui.js';
+import { season, saveSeason, teamStandings } from './season.js';
+import { openNego, preview, previewHTML, fmtM, ROLES } from './nego.js';
 
 export const MID_MULT = 2.5;
 const r1 = v => Math.round(v * 10) / 10;
+const hex = c => typeof c === 'number' ? '#' + c.toString(16).padStart(6, '0') : c;
 
-function candidates(mid) {
+// place de l'écurie du joueur (attire ou non les pilotes et les chefs) : classement en cours, sinon saison passée, sinon niveau
+export function teamPos() {
+  if (season && (season.round >= 3 || season.done)) return teamStandings().findIndex(t => t.player) + 1;
+  return career?.lastPos || TIER_POS[career?.tier] || 6;
+}
+
+function candidates() {
   if (!career.free) career.free = MARKET.filter(d => d.name !== career.mate.name).map(d => ({ ...d }));
   const list = [{ s: career.mate, from: 'Ton pilote actuel', cur: true }];
   TEAMS.forEach((t, ti) => { if (ti) t.drivers.forEach((d, di) => list.push({ s: statsOf(d), from: t.name, team: ti, slot: di })); });
   for (const d of career.free) list.push({ s: d, from: d.from || 'Libre' });
-  for (const c of list) {
-    const base = salary(c.s) * (c.s.sponsor ? 1 : salaryCut());
-    c.cost = c.cur ? (mid ? 0 : base) : base < 0 ? (mid ? base * 0.5 : base) : base * (mid ? MID_MULT : 1);
-    c.cost = r1(c.cost);
-  }
   return [list[0], ...list.slice(1).sort((a, b) => b.s.spd - a.s.spd)];
 }
+const colorOf = c => c.team ? hex(TEAMS[c.team].color) : c.cur ? '#ff3d2e' : /Formule B/.test(c.from) ? '#22d3c5' : /Vétéran/.test(c.from) ? '#b07cff' : '#8d96a3';
 
-// kind : 'mid' (mi-saison) ou 'off' (intersaison : moteur puis pilote)
+// kind : 'mid' (mi-saison, pendant la pause estivale) ou 'off' (intersaison : moteur puis pilote).
+// Chaque pilote se négocie (nego.js) ; la signature est payée tout de suite.
 export function openMarket(el, kind, onDone, onCancel) {
   const mid = kind === 'mid', $ = s => el.querySelector(s);
-  const list = candidates(mid), steps = mid ? ['drv'] : ['eng', 'drv'];
-  const pick = { drv: list[0], eng: career.engine };
-  let step = 0;
+  const year = season.year, ny = mid ? year : year + 1, win = `${year}-${kind}`;   // ny : 1re saison des nouveaux contrats
+  const T = career.talks = career.talks || {};
+  const steps = mid ? ['drv'] : ['eng', 'drv'];
+  let list = candidates(), eng = career.engine, step = 0;
   const engCost = id => ENGINES.find(e => e.id === id).price;
-  const left = () => r1(team.budget - (steps.includes('eng') ? engCost(pick.eng) : 0) - pick.drv.cost);
-  function render() {
-    const what = steps[step];
-    $('#suTitle').textContent = mid ? 'Mercato' : what === 'eng' ? 'Contrat moteur' : 'Transferts';
-    stepBar($('#suSteps'), mid ? [] : ['Moteur', 'Pilote'], step);
-    $('#suHint').textContent = mid ? `Mi-saison : les transferts coûtent ×${String(MID_MULT).replace('.', ',')}. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux.`
-      : what === 'eng' ? 'Intersaison : renouvelle ou change de motoriste pour la saison prochaine.' : 'Intersaison : garde ton équipier (prolongation) ou recrute un pilote libre ou rival.';
-    const shown = what === 'eng' ? r1(team.budget - engCost(pick.eng)) : left();
-    $('#suBudget').innerHTML = `<small>Budget restant</small><b>${shown.toFixed(1)} M€</b>`;
-    let h = '';
-    if (what === 'eng') h = ENGINES.map(e => {
-      const can = e.price <= team.budget || e === ENGINES[ENGINES.length - 1];
-      return engineCard(e, { pick: pick.eng === e.id, disabled: !can, cur: career.engine === e.id });
-    }).join('');
-    else h = list.map((c, k) => {
-      const can = c === pick.drv || c.cost <= left() + pick.drv.cost;
-      return driverCard(c.s, { k, from: c.from, color: c.team ? TEAMS[c.team].color : c.cur ? '#ff3d2e' : null, pick: pick.drv === c, disabled: !can, cur: c.cur,
-        price: c.cur && mid ? 'Sous contrat' : c.cost < 0 ? `apporte ${-c.cost} M€` : c.cost + ' M€' + (c.cur ? ' (prolonger)' : '') });
-    }).join('');
-    $('#suList').innerHTML = h;
-    $('#suList').className = 'clist ' + (what === 'eng' ? 'engs' : 'drvs');
-    el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
-      if (what === 'eng') pick.eng = b.dataset.v; else pick.drv = list[+b.dataset.v];
-      render();
-    });
-    $('#suNext').disabled = what === 'drv' && left() < 0;
-    $('#suNext').textContent = step < steps.length - 1 ? 'Suivant →' : mid ? (pick.drv.cur ? 'Garder mon équipier' : `Signer ${pick.drv.s.name}`) : 'Lancer la nouvelle saison';
-    $('#suBack').textContent = step ? '← Retour' : mid ? 'Fermer' : 'Annuler';
-  }
-  $('#suNext').onclick = () => {
-    if (step < steps.length - 1) { step++; return render(); }
-    const c = pick.drv, old = career.mate;
+  const K = () => mateContract(), valid = () => untilOf(K()) >= ny;
+  const due = () => !mid && valid() && K().paid < ny ? K().sal : 0;       // salaire de l'équipier pour la saison prochaine
+  const left = () => r1(team.budget - (mid ? 0 : engCost(eng) + due()));
+  // indemnité de départ d'un équipier encore sous contrat qu'on libère : la moitié des saisons restantes
+  const release = () => { const k = K(), n = untilOf(k) - year; return n > 0 && k.sal > 0 ? r1(0.5 * k.sal * n) : 0; };
+  const subOf = c => ({ kind: 'drv', key: c.s.name, name: c.s.name, from: c.cur ? c.s.from || '' : c.from, r: rating(c.s), cur: !!c.cur,
+    base: salary(c.s) * (c.s.sponsor ? 1 : salaryCut()), sponsor: c.s.sponsor, club: c.team ? TEAMS[c.team].name : null, color: colorOf(c),
+    floor: c.cur && valid() && K().sal > 0 ? r1(K().sal * 1.05) : 0 });
+  const costOf = (c, k, fee) => {
+    const rel = c.cur || c.team ? 0 : release(), sal = mid ? r1(k.sal * 0.5) : k.sal;
+    return { now: r1(fee + k.bonus + sal + rel), parts: [['indemnité', fee], ['prime', k.bonus], [mid ? 'demi-saison' : 'saison ' + ny, sal], ['départ de ' + career.mate.name, rel]] };
+  };
+  const nctx = c => ({ win, store: T, rep: team.rep, pos: teamPos(), mid, feeMult: mid ? MID_MULT : 1, team: TEAMS[0].name, year: ny,
+    swap: c.team ? career.mate.name : null, save: saveCareer, avail: () => r1(team.budget - (mid ? 0 : engCost(eng))), cost: (k, fee) => costOf(c, k, fee) });
+  function sign(c, k, fee) {
+    const old = career.mate;
+    team.budget = r1(team.budget - costOf(c, k, fee).now);
     if (!c.cur) {
       if (c.team) {   // l'ancien équipier part dans l'écurie rivale à sa place
         const t = TEAMS[c.team];
@@ -73,10 +65,69 @@ export function openMarket(el, kind, onDone, onCancel) {
       }
       career.mate = { ...c.s, from: c.team ? 'Ex-' + TEAMS[c.team].name : c.s.from };
     }
-    team.budget = left();
-    if (!mid) career.engine = pick.eng;
+    career.contract = { sal: k.sal, years: k.years, role: k.role, bonus: k.bonus, since: ny, paid: ny };
+    T.signed = win;
+    (season.news = season.news || []).push(c.cur ? `✍️ ${c.s.name} prolonge chez ${TEAMS[0].name} jusqu’en ${ny + k.years - 1}.`
+      : `✍️ ${c.s.name} signe chez ${TEAMS[0].name} jusqu’en ${ny + k.years - 1}${fee ? ` (indemnité de ${fmtM(fee)} M€ pour ${TEAMS[c.team].name})` : ''}.`);
+    saveCareer(); applyCareer(); saveTeam(); saveSeason();
+    if (mid) return onDone(c.s.name);
+    list = candidates(); render();
+  }
+  // contrat terminé et personne de signé : un pilote de réserve prend le volant (1 an, statut n°2)
+  function reserve() {
+    const taken = new Set(); TEAMS.forEach(t => t.drivers.forEach(d => taken.add(d.name))); career.free.forEach(d => taken.add(d.name));
+    const y = newYoungster(taken);
+    career.free.push({ ...career.mate, from: 'Ex-équipier' });
+    career.mate = { ...y, from: 'Pilote de réserve', spd: rnd(62, 68), strat: rnd(55, 62), tyre: rnd(58, 66), pot: rnd(60, 76) };
+    career.contract = { sal: 1, years: 1, role: 'n2', bonus: 0, since: ny, paid: ny - 1 };
+  }
+  function render() {
+    const what = steps[step], k = K(), u = untilOf(k), lock = T.signed === win;
+    $('#suTitle').textContent = mid ? 'Mercato' : what === 'eng' ? 'Contrat moteur' : 'Transferts';
+    stepBar($('#suSteps'), mid ? [] : ['Moteur', 'Pilote'], step);
+    $('#suHint').textContent = mid ? `Mi-saison : indemnités de transfert ×${String(MID_MULT).replace('.', ',')} et agents plus gourmands. Touche un pilote pour négocier. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux.`
+      : what === 'eng' ? 'Intersaison : renouvelle ou change de motoriste pour la saison prochaine. ' + (season.offNote || '')
+      : lock ? 'Recrutement bouclé pour cette intersaison.'
+      : valid() ? `${career.mate.name} est sous contrat jusqu’en ${u}. Touche un pilote pour négocier ; libérer un équipier sous contrat coûte une indemnité de départ.`
+      : `Le contrat de ${career.mate.name} est terminé : touche sa carte pour le prolonger, ou négocie avec un autre pilote.`;
+    const shown = what === 'eng' ? r1(team.budget - engCost(eng)) : left();
+    $('#suBudget').innerHTML = `<small>Budget restant</small><b>${shown.toFixed(1)} M€</b>`;
+    let h = '';
+    if (what === 'eng') h = ENGINES.map(e => {
+      const can = e.price <= team.budget || e === ENGINES[ENGINES.length - 1];
+      return engineCard(e, { pick: eng === e.id, disabled: !can, cur: career.engine === e.id });
+    }).join('');
+    else h = list.map((c, i) => {
+      if (c.cur) return driverCard(c.s, { k: i, from: `Ton équipier · ${ROLES[k.role]}`, color: '#ff3d2e', cur: true, pick: !mid && valid(),
+        price: (mid || valid() ? `Sous contrat jusqu’en ${u}${!mid ? ` · ${fmtM(k.sal)} M€` : ''}` : 'Contrat terminé') + (!mid && !lock ? previewHTML(preview(subOf(c), nctx(c))) : '') });
+      const v = preview(subOf(c), nctx(c));
+      return driverCard(c.s, { k: i, from: c.from, color: colorOf(c), disabled: v.off || lock,
+        price: (v.sal < 0 ? `apporte ${fmtM(-v.sal)} M€` : v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + (v.fee ? `<small> + indemnité ${fmtM(v.fee)} M€</small>` : '') + previewHTML(v) });
+    }).join('');
+    $('#suList').innerHTML = h;
+    $('#suList').className = 'clist ' + (what === 'eng' ? 'engs' : 'drvs');
+    el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
+      if (what === 'eng') { eng = b.dataset.v; return render(); }
+      const c = list[+b.dataset.v];
+      if (c.cur && (mid || lock)) return;
+      openNego(subOf(c), nctx(c), { done: (k, fee) => sign(c, k, fee), close: render });
+    });
+    $('#suNext').disabled = false;
+    $('#suNext').textContent = step < steps.length - 1 ? 'Suivant →' : mid ? 'Garder mon équipier' : valid() ? 'Lancer la nouvelle saison' : 'Lancer avec un pilote de réserve';
+    $('#suBack').textContent = step ? '← Retour' : mid ? 'Fermer' : 'Annuler';
+  }
+  $('#suNext').onclick = () => {
+    if (step < steps.length - 1) { step++; return render(); }
+    if (mid) return onDone(null);
+    if (!valid()) reserve();
+    const k = K();
+    team.budget = r1(team.budget - engCost(eng) - (k.paid < ny ? k.sal : 0)); k.paid = ny;
+    if (team.budget < 0) {   // découvert épongé par la direction, au prix de la réputation
+      team.budget = 0; team.rep = Math.max(0, team.rep - 8); team.moral = Math.max(0, team.moral - 10);
+    }
+    career.engine = eng;
     saveCareer(); applyCareer(); saveTeam();
-    onDone(c.cur ? null : c.s.name);
+    onDone(null);
   };
   $('#suBack').onclick = () => { if (step) { step--; render(); } else onCancel(); };
   render();

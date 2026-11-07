@@ -14,10 +14,11 @@ export function createRace(track, scene, laps, opts = {}) {
   for (const team of TEAMS) for (const d of team.drivers) {
     if (opts.solo && !d.player) continue;  // qualifications : la voiture du joueur seule
     const car = new Car(team, d, team.perf + (opts.perfBonus?.[team.name] || 0));
-    car.stats = d.stats; car.teamIdx = TEAMS.indexOf(team); cars.push(car);
+    car.stats = d.stats; car.role = d.role; car.teamIdx = TEAMS.indexOf(team); cars.push(car);
   }
   // grille : IA rangées par niveau, le joueur part en milieu de grille (ou à la place demandée)
   const player = cars.find(c => c.player);
+  for (const c of cars) if (c.role === 'n2') c.yieldTo = player;   // consigne d'équipe : l'équipier n°2 laisse passer
   player.up = carUpgrades();
   const mod = raceModifiers();
   for (const k in mod) player.up[k] = (player.up[k] ?? 1) + mod[k];
@@ -68,7 +69,10 @@ export function updateRace(R, dt) {
 
   for (const c of cars) {
     if (c.player && !R.autopilot && !c.finished) { readInput(c, dt); if (racing && c.assist?.line) driveAssist(c, track, dt); }
-    else aiDrive(c, track, R.sc ? cars.concat(R.sc.car) : cars, dt);
+    else {
+      aiDrive(c, track, R.sc ? cars.concat(R.sc.car) : cars, dt);
+      if (c.yielding && !c.yieldSaid && R.radio) { c.yieldSaid = true; R.radio.push(`📻 Muret : consigne d’équipe, ${c.name} te laisse passer.`); }
+    }
     c.canReverse = racing && c.player && !R.autopilot;
     if (!racing) { c.throttle = 0; c.brake = 1; }
     if (c.finished && c.v > 20) { c.throttle = 0; }

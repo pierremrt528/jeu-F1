@@ -30,6 +30,18 @@ export function aiDrive(car, track, cars, dt) {
     laneTarget = ahead.lat + car.passSide * 3.4;
     if (gap < 12) vCap = ahead.v - 0.5 + gap * 0.15; // ne pas percuter
   }
+  // consigne d'équipe : l'équipier n°2 s'écarte et lève le pied quand le joueur le suit de près
+  const p = car.yieldTo;
+  car.yielding = false;
+  if (p && car.lap >= 2 && !car.scMode && !p.out && !p.pit && !p.finished) {
+    const d = car.lap * N + car.idx - (p.lap * N + p.idx);
+    car.yieldCd = Math.max(0, (car.yieldCd || 0) - dt);
+    if (d > 0 && d < 16 && car.yieldCd <= 0) {
+      car.yielding = true; laneTarget = (p.lat >= car.lat ? -1 : 1) * lim;
+      car.yieldRun = (car.yieldRun || 0) + dt;
+      if (car.yieldRun > 7) { car.yieldCd = 40; car.yieldRun = 0; }   // le joueur n'arrive pas à passer : il reprend son rythme
+    } else if (d <= 0) car.yieldRun = 0;
+  }
   laneTarget = Math.max(-lim, Math.min(lim, laneTarget));
   car.lane += (laneTarget - car.lane) * Math.min(1, dt * 1.5);
 
@@ -39,6 +51,7 @@ export function aiDrive(car, track, cars, dt) {
   let vt = V[car.idx];
   for (let k = 1; k <= 4; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
   vt = Math.min(vt * (car.scMode ? (ahead ? 0.72 : 0.9) : 1) * car.skill * Math.sqrt((car.gripMul ?? 1) / (1 + ((car.mass || 1) - 1) * 0.25) * (0.4 + 0.6 * (car.dmgKd ?? 1))), vCap);
+  if (car.yielding) vt *= 0.9;
   if (car.offTrack) vt = Math.min(vt, 25);
   if (car.v < vt - 0.8) { car.throttle = 1; car.brake = 0; }
   else if (car.v > vt + 1.2) { car.throttle = 0; car.brake = Math.min(1, (car.v - vt) / 6); }

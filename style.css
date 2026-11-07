@@ -689,3 +689,75 @@ body.tilt #ctl .left { display: none; }
 .calm:first-child { margin-top: 0; }
 .cal.ev { background: rgba(34,211,197,.06); border: 1px dashed rgba(34,211,197,.25); font-size: 13px; }
 .cal.ev span { font-size: 15px; } .cal.ev.past { opacity: .55; }
+/* négociations (pilotes et chefs de pôle) */
+.nego { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 10px;
+  padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); background: rgba(5,7,10,.74); animation: fadeIn .16s ease-out; }
+.ncard { position: relative; width: 100%; max-width: 880px; max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--c) 14%, #141820), #0f1218 60%); border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.55); }
+.ncard.in, .ncard.sgn { animation: rise .28s cubic-bezier(.2,.8,.2,1); }
+.nhead { display: flex; align-items: center; gap: 10px; }
+.nhead .av { --c: inherit; width: 42px; height: 42px; font-size: 13px; background: var(--c); }
+.nn { display: flex; flex-direction: column; min-width: 0; flex: 1; } .nn b { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; font-size: 22px; line-height: 1; text-transform: uppercase; }
+.nn small { color: var(--mut); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ngauge, .npat { display: flex; flex-direction: column; gap: 3px; font-size: 11px; min-width: 96px; }
+.ngauge small, .npat small { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); }
+.ngauge i { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; } .ngauge em { display: block; height: 100%; background: currentColor; transition: width .4s; }
+.ngauge b { font-size: 11px; white-space: nowrap; }
+.hi { color: #3ddc84; } .ok { color: #a6e05a; } .no { color: #ff5a4a; }
+.ngauge.mid { color: #ffb340; } .ngauge.low { color: #ff8a5a; }
+.npat { min-width: 0; } .npat > span { display: flex; gap: 4px; } .npat i { width: 11px; height: 11px; border-radius: 50%; background: #2c3340; } .npat i.on { background: var(--gold); box-shadow: 0 0 6px rgba(255,200,61,.6); }
+.nx { flex: none; padding: 6px 10px; }
+.npers { font-size: 12px; color: #b4bcc8; margin-top: -2px; }
+.nbody { display: grid; grid-template-columns: 44% 1fr; gap: 12px; min-height: 0; }
+.nchat { display: flex; flex-direction: column; gap: 6px; overflow: auto; max-height: 270px; padding-right: 2px; }
+.nb { max-width: 94%; padding: 7px 10px; border-radius: 10px 10px 10px 2px; font-size: 13px; line-height: 1.3; background: #232936; }
+.nb.new { animation: rise .3s both; } .nb.new + .nb.new { animation-delay: .35s; }
+.nb small { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); margin-bottom: 1px; }
+.nb.m { align-self: flex-end; border-radius: 10px 10px 2px 10px; background: color-mix(in srgb, var(--acc) 24%, #1d222c); }
+.nb.c { border-left: 3px solid var(--gold); }
+.noffer { display: flex; flex-direction: column; gap: 6px; }
+.nlbl { font-size: 13px; color: #c3cad3; }
+.nrow { display: grid; grid-template-columns: 104px 40px 1fr 40px; align-items: center; gap: 6px; font-size: 13px; }
+.nrow > span small { display: block; font-size: 10px; color: var(--mut); }
+.nrow > button { padding: 6px 0; font-size: 18px; font-weight: 900; line-height: 1; }
+.nrow > b { text-align: center; font-family: var(--cond); font-stretch: condensed; font-weight: 900; font-size: 20px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.nseg { grid-column: 2 / 5; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; } .nseg button { padding: 6px 2px; font-size: 13px; }
+.nfx { font-size: 11px; color: var(--mut); margin: -3px 0 0 110px; }
+.ncost { font-size: 12px; color: #b4bcc8; line-height: 1.4; } .ncost b { color: var(--gold); font-size: 14px; } .ncost b.bad { color: #ff6a5a; } .ncost small { color: var(--mut); }
+.nbtn { display: flex; gap: 6px; align-items: stretch; } .nbtn .main { margin: 0; flex: 1.4; padding: 10px; font-size: 17px; }
+.nbtn button { flex: 1; } .nbtn .acc { border-color: #3ddc84; color: #8ff0b6; }
+.ndeal { font-size: 14px; line-height: 1.4; padding: 8px 10px; border-radius: 6px; background: rgba(61,220,132,.1); border: 1px solid rgba(61,220,132,.35); } .ndeal b { color: #8ff0b6; }
+.nint { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 10px !important; font-weight: 700; font-style: normal; }
+.nint i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.nint.mid { color: #ffb340; } .nint.low { color: #ff8a5a; }
+/* cinématique de signature */
+.ncard.sgn { align-items: center; max-width: 520px; overflow: hidden; text-align: center; padding: 16px; }
+.sghead { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; font-size: 22px; text-transform: uppercase; animation: rise .4s .2s both; }
+.sgcard { position: relative; width: 250px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 14px 12px; border-radius: 12px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c) 50%, #1d222c), #10131a 75%); border: 1px solid color-mix(in srgb, var(--c) 70%, transparent);
+  box-shadow: 0 0 46px color-mix(in srgb, var(--c) 40%, transparent); animation: sgIn 1s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes sgIn { 0% { transform: perspective(700px) rotateY(110deg) scale(.5); opacity: 0; } 65% { transform: perspective(700px) rotateY(-10deg) scale(1.06); opacity: 1; } 100% { transform: none; } }
+.sgcard .av { width: 66px; height: 66px; font-size: 20px; background: var(--c); }
+.sgcard > b { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; font-size: 26px; text-transform: uppercase; line-height: 1; margin-top: 4px; }
+.sgcard > small { color: #c3cad3; font-size: 12px; } .sgk { font-weight: 800; color: var(--gold); font-size: 14px; margin-top: 2px; }
+.sig { width: 180px; height: 34px; } .sig path { fill: none; stroke: #9ad7ff; stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 320; stroke-dashoffset: 320; animation: ink .8s .55s ease-out forwards; }
+@keyframes ink { to { stroke-dashoffset: 0; } }
+.stamp { position: absolute; right: -16px; top: 40%; padding: 3px 12px; border: 3px solid var(--acc); border-radius: 6px; color: var(--acc); background: rgba(10,12,16,.65);
+  font-style: normal; font-family: var(--cond); font-stretch: condensed; font-weight: 900; font-size: 30px; letter-spacing: .08em; transform: rotate(-14deg); animation: stamp .35s 1.05s cubic-bezier(.3,1.7,.5,1) both; }
+@keyframes stamp { from { transform: rotate(-14deg) scale(3); opacity: 0; } to { transform: rotate(-14deg) scale(1); opacity: 1; } }
+.conf { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.conf i { position: absolute; top: -14px; left: var(--x); width: 7px; height: 12px; background: var(--k); opacity: 0; animation: fall var(--t) var(--d) linear both; }
+@keyframes fall { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(460px) rotate(var(--r)); opacity: 0; } }
+.ncard.sgn .main { width: 70%; margin-top: 4px; animation: rise .4s 1.4s both; }
+@media (orientation: portrait) {
+  .nbody { grid-template-columns: 1fr; } .nchat { max-height: 26vh; } .nhead { flex-wrap: wrap; } .nn { flex-basis: calc(100% - 110px); }
+  .ngauge { flex: 1; order: 3; } .npat { order: 4; } .nx { order: 2; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .ncard { padding: 8px 12px; gap: 5px; } .nhead .av { width: 34px; height: 34px; } .nn b { font-size: 18px; } .npers { font-size: 11px; }
+  .nchat { max-height: 230px; } .nb { padding: 5px 8px; font-size: 12px; } .nrow { grid-template-columns: 96px 36px 1fr 36px; } .nrow > button { padding: 4px 0; }
+  .nseg button { padding: 4px 2px; } .nrow > b { font-size: 18px; } .nfx { margin-left: 102px; } .nbtn .main { padding: 8px; font-size: 15px; } .nbtn button { padding: 8px 6px; }
+  .ncard.sgn { padding: 10px; gap: 4px; } .sgcard { padding: 10px 12px 8px; } .sgcard .av { width: 48px; height: 48px; } .sghead { font-size: 18px; } .sig { height: 26px; }
+}
+@media (orientation: portrait) { #gTree .node.chef .fee { white-space: normal; line-height: 1.25; } #gTree .node.chef .nint { display: flex; margin: 2px 0 0; } }

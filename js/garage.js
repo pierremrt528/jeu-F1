@@ -4,7 +4,11 @@ import { NO_UP } from './car.js';
 import { team, saveTeam } from './team.js';
 import { engineOf } from './career.js';
 import { partDiscount, partDelay, parallelParts, pitBonus, renderInfra, infra } from './infra.js';
-import { CHIEFS, DEPTS, chiefOf, chiefMul, hire } from './staff.js';
+import { CHIEFS, DEPTS, chiefOf, chiefMul, staff, saveStaff, chiefContract, chiefUntil, chiefRelease, signChief } from './staff.js';
+import { openNego, preview, previewHTML, fmtM } from './nego.js';
+import { teamPos } from './market.js';
+import { season } from './season.js';
+import { TEAMS } from './data.js';
 
 // fx : bonus additionnels (0.02 = +2 %). rel : fiabilité. tyre/fuel : usure et consommation (-0.05 = −5 %). pit : secondes à l'arrêt.
 // req : toutes les pièces requises ; reqAny : au moins une.
@@ -173,7 +177,6 @@ export function openGarage(el, onClose) {
   root = el; root.querySelector('#garageClose').onclick = onClose;
   render();
 }
-const chiefLine = c => c ? `<span>💰 −${c.cost} %</span><span>⏱ −${c.time} %</span><span>🧪 −${c.risk} %</span>` : '<span>aucun bonus</span>';
 
 function render() {
   const $ = s => root.querySelector(s);
@@ -236,26 +239,39 @@ function render() {
   }).join('');
 }
 
-// ---------- mercato des chefs de département ----------
+// ---------- mercato des chefs de département : candidats et négociation ----------
 function renderChefs($) {
-  const dept = tab, t = treeById(dept), cur = chiefOf(dept);
+  const dept = tab, t = treeById(dept), cur = chiefOf(dept), ck = cur && chiefContract(dept), yr = season?.year || 2027;
   const bar = (l, v) => `<span class="cb"><small>${l}</small><i><em style="width:${v * 2.8}%"></em></i><b>−${v} %</b></span>`;
-  $('#gTree').innerHTML = CHIEFS.filter(c => c.dept === dept).map(c => `<button class="node chef ${cur === c ? 'own' : team.budget >= c.fee ? 'ok' : 'poor'} ${sel === c.id ? 'pick' : ''}" data-chief="${c.id}" style="--c:${t.color}">
+  const subOf = c => ({ kind: 'chief', key: c.id, name: c.name, from: c.from, r: 60 + (c.cost + c.time + c.risk) / 2, base: c.fee, cur: cur === c, color: t.color,
+    floor: cur === c ? Math.round(ck.sal * 1.05 * 10) / 10 : 0 });
+  // prolongation du chef en poste : le nouveau contrat démarre la saison suivante, seule la prime se paie tout de suite
+  const nctx = c => ({ win: `${yr}-r${season?.round ?? 0}`, store: staff.talks = staff.talks || {}, rep: team.rep, pos: teamPos(), mid: false, team: TEAMS[0].name,
+    year: yr + (cur === c ? 1 : 0), save: saveStaff, avail: () => team.budget,
+    cost: k => {
+      const ext = cur === c, rel = cur && !ext ? chiefRelease(dept) : 0, sal = ext ? 0 : k.sal;
+      return { now: Math.round((k.bonus + sal + rel) * 10) / 10, parts: [['prime', k.bonus], ['saison ' + yr, sal], ['départ de ' + (cur?.name || ''), rel]] };
+    } });
+  $('#gTree').innerHTML = CHIEFS.filter(c => c.dept === dept).map(c => {
+    const v = cur === c ? null : preview(subOf(c), nctx(c));
+    const fee = v ? (v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + previewHTML(v) : `✓ En poste · jusqu’en ${chiefUntil(ck)}`;
+    return `<button class="node chef ${v ? (v.off ? 'poor' : 'ok') : 'own'} ${sel === c.id ? 'pick' : ''}" data-chief="${c.id}" style="--c:${t.color}">
     <span class="ch"><span class="av">${c.name.replace(/^[A-Z]\.\s*/, '').slice(0, 3).toUpperCase()}</span><span><b>${c.name}</b><small class="cf">${c.from}</small></span></span>
-    ${bar('Coûts', c.cost)}${bar('Délais', c.time)}${bar('Échecs', c.risk)}<small class="fee">${cur === c ? '✓ En poste' : c.fee + ' M€ / saison'}</small></button>`).join('');
+    ${bar('Coûts', c.cost)}${bar('Délais', c.time)}${bar('Échecs', c.risk)}<small class="fee">${fee}</small></button>`;
+  }).join('');
   root.querySelectorAll('[data-chief]').forEach(b => b.onclick = () => { sel = b.dataset.chief; render(); });
   const c = CHIEFS.find(x => x.id === sel && x.dept === dept);
   $('#gDetail').style.setProperty('--c', t.color);
   if (c) {
-    const can = cur !== c && team.budget >= c.fee;
+    const isCur = cur === c, rel = cur && !isCur ? chiefRelease(dept) : 0;
     $('#gDetail').innerHTML = `<div class="dhead"><span class="dk">${ICONS[dept]} Chef ${t.name}</span><b>${c.name}</b></div><p class="desc">${c.from}. Sur toutes les pièces du pôle ${t.name} :</p>` +
       `<p class="fx"><span>▼ ${c.cost} % de coût</span><span>▼ ${c.time} % de délai</span><span>▼ ${c.risk} % de risque d’échec et de retard</span></p>` +
-      (cur && cur !== c ? `<p class="chief">Remplace <b>${cur.name}</b> (${chiefLine(cur).replace(/<[^>]+>/g, ' ').trim()})</p>` : '') +
-      (cur === c ? `<p class="state done">✓ En poste</p>` : `<div class="dcost"><span><small>Contrat</small><b>${c.fee} M€</b></span><span><small>Puis chaque saison</small><b>${c.fee} M€</b></span></div>` +
-        (team.budget < c.fee ? `<p class="why">Budget insuffisant : il manque ${(c.fee - team.budget).toFixed(1)} M€.</p>` : '') + `<button id="cHire" class="main" ${can ? '' : 'disabled'}>Engager</button>`);
-    const h = $('#cHire'); if (h) h.onclick = () => { if (can && hire(c)) render(); };
-  } else $('#gDetail').innerHTML = `<p class="hint">Chaque pôle peut avoir un chef. Il réduit le coût des pièces, la durée des recherches ou le risque qu’elles échouent ou prennent du retard. Le contrat se paie à la signature puis à chaque nouvelle saison.</p>`;
-  $('#gStats').innerHTML = `<h4>Ton équipe technique</h4>` + Object.entries(DEPTS).map(([d, name]) => { const x = chiefOf(d); return `<p class="istat">${ICONS[d]} ${name} : <b>${x ? x.name : '—'}</b> <small>${x ? `−${x.cost} % · −${x.time} % · −${x.risk} %` : ''}</small></p>`; }).join('');
+      (cur && !isCur ? `<p class="chief">Remplace <b>${cur.name}</b>${rel ? ` · indemnité de départ ${fmtM(rel)} M€` : ''}</p>` : '') +
+      (isCur ? `<p class="state done">✓ En poste jusqu’en ${chiefUntil(ck)} · ${fmtM(ck.sal)} M€ par saison</p>` : `<p class="chief">Salaire de référence ≈ ${fmtM(c.fee)} M€ par saison, payé à la signature puis à chaque intersaison.</p>`) +
+      `<button id="cHire" class="main">${isCur ? 'Prolonger le contrat' : '🤝 Négocier'}</button>`;
+    $('#cHire').onclick = () => openNego(subOf(c), nctx(c), { done: k => { signChief(c, k, nctx(c).cost(k).now, isCur); render(); }, close: render });
+  } else $('#gDetail').innerHTML = `<p class="hint">Chaque pôle peut avoir un chef. Il réduit le coût des pièces, la durée des recherches ou le risque qu’elles échouent ou prennent du retard. Touche un candidat puis négocie son contrat (salaire, durée, prime) : les meilleurs boudent les écuries sans résultats, et un contrat terminé libère le poste à l’intersaison.</p>`;
+  $('#gStats').innerHTML = `<h4>Ton équipe technique</h4>` + Object.entries(DEPTS).map(([d, name]) => { const x = chiefOf(d), k = x && chiefContract(d); return `<p class="istat">${ICONS[d]} ${name} : <b>${x ? x.name : '—'}</b> <small>${x ? `−${x.cost} % · −${x.time} % · −${x.risk} % · jusqu’en ${chiefUntil(k)}` : ''}</small></p>`; }).join('');
 }
 
 function drawLines() {

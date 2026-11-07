@@ -3,7 +3,9 @@
 import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
 import { mateGrowth } from './infra.js';
-import { driverCard, engineCard, tierCard, steps } from './ui.js';
+import { driverCard, engineCard, tierCard, steps, rating } from './ui.js';
+import { openNego, preview, previewHTML, fmtM, ans, ROLES } from './nego.js';
+import { season } from './season.js';
 
 export const TIERS = [
   { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait, ni pièces ni bâtiments : tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
@@ -45,8 +47,19 @@ export function applyCareer() {
   if (!career) { t.perf = BASE.perf; t.drivers[1] = { ...BASE.rosters[0][1] }; return; }
   const tier = TIERS.find(x => x.id === career.tier), eng = ENGINES.find(x => x.id === career.engine);
   t.perf = tier.perf * enginePerf(eng);
-  t.drivers[1] = { name: career.mate.name, skill: mateSkill(career.mate.spd), stats: career.mate };
+  // statut du contrat : n°1 un peu plus rapide, n°2 un peu moins mais il laisse passer le joueur
+  const role = career.contract?.role;
+  t.drivers[1] = { name: career.mate.name, skill: mateSkill(career.mate.spd) * (role === 'n1' ? 1.003 : role === 'n2' ? 0.997 : 1), stats: career.mate, role };
 }
+// contrat de l'équipier { sal, years, role, bonus, since, paid } ; anciennes sauvegardes : 1 an au salaire de base
+export function mateContract() {
+  if (!career) return null;
+  if (!career.contract) { const y = season?.year || 2027; career.contract = { sal: salary(career.mate), years: 1, role: 'eq', bonus: 0, since: y, paid: y }; }
+  return career.contract;
+}
+export const untilOf = k => k.since + k.years - 1;
+// place de l'écurie pour les négociations : classement en cours, sinon saison passée, sinon niveau
+export const TIER_POS = { new: 9, mid: 5, top: 2 };
 // stats d'un pilote d'une écurie rivale, tirées de son niveau (toujours les mêmes pour un nom donné)
 export function statsOf(d) {
   if (d.stats) return d.stats;
@@ -70,25 +83,27 @@ export function growMate() {
 
 // ---------- écran de montage (3 étapes) ----------
 export function openSetup(el, onDone, onCancel) {
-  const pick = { tier: null, mate: null, engine: null };
+  const pick = { tier: null, mate: null, engine: null, k: null, cost: 0 };
+  const year = season ? season.year + 1 : 2027, talks = {};
   let step = 0;
   const $ = s => el.querySelector(s);
   const left = () => {
     let b = pick.tier ? TIERS.find(t => t.id === pick.tier).budget : 0;
-    if (pick.mate) b -= salary(pick.mate);
+    if (pick.mate) b -= pick.cost;
     if (pick.engine) b -= ENGINES.find(e => e.id === pick.engine).price;
     return Math.round(b * 10) / 10;
   };
   function render() {
     $('#suTitle').textContent = ['Ton écurie', 'Ton équipier', 'Ton motoriste'][step];
     steps($('#suSteps'), ['Écurie', 'Pilote', 'Moteur'], step);
-    $('#suHint').textContent = ['Choisis ton point de départ : plus de budget, mais plus de pression.', 'Ton coéquipier marque des points pour l’écurie. Le potentiel le fait progresser pendant la saison.', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse.'][step];
+    $('#suHint').textContent = ['Choisis ton point de départ : plus de budget, mais plus de pression.', 'Touche un pilote pour négocier avec son agent : salaire, durée, statut, prime. Les meilleurs boudent les petites écuries.', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse.'][step];
     $('#suBudget').innerHTML = pick.tier ? `<small>Budget restant</small><b>${left().toFixed(1)} M€</b>` : '<small>Budget</small><b>—</b>';
     let h = '';
     if (step === 0) h = TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('');
     if (step === 1) h = MARKET.map((d, k) => {
-      const s = salary(d), can = s <= left() + (pick.mate ? salary(pick.mate) : 0);
-      return driverCard(d, { k, from: d.from, price: s < 0 ? `apporte ${-s} M€` : s + ' M€ / saison', pick: pick.mate === d, disabled: !can });
+      if (pick.mate === d) return driverCard(d, { k, from: d.from, pick: true, price: `✍️ ${ans(pick.k.years)} · ${fmtM(pick.k.sal)} M€ / saison${pick.k.role !== 'eq' ? ' · ' + ROLES[pick.k.role] : ''}` });
+      const v = preview(subOf(d), nctx());
+      return driverCard(d, { k, from: d.from, disabled: v.off, price: (v.sal < 0 ? `apporte ${fmtM(-v.sal)} M€` : v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + previewHTML(v) });
     }).join('');
     if (step === 2) h = ENGINES.map(e => {
       const can = e.price <= left() + (pick.engine ? ENGINES.find(x => x.id === pick.engine).price : 0);
@@ -98,8 +113,12 @@ export function openSetup(el, onDone, onCancel) {
     $('#suList').className = 'clist ' + ['tiers', 'drvs', 'engs'][step];
     el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
       const v = b.dataset.v;
-      if (step === 0) { pick.tier = v; pick.mate = null; pick.engine = null; }
-      if (step === 1) pick.mate = MARKET[+v];
+      if (step === 0) { pick.tier = v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; }
+      if (step === 1) {
+        const d = MARKET[+v];
+        if (pick.mate === d) return;
+        return openNego(subOf(d), nctx(), { done: k => { pick.mate = d; pick.k = k; pick.cost = Math.round((k.sal + k.bonus) * 10) / 10; render(); }, close: render });
+      }
       if (step === 2) pick.engine = v;
       render();
     });
@@ -111,11 +130,18 @@ export function openSetup(el, onDone, onCancel) {
   $('#suNext').onclick = () => {
     if (step < 2) { step++; return render(); }
     const tier = TIERS.find(t => t.id === pick.tier);
-    career = { tier: pick.tier, engine: pick.engine, mate: { ...pick.mate } };
+    career = { tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
     saveCareer(); applyCareer();
     Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '' }); saveTeam();
     onDone();
   };
   $('#suBack').onclick = () => { if (step) { step--; render(); } else onCancel(); };
+  // négociation : réputation et place selon le niveau choisi ; le budget restant hors pilote
+  const subOf = d => ({ kind: 'drv', key: d.name, name: d.name, from: d.from, r: rating(d), base: salary(d), sponsor: d.sponsor, color: /Formule B/.test(d.from) ? '#22d3c5' : /Vétéran/.test(d.from) ? '#b07cff' : '#8d96a3' });
+  const nctx = () => {
+    const tier = TIERS.find(t => t.id === pick.tier);
+    return { win: 'setup-' + pick.tier, store: talks, rep: tier.rep, pos: TIER_POS[tier.id], team: TEAMS[0].name, year,
+      avail: () => Math.round((left() + pick.cost) * 10) / 10, cost: k => ({ now: Math.round((k.sal + k.bonus) * 10) / 10, parts: [['prime', k.bonus], ['1re saison', k.sal]] }) };
+  };
   render();
 }
