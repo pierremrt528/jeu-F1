@@ -7,7 +7,7 @@ import { partDiscount, partDelay, parallelParts, pitBonus, renderInfra, infra } 
 import { CHIEFS, DEPTS, chiefOf, chiefMul, staff, saveStaff, chiefContract, chiefUntil, chiefRelease, signChief } from './staff.js';
 import { openNego, preview, previewHTML, fmtM } from './nego.js';
 import { teamPos } from './market.js';
-import { season } from './season.js';
+import { season, preStep } from './season.js';
 import { TEAMS } from './data.js';
 
 // fx : bonus additionnels (0.02 = +2 %). rel : fiabilité. tyre/fuel : usure et consommation (-0.05 = −5 %). pit : secondes à l'arrêt.
@@ -69,7 +69,7 @@ const NODES = Object.fromEntries(TREES.flatMap(t => t.nodes.map(n => [n.id, n]))
 const TREE_OF = Object.fromEntries(TREES.flatMap(t => t.nodes.map(n => [n.id, t.id])));
 // prix en M€ (Centre de R&D, chef du pôle), délai en jours (Soufflerie, chef), risques d'échec et de retard (chef)
 export const price = n => Math.round(n.cost / 5 * partDiscount() * chiefMul(TREE_OF[n.id], 'cost') * 10) / 10;
-export const delay = n => Math.max(3, Math.round(partDelay(n.cost <= 20 ? 10 : n.cost <= 55 ? 18 : 28) * chiefMul(TREE_OF[n.id], 'time')));
+export const delay = n => Math.max(6, Math.round(partDelay(n.cost <= 20 ? 20 : n.cost <= 55 ? 36 : 56) * chiefMul(TREE_OF[n.id], 'time')));   // 20 à 56 jours
 export const risk = n => {
   const k = chiefMul(TREE_OF[n.id], 'risk');
   return { fail: Math.round((n.cost <= 20 ? 6 : n.cost <= 55 ? 10 : 16) * k), late: Math.round(22 * k) };
@@ -141,7 +141,7 @@ export function tickDevelopment(days) {
     d.left -= days;
     while (d.left <= 0) {
       const r = risk(n);
-      if (!d.rolled && Math.random() * 100 < r.late) { const x = 4 + Math.floor(Math.random() * 9); d.left += x; d.rolled = true; out.late.push(`${n.name} (+${x} j)`); continue; }
+      if (!d.rolled && Math.random() * 100 < r.late) { const x = 8 + Math.floor(Math.random() * 17); d.left += x; d.rolled = true; out.late.push(`${n.name} (+${x} j)`); continue; }
       if (Math.random() * 100 < r.fail) out.fail.push(n.name); else { garage.owned.push(d.id); out.done.push(n.name); }
       delete garage.dev[k]; break;
     }
@@ -234,7 +234,7 @@ function render() {
       team.budget = Math.round((team.budget - price(n)) * 10) / 10; saveTeam();
       garage.dev[free] = { id: n.id, left: delay(n), days: 1 }; save(); render();
     };
-  } else $('#gDetail').innerHTML = `<p class="hint">Touche une pièce pour voir ses effets. La recherche est payée tout de suite et dure plusieurs jours : elle avance entre les Grands Prix selon le calendrier (une semaine entre deux courses enchaînées, plus pendant les pauses). À la fin des essais, une pièce peut prendre du retard ou échouer : un bon chef de département réduit ces risques.</p>`;
+  } else $('#gDetail').innerHTML = `<p class="hint">Touche une pièce pour voir ses effets. La recherche est payée tout de suite et dure de 20 à 56 jours : elle avance avec le calendrier, pendant la pré-saison (du 1er janvier au premier GP) puis entre les Grands Prix (une semaine entre deux courses enchaînées, plus pendant les pauses). À la fin des essais, une pièce peut prendre du retard ou échouer : un bon chef de département réduit ces risques.</p>`;
   // statistiques de la voiture
   const u = carUpgrades(), u2 = { ...u };
   if (n && !owned(n.id)) for (const k in n.fx) u2[k] += n.fx[k];
@@ -253,7 +253,8 @@ function renderChefs($) {
   const subOf = c => ({ kind: 'chief', key: c.id, name: c.name, from: c.from, r: 60 + (c.cost + c.time + c.risk) / 2, base: c.fee, cur: cur === c, color: t.color,
     floor: cur === c ? Math.round(ck.sal * 1.05 * 10) / 10 : 0 });
   // prolongation du chef en poste : le nouveau contrat démarre la saison suivante, seule la prime se paie tout de suite
-  const nctx = c => ({ win: `${yr}-r${season?.round ?? 0}`, store: staff.talks = staff.talks || {}, rep: team.rep, pos: teamPos(), mid: false, team: TEAMS[0].name,
+  const nctx = c => ({ win: `${yr}-r${season?.round ?? 0}${preStep() < 3 ? 'p' + preStep() : ''}`,   // pré-saison : une fenêtre par étape
+    store: staff.talks = staff.talks || {}, rep: team.rep, pos: teamPos(), mid: false, team: TEAMS[0].name,
     year: yr + (cur === c ? 1 : 0), save: saveStaff, avail: () => team.budget,
     cost: k => {
       const ext = cur === c, rel = cur && !ext ? chiefRelease(dept) : 0, sal = ext ? 0 : k.sal;

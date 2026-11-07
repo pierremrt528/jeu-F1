@@ -11,6 +11,7 @@ export function initInput(onCamera, onPause) {
     for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(t, e => { ids.delete(e.pointerId); upd(); });
   });
   addEventListener('keydown', e => {
+    if (e.target?.tagName === 'INPUT') return;   // saisie du nom de l'écurie
     keys.add(e.code);
     if (e.code === 'KeyC') onCamera();
     if (e.code === 'Escape' || e.code === 'KeyP') onPause();

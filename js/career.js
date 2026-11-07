@@ -39,10 +39,14 @@ export let career = (() => { try { return JSON.parse(localStorage.getItem(KEY));
 export function resetCareer() { career = null; try { localStorage.removeItem(KEY); } catch {} applyCareer(); }
 export function saveCareer() { try { localStorage.setItem(KEY, JSON.stringify(career)); } catch {} }
 
-// applique le montage à l'Écurie Martel (et les transferts aux écuries rivales)
-const BASE = { perf: TEAMS[0].perf, rosters: TEAMS.map(t => t.drivers.map(d => ({ ...d }))) };
+// applique le montage à l'écurie du joueur (nom choisi à la création, transferts aux écuries rivales)
+const BASE = { name: TEAMS[0].name, perf: TEAMS[0].perf, rosters: TEAMS.map(t => t.drivers.map(d => ({ ...d }))) };
+// nom d'écurie saisi par le joueur : sans caractères HTML, 24 caractères au plus
+export const cleanName = s => String(s || '').replace(/[<>&"]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+const taken = n => TEAMS.slice(1).some(t => t.name.toLowerCase() === cleanName(n).toLowerCase());
 export function applyCareer() {
   const t = TEAMS[0];
+  t.name = cleanName(career?.name) || BASE.name;
   TEAMS.forEach((tm, k) => { if (k) tm.drivers = (career?.rosters?.[tm.name] || BASE.rosters[k]).map(d => ({ ...d })); });
   if (!career) { t.perf = BASE.perf; t.drivers[1] = { ...BASE.rosters[0][1] }; return; }
   const tier = TIERS.find(x => x.id === career.tier), eng = ENGINES.find(x => x.id === career.engine);
@@ -83,7 +87,7 @@ export function growMate() {
 
 // ---------- écran de montage (3 étapes) ----------
 export function openSetup(el, onDone, onCancel) {
-  const pick = { tier: null, mate: null, engine: null, k: null, cost: 0 };
+  const pick = { tier: null, mate: null, engine: null, k: null, cost: 0, name: TEAMS[0].name };
   const year = season ? season.year + 1 : 2027, talks = {};
   let step = 0;
   const $ = s => el.querySelector(s);
@@ -99,7 +103,8 @@ export function openSetup(el, onDone, onCancel) {
     $('#suHint').textContent = ['Choisis ton point de départ : plus de budget, mais plus de pression.', 'Touche un pilote pour négocier avec son agent : salaire, durée, statut, prime. Les meilleurs boudent les petites écuries.', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse.'][step];
     $('#suBudget').innerHTML = pick.tier ? `<small>Budget restant</small><b>${left().toFixed(1)} M€</b>` : '<small>Budget</small><b>—</b>';
     let h = '';
-    if (step === 0) h = TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('');
+    if (step === 0) h = `<label class="tname ${taken(pick.name) ? 'bad' : ''}"><span>Nom de ton écurie</span><input id="suName" maxlength="24" autocomplete="off" spellcheck="false" placeholder="${BASE.name}" value="${cleanName(pick.name)}"><small>Nom déjà pris par une écurie rivale</small></label>`
+      + TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('');
     if (step === 1) h = MARKET.map((d, k) => {
       if (pick.mate === d) return driverCard(d, { k, from: d.from, pick: true, price: `✍️ ${ans(pick.k.years)} · ${fmtM(pick.k.sal)} M€ / saison${pick.k.role !== 'eq' ? ' · ' + ROLES[pick.k.role] : ''}` });
       const v = preview(subOf(d), nctx());
@@ -111,6 +116,7 @@ export function openSetup(el, onDone, onCancel) {
     }).join('');
     $('#suList').innerHTML = h;
     $('#suList').className = 'clist ' + ['tiers', 'drvs', 'engs'][step];
+    const nm = $('#suName'); if (nm) nm.oninput = () => { pick.name = nm.value; nm.parentNode.classList.toggle('bad', taken(nm.value)); $('#suNext').disabled = !pick.tier || taken(nm.value); };
     el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
       const v = b.dataset.v;
       if (step === 0) { pick.tier = v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; }
@@ -122,7 +128,7 @@ export function openSetup(el, onDone, onCancel) {
       if (step === 2) pick.engine = v;
       render();
     });
-    const ok = [pick.tier, pick.mate, pick.engine][step];
+    const ok = step ? [pick.tier, pick.mate, pick.engine][step] : pick.tier && !taken(pick.name);
     $('#suNext').disabled = !ok;
     $('#suNext').textContent = step < 2 ? 'Suivant →' : 'Lancer la saison';
     $('#suBack').textContent = step ? '← Retour' : 'Annuler';
@@ -130,7 +136,7 @@ export function openSetup(el, onDone, onCancel) {
   $('#suNext').onclick = () => {
     if (step < 2) { step++; return render(); }
     const tier = TIERS.find(t => t.id === pick.tier);
-    career = { tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
+    career = { name: cleanName(pick.name) || BASE.name, tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
     saveCareer(); applyCareer();
     Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam();
     onDone();

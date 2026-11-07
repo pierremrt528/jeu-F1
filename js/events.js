@@ -1,5 +1,6 @@
 // Vie de l'écurie entre les Grands Prix : événements à choix annoncés en « flash info », objectifs de
 // la direction (confiance, licenciement possible), missions proposées par les sponsors avant chaque course.
+import { TEAMS } from './data.js';
 import { team, applyFx, saveTeam } from './team.js';
 import { career, saveCareer, applyCareer, mateContract } from './career.js';
 import { chiefOf, chiefContract, DEPTS, loseChief } from './staff.js';
@@ -140,6 +141,20 @@ const EVENTS = [
     { t: 'Réglages vitesse', fx: { perf: { vtop: 0.008, mu: -0.006 } }, out: 'Taillée pour les lignes droites.' },
     { t: 'Garder un réglage équilibré', fx: {}, out: 'Pas de pari.' },
   ] },
+  // pré-saison (jamais tirés au hasard) : présentation de la voiture, puis essais hivernaux
+  { id: 'launch', pre: true, icon: '🚗', title: 'Présentation de la voiture', text: () => `La nouvelle monoplace de ${TEAMS[0].name} est dévoilée devant la presse et les partenaires. Quel message veux-tu faire passer pour la saison ?`, ch: [
+    { t: 'Grand show devant les fans (2 M€)', fx: { budget: -2, rep: 5, moral: 4 }, out: 'Jeux de lumière, pilotes sur scène : la livrée fait le tour des réseaux.' },
+    { t: 'Annoncer de grandes ambitions', fx: { rep: 3, conf: 6, moral: 3 }, out: 'La direction adore ton discours. Il faudra maintenant l’assumer en piste.',
+      risk: { p: 0.3, fx: { rep: -3, conf: -3 }, out: 'Les journalistes se moquent : « Encore une écurie qui promet la lune… »' } },
+    { t: 'Une simple vidéo en ligne : l’argent va à l’usine', fx: { budget: 1.5, dev: -4, rep: -2 }, out: 'Présentation discrète : les 1,5 M€ économisés font gagner quatre jours aux recherches.' },
+  ] },
+  { id: 'tests', pre: true, icon: '🧪', title: 'Essais hivernaux', text: c => `Trois jours de roulage avant le premier Grand Prix${c.dev ? ', avec des pièces encore en développement à l’usine' : ''}. Quel programme pour la voiture ?`, ch: [
+    { t: 'Simulations de course : pneus et réglages', fx: { perf: { mu: 0.006 }, moral: 2 }, out: 'Des relais longs sans souci : la voiture sera bien réglée pour le premier GP.' },
+    { t: 'Tours rapides à vide pour impressionner', fx: { rep: 4, moral: 3 }, out: 'Meilleur temps de la matinée : la presse s’emballe !',
+      risk: { p: 0.3, fx: { budget: -1.5, dev: 6, moral: -3 }, out: 'Tête-à-queue dans le mur : 1,5 M€ de réparations et six jours de retard à l’usine.' } },
+    { t: c => c.dev ? 'Valider les pièces en cours de développement' : 'Rouler pour récolter des données', fx: c => c.dev ? { dev: -8 } : { perf: { vtop: 0.004 } },
+      out: c => c.dev ? 'Les données des essais font gagner huit jours à l’usine.' : 'Les ingénieurs trouvent un peu de vitesse de pointe pour le premier GP.' },
+  ] },
 ];
 
 // contexte d'un événement (résultat de la course qui vient d'avoir lieu)
@@ -150,7 +165,7 @@ export function eventCtx(res) {
 }
 export function pickEvent(ctx) {
   const seen = season.seenEv || [];
-  const pool = EVENTS.filter(e => !seen.includes(e.id) && (!e.when || e.when(ctx)));
+  const pool = EVENTS.filter(e => !e.pre && !seen.includes(e.id) && (!e.when || e.when(ctx)));
   if (!pool.length) return null;
   const e = pick(pool);
   season.seenEv = [...seen, e.id];

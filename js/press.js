@@ -1,6 +1,7 @@
 // Conférence de presse après la course : questions de journalistes (fictifs) adaptées au résultat,
 // réponses à choix avec bonus/malus (moral, budget, réputation, performance à la prochaine course).
 import { team, applyFx, FXNAMES } from './team.js';
+import { TEAMS } from './data.js';
 
 const OUTLETS = [
   ['Claire Fontanel', 'Le Paddock', '#e5483b'], ['Hugo Marchetti', 'Vitesse Hebdo', '#3aa0ff'],
@@ -265,4 +266,4 @@ export function runPress(el, questions, onDone) {
 }
 
 export const teamLine = () =>
-  `<span>Moral <b>${team.moral}</b></span><span>Budget <b>${team.budget.toFixed(1)} M€</b></span><span>Réputation <b>${team.rep}</b></span>`;
+  `<span class="tn">${TEAMS[0].name}</span><span>Moral <b>${team.moral}</b></span><span>Budget <b>${team.budget.toFixed(1)} M€</b></span><span>Réputation <b>${team.rep}</b></span>`;

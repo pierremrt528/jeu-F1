@@ -24,24 +24,34 @@ export function raceDate(k, year = season?.year || 2027) {
   return d;
 }
 export const fmtDate = d => `${d.getDate() === 1 ? '1er' : d.getDate()} ${MOIS[d.getMonth()]}`;
-// jours entre le GP k et le suivant (après le dernier : jusqu'au premier GP de la saison suivante)
-export const daysAfter = k => k < gaps().length ? gaps()[k] : Math.round((raceDate(0, (season?.year || 2027) + 1) - raceDate(k)) / 864e5);
-// date du jour dans la carrière : 1er janvier avant la première course, sinon le lendemain du dernier GP
+// jours entre le GP k et le suivant (après le dernier : jusqu'au 1er janvier, la pré-saison prend le relais)
+export const daysAfter = k => k < gaps().length ? gaps()[k] : Math.round((new Date((season?.year || 2027) + 1, 0, 1) - raceDate(k)) / 864e5);
+// pré-saison : 1er janvier, présentation de la voiture, essais hivernaux, puis le premier GP (le temps avance par étapes)
+export function preDates(year = season?.year || 2027) {
+  const f = raceDate(0, year), before = n => { const d = new Date(f); d.setDate(f.getDate() - n); return d; };
+  return [new Date(year, 0, 1), before(30), before(16), f];
+}
+export const preStep = () => season && !season.round && !season.done && !season.grid ? Math.min(3, season.pre || 0) : 3;
+// date du jour dans la carrière : étape de la pré-saison, arrivée sur le circuit du 1er GP, sinon le lendemain du dernier GP
 export function today() {
   if (!season) return new Date(2027, 0, 1);
   if (season.done) return new Date(season.year, 11, 15);
-  if (!season.round) return new Date(season.year, 0, 1);
+  if (!season.round) { const p = preStep(); if (p < 3) return preDates()[p]; const d = raceDate(0); d.setDate(d.getDate() - 3); return d; }
   const d = raceDate(season.round - 1); d.setDate(d.getDate() + 1); return d;
+}
+// les écuries rivales travaillent aussi pendant l'hiver : progrès au prorata des jours (≈ 16,6 jours par GP)
+export function devRivals(days) {
+  const k = Math.sqrt(10 / nRounds()) * days / 16.6;
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k;
+  saveSeason();
 }
 // rendez-vous de la saison hors Grands Prix (affichés dans le calendrier)
 export function seasonEvents(year = season?.year || 2027) {
-  const n = nRounds(), m = midRound(), f = raceDate(0, year), last = raceDate(n - 1, year);
-  const launch = new Date(f); launch.setDate(f.getDate() - 30);
-  const tests = new Date(f); tests.setDate(f.getDate() - 16);
+  const n = nRounds(), m = midRound(), last = raceDate(n - 1, year), [, launch, tests] = preDates(year);
   const summer = raceDate(m - 1, year); summer.setDate(summer.getDate() + 1);
   const gala = new Date(last); gala.setDate(last.getDate() + 7);
   return [
-    { d: new Date(year, 0, 1), ic: '🎆', t: 'Début de la saison', s: 'contrats et budget de l’année' },
+    { d: new Date(year, 0, 1), ic: '🎆', t: 'Début de la saison', s: 'premières pièces, recrutements, budget de l’année' },
     { d: launch, ic: '🚗', t: 'Présentation de la voiture', s: 'nouvelle livrée devant la presse' },
     { d: tests, ic: '🧪', t: 'Essais hivernaux', s: '3 jours de roulage avant le premier GP' },
     { d: summer, ic: '☀️', t: 'Pause estivale · mercato d’été', s: `${gaps()[m - 1] || 35} jours sans course, transferts possibles` },
@@ -163,7 +173,7 @@ export function calendarHTML() {
   let h = '', month = -1;
   for (const it of items) {
     if (it.d.getMonth() !== month) { month = it.d.getMonth(); h += `<h5 class="calm">${MOIS_LONG[month]} ${y}</h5>`; }
-    if (it.ev) { h += `<div class="cal ev ${it.d < now ? 'past' : ''}"><span>${it.ev.ic}</span><div>${it.ev.t}<small>${fmtDate(it.d)} · ${it.ev.s}</small></div><em></em></div>`; continue; }
+    if (it.ev) { h += `<div class="cal ev ${+it.d === +now && !season.round ? 'now' : it.d < now ? 'past' : ''}"><span>${it.ev.ic}</span><div>${it.ev.t}<small>${fmtDate(it.d)} · ${it.ev.s}</small></div><em></em></div>`; continue; }
     const k = it.k, c = CIRCUITS.find(x => x.id === it.id), r = season.results[k];
     const cls = k === season.round && !season.done ? 'next' : r ? 'past' : '';
     const res = r ? `<b class="${r.pos <= 3 ? 'pod' : ''}">P${r.pos}</b> <small>+${r.pts} pts</small>` : k === season.round ? '<b>À suivre</b>' : '';

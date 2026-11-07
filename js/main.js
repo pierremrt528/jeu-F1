@@ -18,6 +18,11 @@ import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, 
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
+// livraisons de l'usine et des chantiers (résultats d'une course, étapes de la pré-saison)
+const devNews = (p, built) => (built ? `<br>🏗️ Construction terminée : <b>${built}</b>` : '') +
+  (p.done.length ? `<br>🔧 Pièce${p.done.length > 1 ? 's' : ''} livrée${p.done.length > 1 ? 's' : ''} : <b>${p.done.join(', ')}</b>` : '') +
+  (p.late.length ? `<br>⏱ Retard aux essais : <b>${p.late.join(', ')}</b>` : '') +
+  (p.fail.length ? `<br>❌ Recherche ratée (argent perdu) : <b class="bad">${p.fail.join(', ')}</b>` : '');
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { initDebris, updateDebris, clearDebris } from './debris.js';
@@ -305,13 +310,10 @@ function showResults() {
   $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
   $('resGarageBtn').classList.toggle('hidden', R.free);
   $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Sponsors : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
-    (R.built ? `<br>🏗️ Construction terminée : <b>${R.built}</b>` : '') +
     (R.regNews ? `<br>📜 <b>Annonce officielle</b> : nouveau règlement ${SZ.season.year + 1} pour <b>${R.regNews}</b>. Tes pièces ${R.regN > 1 ? 'de ces domaines' : 'de ce domaine'} repartiront de zéro l’an prochain.` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
-    (R.season ? `<br>📅 ${R.days >= 60 ? 'Intersaison' : `Prochain GP dans <b>${R.days} jours</b>`} : l’usine travaille pendant ce temps.` : '') +
-    (R.parts.done.length ? `<br>🔧 Pièce${R.parts.done.length > 1 ? 's' : ''} livrée${R.parts.done.length > 1 ? 's' : ''} : <b>${R.parts.done.join(', ')}</b>` : '') +
-    (R.parts.late.length ? `<br>⏱ Retard aux essais : <b>${R.parts.late.join(', ')}</b>` : '') +
-    (R.parts.fail.length ? `<br>❌ Recherche ratée (argent perdu) : <b class="bad">${R.parts.fail.join(', ')}</b>` : '') +
+    (R.season ? `<br>📅 ${SZ.season?.done ? `Fin de saison dans <b>${R.days} jours</b> (31 déc.), puis pré-saison` : `Prochain GP dans <b>${R.days} jours</b>`} : l’usine travaille pendant ce temps.` : '') +
+    devNews(R.parts, R.built) +
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '') +
     (R.mis ? `<br>🤝 Mission ${R.mis.sp} (${R.mis.txt.toLowerCase()}) : ${R.mis.ok ? `<b>réussie, +${R.mis.gain.toFixed(1)} M€</b>` : '<b class="bad">ratée, réputation −3</b>'}` : '') +
     (R.deals ? `<br>💼 Sponsors ponctuels : <b>+${R.deals.toFixed(1)} M€</b>` : '') +
@@ -338,7 +340,7 @@ function refreshMenu() {
   const S = SZ.season;
   $('homeYear').textContent = S ? S.year : 2027;
   const me = S ? SZ.driverStandings().findIndex(d => d.player) + 1 : 0;
-  $('careerInfo').innerHTML = !S ? 'Nouvelle carrière' : S.done ? `Saison ${S.year} terminée · P${me}` : `Saison ${S.year} · manche <b>${S.round + 1}</b>/${SZ.nRounds()} · P${me} · ${S.pts['Toi'] || 0} pts`;
+  $('careerInfo').innerHTML = !S ? 'Nouvelle carrière' : S.done ? `Saison ${S.year} terminée · P${me}` : career && SZ.preStep() < 3 ? `${TEAMS[0].name} · saison ${S.year} · pré-saison (${SZ.fmtDate(SZ.today())})` : `Saison ${S.year} · manche <b>${S.round + 1}</b>/${SZ.nRounds()} · P${me} · ${S.pts['Toi'] || 0} pts`;
   $('careerBtn').querySelector('.hgo').firstChild.textContent = S ? 'Continuer ' : 'Commencer ';
   const c = CIRCUITS.find(c => c.id === settings.circuit) || CIRCUITS[0];
   $('soloInfo').textContent = `${c.name} · ${FORMATS[settings.soloFmt]?.name || 'Sprint'}`;
@@ -362,12 +364,38 @@ function setupSeason() {
     SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); SZ.recordPerf(playerPerf()); openSeason();
   }, () => { refreshMenu(); show('menu'); });
 }
+// pré-saison : du 1er janvier au premier GP, le temps avance par étapes (présentation de la voiture, essais
+// hivernaux) ; l'usine, les chantiers et les écuries rivales travaillent pendant ce temps
+const PRE = [
+  ['🎆 Pré-saison', 'La saison commence : lance tes premières pièces au QG, construis, recrute tes chefs de pôle et, si tu veux, un nouvel équipier au mercato d’hiver.'],
+  ['🚗 Présentation de la voiture', 'La voiture est dévoilée. Relance l’usine si un pôle est libre : chaque jour compte avant le premier GP.'],
+  ['🧪 Essais hivernaux', 'Dernière ligne droite avant le premier Grand Prix.'],
+];
+const PRE_NEXT = ['présentation de la voiture', 'essais hivernaux', 'semaine du 1er GP'];
+function preSeason(S, pre) {
+  const c = SZ.roundCircuit(), D = SZ.preDates(), days = Math.round((D[pre + 1] - D[pre]) / 864e5);
+  if (def.id !== c.id) loadCircuit(c.id);
+  $('szNext').innerHTML = `<h3>${PRE[pre][0]}</h3><p>📅 Aujourd’hui : <b>${SZ.fmtDate(D[pre])} ${S.year}</b> · 1er GP le ${SZ.fmtDate(D[3])} (${c.name})</p>` +
+    `<p>${PRE[pre][1]} Les pièces demandent 20 à 56 jours ; les écuries rivales travaillent aussi pendant l’hiver.</p>` + (S.preLog || '') + boardHTML() + regHTML(S) + newsHTML(S);
+  $('szActions').innerHTML = `<button class="main" id="szPre">⏩ ${pre < 2 ? `Avancer au ${SZ.fmtDate(D[pre + 1])}` : 'Partir pour le 1er GP'}<small>${days} jours · ${PRE_NEXT[pre]}</small></button>` +
+    (career.talks?.signed === `${S.year}-pre` ? '' : '<button id="szWinter">🤝 Mercato d’hiver : recruter un pilote</button>');
+  $('szPre').onclick = () => {
+    const parts = tickDevelopment(days), built = tickInfra(days);
+    SZ.devRivals(days);
+    S.pre = pre + 1;
+    S.preLog = `<p class="prelog">🏭 <b>${days} jours d’usine</b> (${SZ.fmtDate(D[pre])} → ${SZ.fmtDate(D[pre + 1])})${devNews(parts, built) || ' : rien de livré.'}</p>`;
+    if (S.pre < 3) S.event = { id: S.pre === 1 ? 'launch' : 'tests', ctx: eventCtx({}) };   // choix à faire
+    SZ.saveSeason(); openSeason();
+  };
+  const w = $('szWinter'); if (w) w.onclick = () => { show('setup'); openMarket($('setup'), 'pre', () => openSeason(), () => openSeason()); };
+}
 function openSeason() {
   const S = SZ.season;
   if (!S) return show('menu');
   if (R) { clearRace(); R = null; }
   paused = true;
-  $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : ` · manche ${S.round + 1}/${SZ.nRounds()}`);
+  const pre = career ? SZ.preStep() : 3;   // pré-saison : 0 = 1er janvier, 1 = présentation, 2 = essais, 3 = semaine du 1er GP
+  $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : pre < 3 ? ' · pré-saison' : ` · manche ${S.round + 1}/${SZ.nRounds()}`);
   if (S.done && career) seasonReview();
   if (isFired()) {   // la direction a perdu confiance : fin de la carrière
     $('szTitle').textContent = 'Licencié !';
@@ -386,12 +414,13 @@ function openSeason() {
     $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, salaires des chefs de département, contrat moteur, contrat de ton équipier et transferts sans surcoût.</p>` + (career ? boardHTML() : '') + regHTML(S) + newsHTML(S);
     $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
     $('szNew').onclick = () => offSeason(tp);
-  } else {
+  } else if (pre < 3) preSeason(S, pre);
+  else {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
     if (career && !S.mission && !S.grid) { const ds = SZ.driverStandings(), k = ds.findIndex(d => d.player); S.mission = makeMission(ds[k ? k - 1 : 1]?.name); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (career ? boardHTML() + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (!S.round ? S.preLog || '' : '') + (career ? boardHTML() + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
     const mid = S.round === SZ.midRound() && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
@@ -557,7 +586,7 @@ function showPrerace(opts) {
 const toggleBox = () => { if (R && !R.solo) boxToggle(R, R.player); };
 $('boxBtn').onclick = toggleBox;
 $('tyreChip').onclick = () => { if (R && !R.solo) radioOrder(R, 'tyre'); };
-addEventListener('keydown', e => { if (e.code === 'KeyB') toggleBox(); if (e.code === 'KeyR') toggleRadio(); });
+addEventListener('keydown', e => { if (e.target?.tagName === 'INPUT') return; if (e.code === 'KeyB') toggleBox(); if (e.code === 'KeyR') toggleRadio(); });
 function toggleRadio() { if (!R || R.solo) return; $('radioPanel').classList.toggle('hidden'); radioLabels(); }
 function radioLabels() {
   if (!R) return;
