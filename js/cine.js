@@ -8,6 +8,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const w = new THREE.Vector3();
 let C = null;   // cinématique en cours
 export const cineKind = () => C?.kind;
+export const cineT = () => C ? (performance.now() - C.t0) / 1000 : 0;
 
 // point de la piste i, décalé latéralement de lat (m, + = à droite) et en hauteur de h (m)
 function at(track, i, lat, h, out) {
@@ -43,6 +44,11 @@ export function startOutro(R, info, onEnd) {
   open('outro', info, info.confetti ? confetti() : '');
 }
 
+// scène de l'atelier 3D (caméra gérée par showroom.js, plans dans config/scenes.js) : arrivée au QG…
+export function startScene(kind, info, onEnd) {
+  C = { kind, t0: performance.now(), onEnd };
+  open(kind, info);
+}
 // place la caméra pendant une cinématique ; false s'il n'y en a pas (temps réel : reste calé sur les animations CSS)
 export function cineCamera(camera) {
   if (!C) return false;

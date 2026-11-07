@@ -1,14 +1,16 @@
 // Montage de l'écurie en début de saison : niveau de l'écurie (budget), 2e pilote, motoriste.
 // Le choix est appliqué à l'Écurie Martel (TEAMS[0]) : performance de la voiture et équipier.
-import { TEAMS } from './data.js';
+import { TEAMS, PLAYER, DIFFS } from './data.js';
 import { team, saveTeam } from './team.js';
 import { mateGrowth } from './infra.js';
 import { driverCard, engineCard, tierCard, steps, rating } from './ui.js';
 import { openNego, preview, previewHTML, fmtM, ans, ROLES } from './nego.js';
-import { season } from './season.js';
+import { season, seasonOpts } from './season.js';
 import { applyTheme, PALETTE, colorOf, clash, DEFAULT_COLORS } from './theme.js';
 import { SHAPES, logoSVG, autoAbbr, cleanAbbr } from './logo.js';
-import { frame } from './showroom.js';
+import { frame, focus } from './showroom.js';
+import { SKINS, HAIRS, HAIR_COLS, HELMETS, DEFAULT_LOOK } from './pilot3d.js';
+import NATIONS from './config/nations.js';
 
 export const TIERS = [
   { id: 'new', name: 'Nouvelle écurie', desc: 'Petit budget, voiture en retrait, ni pièces ni bâtiments : tout est à construire.', budget: 30, perf: 0.955, rep: 30, moral: 70 },
@@ -49,12 +51,18 @@ export const cleanName = s => String(s || '').replace(/[<>&"]/g, '').replace(/\s
 const taken = n => TEAMS.slice(1).some(t => t.name.toLowerCase() === cleanName(n).toLowerCase());
 const abbrTaken = a => TEAMS.slice(1).some(t => autoAbbr(t.name) === a);
 export const DEFAULT_LOGO = { shape: 0, p: 'rouge', s: 'blanc' };
+export const helmetHex = h => h && { m: h.m, p: colorOf(h.p).hex, s: colorOf(h.s).hex };
+export const natOf = id => NATIONS.find(n => n.id === id);
 export function applyCareer() {
   const t = TEAMS[0];
   t.name = cleanName(career?.name) || BASE.name;
   // identité et couleurs (anciennes sauvegardes : rouge et blanc, abréviation tirée du nom)
   t.abbr = career?.abbr || autoAbbr(t.name);
   t.logo = career?.logo || DEFAULT_LOGO;
+  // pilote du joueur et réglages de carrière (anciennes sauvegardes : « Toi », 22 courses)
+  PLAYER.name = career?.player?.name || 'Toi';
+  t.look = career?.player?.look; t.helmet = career?.player ? helmetHex(career.player.helmet) : null;
+  seasonOpts.races = career?.opts?.races || 22;
   applyTheme(career?.colors || null);
   TEAMS.forEach((tm, k) => { if (k) tm.drivers = (career?.rosters?.[tm.name] || BASE.rosters[k]).map(d => ({ ...d })); });
   if (!career) { t.perf = BASE.perf; t.drivers[1] = { ...BASE.rosters[0][1] }; return; }
@@ -95,11 +103,23 @@ export function growMate() {
 }
 
 // ---------- écran de montage (5 étapes : identité, couleurs, niveau, équipier, motoriste) ----------
-export function openSetup(el, onDone, onCancel) {
+// aides : { abs, tc, line } des réglages du jeu, proposées à l'étape Carrière
+export function openSetup(el, onDone, onCancel, aids = {}) {
   const c0 = career?.colors || DEFAULT_COLORS;
-  const pick = { tier: null, mate: null, engine: null, k: null, cost: 0, name: TEAMS[0].name, abbr: '', logo: { ...(career?.logo || DEFAULT_LOGO) }, colors: { ...c0 } };
+  const pick = { tier: null, mate: null, engine: null, k: null, cost: 0, name: TEAMS[0].name, abbr: '', logo: { ...(career?.logo || DEFAULT_LOGO) }, colors: { ...c0 },
+    opts: { races: 22, diff: 'normal', abs: aids.abs ?? true, tc: aids.tc ?? true, line: aids.line || 0 },
+    player: { name: '', nat: 'fr', num: 7, look: { ...DEFAULT_LOOK }, helmet: { m: 1, p: 'jaune', s: 'carbone' } } };
   const year = season ? season.year + 1 : 2027, talks = {};
+  const STEPS = [
+    ['carr', 'Carrière', 'Carrière', 'Nombre de courses, niveau des pilotes IA, aides au pilotage et point de départ de ton écurie.'],
+    ['pilote', 'Pilote', 'Pilote', 'Tu es propriétaire et pilote : ton nom, ta nationalité, ton numéro, ton allure et ton casque.'],
+    ['ident', 'Identité', 'Identité', 'Le nom, l’abréviation de 3 lettres (classements, chronos) et le logo de ton écurie.'],
+    ['cols', 'Couleurs', 'Couleurs', 'Couleur primaire et secondaire : livrée, combinaison, QG et menus. Une paire déjà portée par une écurie rivale n’est pas proposée.'],
+    ['moteur', 'Moteur', 'Motoriste', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse. Prix payé chaque saison.'],
+    ['equip', 'Équipier', 'Équipier', 'Touche un pilote pour négocier avec son agent : salaire, durée, statut, prime. Les meilleurs boudent les petites écuries.'],
+  ];
   let step = 0;
+  const cur = () => STEPS[step][0];
   const $ = s => el.querySelector(s);
   const left = () => {
     let b = pick.tier ? TIERS.find(t => t.id === pick.tier).budget : 0;
@@ -109,56 +129,101 @@ export function openSetup(el, onDone, onCancel) {
   };
   const abbr = () => cleanAbbr(pick.abbr) || autoAbbr(pick.name);
   const idOk = () => !taken(pick.name) && abbr().length === 3 && !abbrTaken(abbr());
+  const pname = () => cleanName(pick.player.name);
   function render() {
-    el.classList.toggle('room', step === 1);
-    if (step === 1) innerHeight > innerWidth ? frame(0.04, 0.96, 0.04, 0.36) : frame(0.52, 0.99, 0.12, 0.8);
-    $('#suTitle').textContent = ['Identité', 'Couleurs', 'Ton écurie', 'Ton équipier', 'Ton motoriste'][step];
-    steps($('#suSteps'), ['Identité', 'Couleurs', 'Écurie', 'Pilote', 'Moteur'], step);
-    $('#suHint').textContent = ['Le nom, l’abréviation de 3 lettres (classements, chronos) et le logo de ton écurie.', 'Couleur primaire et secondaire : livrée, casque, QG et menus. Une paire déjà portée par une écurie rivale n’est pas proposée.', 'Choisis ton point de départ : plus de budget, mais plus de pression.', 'Touche un pilote pour négocier avec son agent : salaire, durée, statut, prime. Les meilleurs boudent les petites écuries.', 'Le moteur fixe la vitesse de pointe ; la fiabilité évite la casse.'][step];
+    const c = cur(), room = c === 'pilote' || c === 'cols';
+    el.classList.toggle('room', room);
+    if (room) { focus(c === 'pilote' ? 'pilot' : 'car'); innerHeight > innerWidth ? frame(0.04, 0.96, 0.04, 0.36) : frame(0.52, 0.99, 0.08, 0.84); }
+    $('#suTitle').textContent = STEPS[step][2];
+    steps($('#suSteps'), STEPS.map(x => x[1]), step);
+    $('#suHint').textContent = STEPS[step][3];
     $('#suBudget').innerHTML = pick.tier ? `<small>Budget restant</small><b>${left().toFixed(1)} M€</b>` : '<small>Budget</small><b>—</b>';
     let h = '';
-    if (step === 0) h = identityHTML();
-    if (step === 1) h = colorsHTML();
-    if (step === 2) h = TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('');
-    if (step === 3) h = MARKET.map((d, k) => {
+    if (c === 'carr') h = careerHTML();
+    if (c === 'pilote') h = pilotHTML();
+    if (c === 'ident') h = identityHTML();
+    if (c === 'cols') h = colorsHTML();
+    if (c === 'equip') h = MARKET.map((d, k) => {
       if (pick.mate === d) return driverCard(d, { k, from: d.from, pick: true, price: `✍️ ${ans(pick.k.years)} · ${fmtM(pick.k.sal)} M€ / saison${pick.k.role !== 'eq' ? ' · ' + ROLES[pick.k.role] : ''}` });
       const v = preview(subOf(d), nctx());
       return driverCard(d, { k, from: d.from, disabled: v.off, price: (v.sal < 0 ? `apporte ${fmtM(-v.sal)} M€` : v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + previewHTML(v) });
     }).join('');
-    if (step === 4) h = ENGINES.map(e => {
-      const can = e.price <= left() + (pick.engine ? ENGINES.find(x => x.id === pick.engine).price : 0);
+    if (c === 'moteur') h = ENGINES.map(e => {
+      const can = e.price <= left() + (pick.engine ? ENGINES.find(x => x.id === pick.engine).price : 0) + (pick.mate ? pick.cost : 0);
       return engineCard(e, { pick: pick.engine === e.id, disabled: !can });
     }).join('');
     $('#suList').innerHTML = h;
-    $('#suList').className = 'clist ' + ['ident', 'cols', 'tiers', 'drvs', 'engs'][step];
-    if (step === 0) bindIdentity();
-    if (step === 1) bindColors();
-    el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
+    $('#suList').className = 'clist ' + { carr: 'ident', pilote: 'ident', ident: 'ident', cols: 'cols', moteur: 'engs', equip: 'drvs' }[c];
+    if (c === 'carr') bindCareer();
+    if (c === 'pilote') bindPilot();
+    if (c === 'ident') bindIdentity();
+    if (c === 'cols') bindColors();
+    if (c === 'moteur' || c === 'equip') el.querySelectorAll('#suList [data-v]').forEach(b => b.onclick = () => {
       const v = b.dataset.v;
-      if (step === 2) { pick.tier = v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; }
-      if (step === 3) {
+      if (c === 'equip') {
         const d = MARKET[+v];
         if (pick.mate === d) return;
         return openNego(subOf(d), nctx(), { done: k => { pick.mate = d; pick.k = k; pick.cost = Math.round((k.sal + k.bonus) * 10) / 10; render(); }, close: render });
       }
-      if (step === 4) pick.engine = v;
+      if (c === 'moteur') { pick.engine = v; if (left() < 0) { pick.mate = null; pick.k = null; pick.cost = 0; } }
       render();
     });
-    const ok = [idOk(), !clash(pick.colors.p, pick.colors.s), pick.tier, pick.mate, pick.engine][step];
+    const ok = { carr: !!pick.tier, pilote: pname().length >= 2, ident: idOk(), cols: !clash(pick.colors.p, pick.colors.s), moteur: !!pick.engine, equip: !!pick.mate }[c];
     $('#suNext').disabled = !ok;
-    $('#suNext').textContent = step < 4 ? 'Suivant →' : 'Lancer la saison';
+    $('#suNext').textContent = step < STEPS.length - 1 ? 'Suivant →' : 'Arriver au QG →';
     $('#suBack').textContent = step ? '← Retour' : 'Annuler';
   }
   $('#suNext').onclick = () => {
-    if (step < 4) { step++; if (step === 1) preview3D(); return render(); }
+    if (step < STEPS.length - 1) { step++; if (cur() === 'pilote' || cur() === 'cols') preview3D(); return render(); }
     const tier = TIERS.find(t => t.id === pick.tier);
-    el.classList.remove('room');
-    career = { v: 2, name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, colors: { ...pick.colors }, tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
+    el.classList.remove('room'); focus('car');
+    const P = pick.player;
+    career = { v: 2, name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, colors: { ...pick.colors }, opts: { ...pick.opts },
+      player: { name: pname(), nat: P.nat, num: P.num, look: { ...P.look }, helmet: { ...P.helmet } },
+      tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
     saveCareer(); applyCareer();
     Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam();
     onDone();
   };
-  $('#suBack').onclick = () => { if (step) { step--; render(); } else { el.classList.remove('room'); applyCareer(); onCancel(); } };
+  $('#suBack').onclick = () => { if (step) { step--; if (cur() === 'pilote' || cur() === 'cols') preview3D(); render(); } else { el.classList.remove('room'); focus('car'); applyCareer(); onCancel(); } };
+  const seg = (key, list, val) => `<div class="segs">${list.map(([v, t]) => `<button class="${val === v ? 'sel' : ''}" data-${key}="${v}">${t}</button>`).join('')}</div>`;
+  // ---- étape Carrière : nombre de courses, difficulté, aides, niveau de départ ----
+  function careerHTML() {
+    const O = pick.opts;
+    return `<div class="crow"><div class="idsec"><h4>Nombre de courses</h4>${seg('races', [[12, '12 GP'], [16, '16 GP'], [22, '22 GP']], O.races)}</div>
+      <div class="idsec"><h4>Pilotes IA</h4>${seg('diff', Object.entries(DIFFS).map(([k, d]) => [k, d.name]), O.diff)}</div></div>
+      <div class="idsec"><h4>Aides au pilotage</h4><div class="segs"><button class="${O.abs ? 'sel' : ''}" data-aid="abs">ABS ${O.abs ? '✓' : '✗'}</button><button class="${O.tc ? 'sel' : ''}" data-aid="tc">Antipatinage ${O.tc ? '✓' : '✗'}</button><button class="${O.line ? 'sel' : ''}" data-aid="line">Trajectoire : ${['aucune', 'freinage', 'freinage + direction'][O.line]}</button></div></div>
+      <div class="idsec"><h4>Niveau de départ</h4><div class="clist tiers">${TIERS.map((t, k) => tierCard(t, k, pick.tier === t.id)).join('')}</div></div>`;
+  }
+  function bindCareer() {
+    const O = pick.opts;
+    el.querySelectorAll('[data-races]').forEach(b => b.onclick = () => { O.races = +b.dataset.races; render(); });
+    el.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { O.diff = b.dataset.diff; render(); });
+    el.querySelectorAll('[data-aid]').forEach(b => b.onclick = () => { const a = b.dataset.aid; if (a === 'line') O.line = (O.line + 1) % 3; else O[a] = !O[a]; render(); });
+    el.querySelectorAll('.tiers [data-v]').forEach(b => b.onclick = () => { pick.tier = b.dataset.v; pick.mate = null; pick.k = null; pick.cost = 0; pick.engine = null; render(); });
+  }
+  // ---- étape Pilote : nom, nationalité, numéro, apparence (3D), casque ----
+  const dots = (key, list, val, title) => `<div class="sws dots">${list.map((c, k) => `<button class="sw ${val === k ? 'pick' : ''}" data-${key}="${k}" style="--sw:#${c.toString(16).padStart(6, '0')}" aria-label="${title} ${k + 1}"><i></i></button>`).join('')}</div>`;
+  function pilotHTML() {
+    const P = pick.player, L = P.look, H = P.helmet;
+    return `<div class="crow"><label class="tname"><span>Nom du pilote</span><input id="suPName" maxlength="24" autocomplete="off" spellcheck="false" placeholder="ex. Alex Martin" value="${pname()}"></label>
+      <label class="tname num"><span>N°</span><input id="suNum" type="number" min="1" max="99" inputmode="numeric" value="${P.num}"></label></div>
+      <label class="tname"><span>Nationalité</span><select id="suNat">${NATIONS.map(n => `<option value="${n.id}" ${n.id === P.nat ? 'selected' : ''}>${n.flag} ${n.name}</option>`).join('')}</select></label>
+      <div class="crow"><div class="idsec"><h4>Teint</h4>${dots('skin', SKINS, L.skin, 'Teint')}</div><div class="idsec"><h4>Cheveux</h4>${dots('hc', HAIR_COLS, L.hc, 'Couleur')}</div></div>
+      <div class="idsec"><h4>Coiffure</h4>${seg('hair', HAIRS.map((n, k) => [k, n]), L.hair)}${seg('beard', [[0, 'Rasé de près'], [1, 'Barbe']], L.beard)}</div>
+      <div class="idsec"><h4>Casque · motif</h4>${seg('hm', HELMETS.map((n, k) => [k, n]), H.m)}</div>
+      <div class="idsec"><h4>Casque · couleurs</h4><div class="sws">${swatches('hp', H.p)}</div><div class="sws">${swatches('hs', H.s, id => id === H.p ? 'Même couleur' : '')}</div></div>`;
+  }
+  function bindPilot() {
+    const P = pick.player, set = () => { preview3D(); render(); };
+    const nm = $('#suPName'); nm.oninput = () => { P.name = nm.value; $('#suNext').disabled = pname().length < 2; };
+    const nu = $('#suNum'); nu.onchange = () => { P.num = Math.max(1, Math.min(99, Math.round(+nu.value) || 7)); nu.value = P.num; };
+    $('#suNat').onchange = e => { P.nat = e.target.value; };
+    for (const k of ['skin', 'hc', 'hair', 'beard']) el.querySelectorAll(`[data-${k}]`).forEach(b => b.onclick = () => { P.look[k] = +b.dataset[k]; set(); });
+    el.querySelectorAll('[data-hm]').forEach(b => b.onclick = () => { P.helmet.m = +b.dataset.hm; set(); });
+    el.querySelectorAll('[data-hp]').forEach(b => b.onclick = () => { P.helmet.p = b.dataset.hp; if (P.helmet.s === P.helmet.p) P.helmet.s = PALETTE.find(c => c.id !== P.helmet.p).id; set(); });
+    el.querySelectorAll('[data-hs]').forEach(b => b.onclick = () => { P.helmet.s = b.dataset.hs; set(); });
+  }
   // ---- étape Identité : nom, abréviation, logo (forme + 2 couleurs) ----
   const swatches = (cls, cur, dis = () => '') => PALETTE.map(c => { const why = dis(c.id); return `<button class="sw ${cur === c.id ? 'pick' : ''}" data-${cls}="${c.id}" style="--sw:#${c.hex.toString(16).padStart(6, '0')}" ${why ? `disabled title="${why}"` : ''} aria-label="${c.name}"><i></i><small>${c.name}</small></button>`; }).join('');
   function identityHTML() {
@@ -200,7 +265,7 @@ export function openSetup(el, onDone, onCancel) {
     el.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => { pick.colors.s = b.dataset.cs; set(); });
   }
   // aperçu dans l'atelier 3D : nom, abréviation et logo choisis (rétablis par applyCareer si on annule)
-  function preview3D() { Object.assign(TEAMS[0], { name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo } }); applyTheme(pick.colors); }
+  function preview3D() { Object.assign(TEAMS[0], { name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, look: { ...pick.player.look }, helmet: helmetHex(pick.player.helmet) }); applyTheme(pick.colors); }
   applyTheme(pick.colors);
   // négociation : réputation et place selon le niveau choisi ; le budget restant hors pilote
   const subOf = d => ({ kind: 'drv', key: d.name, name: d.name, from: d.from, r: rating(d), base: salary(d), sponsor: d.sponsor, color: /Formule B/.test(d.from) ? '#22d3c5' : /Vétéran/.test(d.from) ? '#b07cff' : '#8d96a3' });

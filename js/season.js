@@ -1,6 +1,6 @@
 // Saison : calendrier des 10 circuits, qualifications, points, classements pilotes et écuries,
 // progression des écuries rivales, sauvegarde locale (clé gpm-season).
-import { TEAMS, CIRCUITS } from './data.js';
+import { TEAMS, CIRCUITS, DIFF, dname } from './data.js';
 import { SPEC } from './car.js';
 import { DS } from './track.js';
 
@@ -67,11 +67,19 @@ export let season = load();
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
 export function saveSeason() { try { localStorage.setItem(KEY, JSON.stringify(season)); } catch {} }
 
+// nombre de courses choisi à la création (12, 16 ou 22) : manches réparties sur l'année, mêmes dates
+export const seasonOpts = { races: 22 };
+function pickRaces(n) {
+  if (!n || n >= CALENDAR.length) return { cal: CALENDAR.slice(), gaps: GAPS.slice() };
+  const at = [0]; for (const g of GAPS) at.push(at[at.length - 1] + g);
+  const idx = Array.from({ length: n }, (_, k) => Math.round(k * (CALENDAR.length - 1) / (n - 1)));
+  return { cal: idx.map(i => CALENDAR[i]), gaps: idx.slice(1).map((i, k) => at[i] - at[idx[k]]) };
+}
 export function newSeason(year, carry = false, nReg = 0) {
   // carry : les écuries rivales gardent la moitié de leurs progrès ; un nouveau règlement les
   // fait reculer et rebat les cartes (certaines écuries comprennent mieux les nouvelles règles)
   const dev = carry && season ? Object.fromEntries(TEAMS.slice(1).map(t => [t.name, (season.dev[t.name] || 0) * 0.5 - nReg * 0.004 + (Math.random() - 0.5) * 0.008 * nReg])) : {};
-  season = { year: year || (season ? season.year + 1 : 2027), cal: CALENDAR.slice(), gaps: GAPS.slice(), round: 0, pts: {}, results: [], dev, hist: [], grid: null, quali: null, done: false };
+  season = { year: year || (season ? season.year + 1 : 2027), ...pickRaces(seasonOpts.races), round: 0, pts: {}, results: [], dev, hist: [], grid: null, quali: null, done: false };
   for (const d of DRIVERS()) season.pts[d.name] = 0;
   saveSeason();
   return season;
@@ -126,7 +134,7 @@ export function qualifying(track, playerTime, wet = false, prev = null) {   // p
   for (const t of TEAMS) for (const d of t.drivers) {
     if (d.player) { rows.push({ name: d.name, team: t.name, color: t.color, player: true, time: playerTime }); continue; }
     const perf = t.perf + (season?.dev[t.name] || 0);
-    const time = prev?.find(r => r.name === d.name)?.time ?? lapEstimate(track, d.skill, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985 * (wet ? 1.12 : 1);
+    const time = prev?.find(r => r.name === d.name)?.time ?? lapEstimate(track, d.skill * DIFF.k, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985 * (wet ? 1.12 : 1);
     rows.push({ name: d.name, team: t.name, color: t.color, time });
   }
   rows.sort((a, b) => (a.time || 1e9) - (b.time || 1e9));
@@ -185,10 +193,10 @@ export function calendarHTML() {
 export function standingsHTML(kind) {
   if (kind === 'perf') return perfChartHTML();
   const list = kind === 'teams' ? teamStandings() : driverStandings();
-  return `<table class="stand">${list.map((r, k) => `<tr class="${r.player ? 'me' : ''}"><td>${k + 1}</td><td><i style="background:${hex(r.color)}"></i>${r.name}${kind === 'teams' ? '' : `<small>${r.team}</small>`}</td><td>${r.pts}</td></tr>`).join('')}</table>`;
+  return `<table class="stand">${list.map((r, k) => `<tr class="${r.player ? 'me' : ''}"><td>${k + 1}</td><td><i style="background:${hex(r.color)}"></i>${kind === 'teams' ? r.name : dname(r.name)}${kind === 'teams' ? '' : `<small>${r.team}</small>`}</td><td>${r.pts}</td></tr>`).join('')}</table>`;
 }
 export function qualiHTML(rows) {
   const pole = rows[0].time;
-  return `<table>${rows.map((r, k) => `<tr class="${r.player ? 'me' : ''}"><td>${k + 1}</td><td><i style="background:${hex(r.color)}"></i>${r.name}<small>${r.team}</small></td><td>${r.time ? (k ? '+' + (r.time - pole).toFixed(3) : fmtT(r.time)) : 'sans temps'}</td></tr>`).join('')}</table>`;
+  return `<table>${rows.map((r, k) => `<tr class="${r.player ? 'me' : ''}"><td>${k + 1}</td><td><i style="background:${hex(r.color)}"></i>${dname(r.name)}<small>${r.team}</small></td><td>${r.time ? (k ? '+' + (r.time - pole).toFixed(3) : fmtT(r.time)) : 'sans temps'}</td></tr>`).join('')}</table>`;
 }
 const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); };

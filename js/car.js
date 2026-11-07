@@ -2,6 +2,7 @@
 import * as THREE from '../lib/three.module.min.js';
 import { locate } from './track.js';
 import { buildCarMesh } from './carmodel.js';
+import { DIFF } from './data.js';
 
 // Unités : mètres, secondes. vtop ≈ 335 km/h.
 export const SPEC = {
@@ -12,14 +13,14 @@ export const SPEC = {
 export class Car {
   constructor(team, driver, perf) {
     this.team = team; this.name = driver.name; this.player = !!driver.player;
-    this.skill = driver.skill || 1; this.perf = perf;
+    this.skill = (driver.skill || 1) * (driver.player ? 1 : DIFF.k); this.perf = perf;
     this.x = 0; this.y = 0; this.z = 0; this.heading = 0; this.pitch = 0;
     this.v = 0; this.idx = 0; this.lat = 0; this.beta = 0; this.ax = 0; this.ay = 0; this.spinT = 0;
     this.steer = 0; this.throttle = 0; this.brake = 0;
     this.lap = 0; this.lapStart = 0; this.lastLap = 0; this.bestLap = 0; this.finished = false; this.finishTime = 0;
     this.slipstream = 0; this.offTrack = false;
     this.lane = 0; this.laneBias = 0; this.passSide = 0; this.passTimer = 0;
-    this.mesh = buildCarMesh(team.color, team.accent, driver.player ? 0xffc21a : (driver.helmet || team.accent));
+    this.mesh = buildCarMesh(team.color, team.accent, driver.player ? (team.helmet || 0xffc21a) : (driver.helmet || team.accent));
   }
   get gear() {
     if (this.v < -0.5) return 'R';

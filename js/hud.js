@@ -1,5 +1,6 @@
 // HUD en DOM : position, tour, chronos, vitesse, rapport, aspiration, feux, mini-carte, tour des écarts.
 import { DS } from './track.js';
+import { dname } from './data.js';
 import { SPEC } from './car.js';
 import { TYRES, MODES, fuelLaps, lifeBand } from './strategy.js';
 import { updateQuali, qualiHud } from './qsession.js';
@@ -79,7 +80,7 @@ export function updateHud(R, fps) {
       const d = ((c.lap * R.track.N + c.idx) - (p.lap * R.track.N + p.idx)) * DS;
       gap = (d > 0 ? '+' : '−') + (Math.abs(d) / Math.max(30, Math.abs(p.v) || 30)).toFixed(1);
     }
-    h += `<div class="${c === p ? 'me' : ''}"><b>${k + 1}</b><i style="background:#${c.team.color.toString(16).padStart(6, '0')}"></i>${c.name}<span>${gap}</span></div>`;
+    h += `<div class="${c === p ? 'me' : ''}"><b>${k + 1}</b><i style="background:#${c.team.color.toString(16).padStart(6, '0')}"></i>${dname(c.name)}<span>${gap}</span></div>`;
   }
   html('tower', h);
   // mini-carte

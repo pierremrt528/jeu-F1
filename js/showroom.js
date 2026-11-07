@@ -6,6 +6,9 @@ import { buildCarMesh } from './carmodel.js';
 import { TEAMS } from './data.js';
 import { onTheme } from './theme.js';
 import { logoImage } from './logo.js';
+import { buildPilot } from './pilot3d.js';
+import { cineKind, cineT, end as endCine } from './cine.js';
+import SCENES from './config/scenes.js';
 
 let W = null;
 const hex = c => '#' + c.toString(16).padStart(6, '0');
@@ -109,17 +112,26 @@ function build(renderer) {
   const car = buildCarMesh(t0.color, t0.accent, t0.helmet || 0xffc21a); spin.add(car);
   const mirror = buildCarMesh(t0.color, t0.accent, t0.helmet || 0xffc21a);
   mirror.remove(mirror.children[2]); mirror.scale.y = -1; spin.add(mirror);
+  // le pilote, debout à côté du plateau, casque à la main (et son reflet)
+  const pilot = buildPilot(t0.look, { p: t0.color, s: t0.accent }, t0.helmet || { m: 0, p: 0xffc21a, s: 0xffc21a });
+  pilot.position.set(PILOT.x, 0, PILOT.z); pilot.rotation.y = -0.45; scene.add(pilot);
+  const pm2 = pilot.clone(); pm2.scale.y = -1; scene.add(pm2);
 
   // mur du fond
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(26, 26, 16, 48, 1, true, Math.PI * 0.55, Math.PI * 0.9), new THREE.MeshBasicMaterial({ map: wallTex(t0.name, acc, t0.logo, t0.abbr), side: THREE.BackSide }));
   wall.position.y = 6.5; scene.add(wall);
 
-  const view = { d: 14, cx: 0.7, cy: 0.5, k: 0 };
+  const view = { d: 14, cx: 0.7, cy: 0.5, k: 0, x: 0, y: 0.55, z: 0 };
   return { scene, camera, spin, view, rot: rot0 };
 }
 
 // zone de l'écran (fractions 0-1) où la voiture doit apparaître ; transition douce entre deux cadrages
 let box = [0.45, 1, 0.1, 0.9];
+// cadrage : la voiture (sphère de 3,3 m) ou le pilote
+const PILOT = { x: 3.9, z: 2.3 };
+const FOCUS = { car: { x: 0, y: 0.55, z: 0, r: 3.3 }, pilot: { x: PILOT.x - 0.1, y: 1.02, z: PILOT.z, r: 1.0 } };
+let focusOn = FOCUS.car;
+export function focus(k) { focusOn = FOCUS[k] || FOCUS.car; }
 // couleurs, nom ou logo changés : la scène est reconstruite au prochain affichage (même angle du plateau)
 let rot0 = 0.6;
 function refreshRoom() {
@@ -139,16 +151,36 @@ export function renderRoom(renderer, dt) {
   if (camera.aspect !== aspect) camera.aspect = aspect;
   // distance pour que la voiture (sphère de 3,3 m) tienne dans la zone demandée
   const [x0, x1, y0, y1] = box;
-  const fit = Math.min(y1 - y0, (x1 - x0) * aspect), dist = 3.3 / (fit * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  W.rot += dt * 0.2; spin.rotation.y = W.rot;
+  if (cineKind() === 'qg') return sceneCam(renderer, v);
+  const F = focusOn;
+  const fit = Math.min(y1 - y0, (x1 - x0) * aspect), dist = F.r / (fit * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   const k = view.k ? 1 - Math.exp(-dt * 4) : 1; view.k = 1;
   view.d += (dist - view.d) * k; view.cx += ((x0 + x1) / 2 - view.cx) * k; view.cy += ((y0 + y1) / 2 - view.cy) * k;
+  view.x += (F.x - view.x) * k; view.y += (F.y - view.y) * k; view.z += (F.z - view.z) * k;
   const el = THREE.MathUtils.degToRad(11);
-  camera.position.set(0, 0.55 + Math.sin(el) * view.d, Math.cos(el) * view.d);
-  camera.lookAt(0, 0.55, 0);
+  camera.position.set(view.x, view.y + Math.sin(el) * view.d, view.z + Math.cos(el) * view.d);
+  camera.lookAt(view.x, view.y, view.z);
   camera.far = view.d + 60;
   scene.fog.near = Math.max(30, view.d + 10); scene.fog.far = Math.max(75, view.d + 55);   // petite zone = caméra plus loin : le brouillard recule aussi
   camera.setViewOffset(v.x, v.y, (0.5 - view.cx) * v.x, (0.5 - view.cy) * v.y, v.x, v.y);
   camera.updateProjectionMatrix();
-  W.rot += dt * 0.2; spin.rotation.y = W.rot;
   renderer.render(scene, camera);
+}
+// cinématique de l'atelier (config/scenes.js) : caméra entre des plans clés, lumière qui monte (exposition)
+const ease = t => t * t * (3 - 2 * t);
+function sceneCam(renderer, v) {
+  const S = SCENES.qg, t = cineT(), K = S.keys, { camera, scene } = W;
+  if (t >= S.dur) { endCine(true); return; }
+  let i = 0; while (i < K.length - 2 && t >= K[i + 1].t) i++;
+  const a = K[i], b = K[i + 1], u = ease(Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t))));
+  const L = (p, q) => p + (q - p) * u;
+  camera.position.set(L(a.pos[0], b.pos[0]), L(a.pos[1], b.pos[1]), L(a.pos[2], b.pos[2]));
+  camera.lookAt(L(a.look[0], b.look[0]), L(a.look[1], b.look[1]), L(a.look[2], b.look[2]));
+  camera.far = 120; scene.fog.near = 30; scene.fog.far = 90;
+  camera.clearViewOffset(); camera.aspect = v.x / Math.max(1, v.y); camera.updateProjectionMatrix();
+  const ex = renderer.toneMappingExposure; renderer.toneMappingExposure = ex * L(a.l, b.l);
+  renderer.render(scene, camera);
+  renderer.toneMappingExposure = ex;
+  W.view.k = 0;   // retour au cadrage normal sans glissement
 }

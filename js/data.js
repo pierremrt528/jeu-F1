@@ -166,3 +166,10 @@ export const CIRCUITS = [
     elev: [[0, 0], [0.35, 10], [0.6, 4], [0.8, 12]],
   },
 ];
+
+// Pilote du joueur : identifiant interne « Toi » (points, grille) et nom affiché choisi à la création
+export const PLAYER = { name: 'Toi' };
+export const dname = n => n === 'Toi' ? PLAYER.name : n;
+// Difficulté des IA (carrière) : multiplie le niveau des pilotes IA
+export const DIFFS = { facile: { name: 'Facile', k: 0.975 }, normal: { name: 'Normal', k: 1 }, difficile: { name: 'Difficile', k: 1.01 }, expert: { name: 'Expert', k: 1.02 } };
+export const DIFF = { k: 1 };

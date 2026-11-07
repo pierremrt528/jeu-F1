@@ -2,11 +2,12 @@
 // au fil du tour du joueur : amélioration en vert, nouvelle pole provisoire en violet), secteurs S1/S2/S3 (violet =
 // meilleur de la séance, vert = record perso, jaune = plus lent), écart en direct avec la pole provisoire (profil de
 // vitesse de référence calé sur son temps) et place estimée. Records perso et temps des IA gardés si on refait le tour.
+import { dname } from './data.js';
 import { DS } from './track.js';
 import { SPEC } from './car.js';
 
 const hex = c => '#' + c.toString(16).padStart(6, '0');
-const code = n => n === 'Toi' ? 'TOI' : n.split(' ').pop().normalize('NFD').replace(/[̀-ͯ]/g, '').slice(0, 3).toUpperCase();
+const code = n => (n = dname(n)) === 'Toi' ? 'TOI' : n.split(' ').pop().normalize('NFD').replace(/[̀-ͯ]/g, '').slice(0, 3).toUpperCase();
 const sec = t => t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}` : t.toFixed(3);
 const lap = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, '0')}`;
 const sgn = (d, n = 3) => (d < 0 ? '−' : '+') + Math.abs(d).toFixed(n);
@@ -78,7 +79,7 @@ export function qualiHud(R) {
   const delta = run && ref && p.idx > R.track.N * 0.03 ? cur - q.cum[p.idx] * ref / q.cum[R.track.N] : null;
   // tour des temps : IA (temps révélé ou provisoire) + joueur (meilleur tour de la séance, ou estimation en direct s'il est en train de l'améliorer)
   const best0 = q.pb0.lap, live = delta != null && (!best0 || ref + delta < best0) ? ref + delta : 0;
-  const me = { code: 'TOI', c: hex(p.team.color), me: true, t: p.finished ? Math.min(p.lastLap, best0 || 1e9) : live || best0, live: !!live };
+  const me = { code: code('Toi'), c: hex(p.team.color), me: true, t: p.finished ? Math.min(p.lastLap, best0 || 1e9) : live || best0, live: !!live };
   const rows = q.ai.map(a => ({ code: a.code, c: a.c, t: shownTime(a), fl: a.shown && R.t - a.flashT < 4 ? a.flash : '' })).concat(me)
     .sort((a, b) => (a.t || 1e9) - (b.t || 1e9));
   const t1 = rows[0].t, pos = rows.indexOf(me) + 1;

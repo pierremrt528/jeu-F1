@@ -2,6 +2,7 @@
 // ailerons à profils d'aile, halo tubulaire, suspensions, livrée par sommet. Tout est fusionné en une géométrie
 // à couleurs par sommet ; roues (pneus arrondis + flancs/jantes texturés) ; ombre douce. 3 appels de rendu par voiture.
 import * as THREE from '../lib/three.module.min.js';
+import { helmetFn } from './pilot3d.js';
 import * as TX from './textures.js';
 import { merge } from './scenery.js';
 
@@ -176,7 +177,9 @@ export function buildCarMesh(color, accent, helmet) {
   }
   // pilote : casque, visière, volant
   {
-    const h = new THREE.SphereGeometry(0.15, 12, 8); h.scale(1, 1.05, 1.12); add(h, helmet, 0, 0.84, 0.3);
+    // casque : couleur unie, ou { m (motif), p, s } pour le casque dessiné du joueur
+    const hm = typeof helmet === 'object' && helmet;
+    const h = new THREE.SphereGeometry(0.15, hm ? 18 : 12, hm ? 12 : 8); h.scale(1, 1.05, 1.12); add(h, hm ? helmetFn(hm, 0, 0.84, 0.3, 0.15) : helmet, 0, 0.84, 0.3);
     const v = new THREE.SphereGeometry(0.153, 10, 3, Math.PI / 2 - 0.9, 1.8, 1.25, 0.42); v.scale(1, 1.05, 1.12); add(v, 0x0d1013, 0, 0.84, 0.3);
     add(new THREE.BoxGeometry(0.25, 0.1, 0.03), carbon, 0, 0.74, 0.8, 0.25);
     add(new THREE.BoxGeometry(0.07, 0.035, 0.01), 0x1f9e55, 0, 0.745, 0.783, 0.25);

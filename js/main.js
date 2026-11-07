@@ -8,15 +8,15 @@ import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
 import { garage, openGarage, tickDevelopment, resetGarage, grantParts, drawRegulation, applyRegulation, treeName, perfFactor } from './garage.js';
-import { openSetup, growMate, career } from './career.js';
+import { openSetup, growMate, career, natOf } from './career.js';
 import { team, racePrize, repFactor, consumeBoost } from './team.js';
 import { buildQuestions, runPress, teamLine } from './press.js';
-import { TEAMS } from './data.js';
+import { TEAMS, DIFF, DIFFS, dname } from './data.js';
 import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
 import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
 import { showPreraceScreen } from './prerace.js';
-import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
+import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard, startScene } from './cine.js';
 import { renderRoom } from './showroom.js';
 import { logoSVG } from './logo.js';
 import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
@@ -127,6 +127,8 @@ const wxParam = () => ({ pluie: { rain: true, change: null }, averse: { rain: fa
 
 // contexte de jeu : 'career' (saison) ou 'solo' (course seule, sans effet sur la carrière)
 let ctx = 'solo';
+// difficulté des IA : celle de la carrière, normale en course solo
+Object.defineProperty(DIFF, 'k', { get: () => ctx === 'career' && career ? (DIFFS[career.opts?.diff]?.k || 1) : 1 });
 const fmtKey = () => ctx === 'career' ? settings.format : (FORMATS[settings.soloFmt] ? settings.soloFmt : 'sprint');
 // format de course : nombre de tours d'après le temps au tour estimé du circuit
 function raceFormat() {
@@ -270,7 +272,7 @@ function showResults() {
   const rows = results(R);
   const win = rows[0].time;
   $('resultsTable').innerHTML = rows.map(r =>
-    `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${r.name}<small>${r.team}${r.stops ? ` · ${r.stops} arrêt${r.stops > 1 ? 's' : ''}` : ''}${r.pen ? ` · pénalité +${r.pen} s` : ''}</small></td>` +
+    `<tr class="${r.player ? 'me' : ''}"><td>${r.pos}</td><td><i style="background:#${r.color.toString(16).padStart(6, '0')}"></i>${dname(r.name)}<small>${r.team}${r.stops ? ` · ${r.stops} arrêt${r.stops > 1 ? 's' : ''}` : ''}${r.pen ? ` · pénalité +${r.pen} s` : ''}</small></td>` +
     `<td>${r.dnf ? 'Abandon' : r.pos === 1 ? fmt(r.time) : '+' + (r.time - win).toFixed(3) + (r.finished ? '' : '*')}</td><td>${fmt(r.best)}</td></tr>`).join('');
   const me = rows.find(r => r.player);
   if (R.free && !R.awarded) {
@@ -372,8 +374,13 @@ function setupSeason() {
     const tier = TIERS.find(t => t.id === career.tier);
     if (tier.parts) grantParts(tier.parts);
     if (tier.infra) grantInfra(tier.infra);
-    SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); SZ.recordPerf(playerPerf()); openSeason();
-  }, () => { refreshMenu(); show('menu'); });
+    Object.assign(settings, { abs: career.opts.abs, tc: career.opts.tc, line: career.opts.line }); save();
+    SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); SZ.recordPerf(playerPerf());
+    // arrivée au QG : la caméra entre dans l'atelier, la voiture et le pilote aux couleurs de l'écurie
+    $('setup').classList.add('room', 'scene');
+    const nat = natOf(career.player.nat);
+    startScene('qg', { top: 'Bienvenue au QG', name: TEAMS[0].name, sub: `${nat ? nat.flag + ' ' : ''}${career.player.name} · n°${career.player.num} · saison ${SZ.season.year}` }, () => { $('setup').classList.remove('room', 'scene'); openSeason(); });
+  }, () => { refreshMenu(); show('menu'); }, settings);
 }
 // pré-saison : du 1er janvier au premier GP, le temps avance par étapes (présentation de la voiture, essais
 // hivernaux) ; l'usine, les chantiers et les écuries rivales travaillent pendant ce temps

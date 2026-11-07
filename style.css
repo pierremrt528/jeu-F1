@@ -1146,4 +1146,15 @@ body.quali .tl { display: none; }
   #setup.room { background: linear-gradient(0deg, rgba(6,8,11,.75) 55%, transparent 66%); align-items: flex-end; }
   #setup.room .setup { max-width: none; height: auto; max-height: 64%; }
 }
-@media (orientation: portrait) { #garage .tlogo b { display: none; } #garage .tlogo svg { width: 28px; height: 28px; } }
+@media (orientation: portrait) { .tlogo b { display: none; } .tlogo svg { width: 28px; height: 28px; } }
+/* création : réglages de carrière, pilote */
+.crow { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: flex-end; } .crow > * { flex: 1 1 200px; min-width: 0; }
+.segs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; } .segs button { padding: 7px 11px; font-size: 13px; flex: 1 0 auto; }
+.idsec .clist.tiers { overflow: visible; }
+.tname select { flex: 1; min-width: 180px; max-width: 360px; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a4352; background: #12161d; color: #fff; font: inherit; font-size: 15px; }
+.tname.num { flex: 0 0 auto; } .tname.num input { flex: 0 0 74px; min-width: 0; max-width: 74px; text-align: center; font-weight: 800; }
+.sws.dots { grid-template-columns: repeat(5, 1fr); max-width: 260px; } .sws.dots .sw i { aspect-ratio: 1; border-radius: 50%; max-height: 26px; width: 26px; }
+/* arrivée au QG : l'atelier 3D seul, sous les bandes de la cinématique */
+#setup.scene { background: none; } #setup.scene .setup { display: none; }
+.cine.qg .ctitle { opacity: 0; animation: fadeIn .7s 5.2s forwards; }
+.cine.qg .lb { animation: lbIn .7s cubic-bezier(.2,.8,.2,1) both; }
