@@ -65,8 +65,8 @@ export function cineCamera(camera) {
     }
   } else {   // tour d'honneur : la caméra tourne autour de la voiture
     const a = C.a0 + k * 0.75, r = 8.5 - Math.min(2.2, k * 0.5);
-    camera.position.set(p.x + Math.sin(a) * r, p.y + 2 + Math.sin(k * 0.9) * 0.6, p.z + Math.cos(a) * r);
-    camera.lookAt(p.x, p.y + 1.5, p.z);   // voiture un peu basse dans l'image, le titre au-dessus
+    camera.position.set(p.x + Math.sin(a) * r, p.y + 2.8 + Math.sin(k * 0.9) * 0.5, p.z + Math.cos(a) * r);   // un peu haut : au-dessus des voitures voisines
+    camera.lookAt(p.x, p.y + 1.3, p.z);   // voiture un peu basse dans l'image, le titre au-dessus
   }
   if (k >= C.dur) end(true);
   return true;
