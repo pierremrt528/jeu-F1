@@ -19,6 +19,7 @@ import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard } from './cine.js';
 import { renderRoom } from './showroom.js';
 import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
+import { makeQuali } from './qsession.js';
 import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
 // livraisons de l'usine et des chantiers (résultats d'une course, étapes de la pré-saison)
 const devNews = (p, built) => (built ? `<br>🏗️ Construction terminée : <b>${built}</b>` : '') +
@@ -146,6 +147,7 @@ function startRace(opts = raceOpts) {
   const rf = raceFormat();
   R = createRace(track, scene, opts.solo ? 1 : rf.laps, { autopilot: params.has('demo'), grid: +params.get('grille') || 10, lapTime: rf.lapTime, format: fmtKey(), assist: { abs: settings.abs, tc: settings.tc, line: settings.line }, ...opts });
   R.season = !!opts.season; R.free = ctx === 'solo';
+  if (opts.solo) makeQuali(R, () => SZ.qualifying(track, null, !!opts.wx?.rain), `${def.id}:${ctx === 'career' && S ? S.year + '-' + S.round : 'solo'}`, rf.lapTime);
   resetInput();
   const p = R.player; camState.h = p.heading; camState.x = p.x; camState.y = p.y; camState.z = p.z;
   if (opts.sim) { R.sim = true; return simulate(); }
@@ -232,7 +234,7 @@ function loop(now) {
       R.outro = true;
       startOutro(R, { top: def.name, name: pos === 1 ? 'Victoire !' : `Podium · P${pos}`, sub: pos === 1 ? 'Tu remportes le Grand Prix' : 'Un nouveau podium pour l’écurie', confetti: pos === 1 }, () => showResults());
     }
-    if (R.done && cineKind() !== 'outro' && R.t - R.endT > (R.solo ? 1.2 : 2.5)) R.solo ? showQuali() : showResults();
+    if (R.done && cineKind() !== 'outro' && R.t - R.endT > (R.solo ? 3 : 2.5)) R.solo ? showQuali() : showResults();
     if (!R) return;
   }
   if (!cineCamera(camera)) updateCamera(dt);
@@ -260,6 +262,7 @@ function show(id) {
   for (const s of ['menu', 'solo', 'settings', 'hud', 'pause', 'results', 'garage', 'press', 'season', 'standings', 'quali', 'setup', 'prerace', 'tuning']) $(s).classList.toggle('hidden', s !== id);
   roomOn = id === 'garage' || id === 'tuning';
   document.body.classList.toggle('racing', id === 'hud');
+  document.body.classList.toggle('quali', id === 'hud' && !!R?.solo);
 }
 function showResults() {
   paused = true;
@@ -487,10 +490,10 @@ function offSeason(tp) {
 }
 function showQuali(simTime) {
   paused = true;
-  const time = simTime ?? (R && R.player.finished ? R.player.lastLap : null);
+  const time = simTime ?? (R && R.player.finished ? Math.min(R.player.lastLap, R.q?.pb0.lap || 1e9) : null), ai = simTime == null ? R?.q?.ai : null;   // séance jouée : mêmes temps des IA que le tour des temps
   if (R) { clearRace(); R = null; }
   const Q = ctx === 'solo' ? soloQ : SZ.season;
-  const rows = SZ.qualifying(track, time, Q.wx?.rain);
+  const rows = SZ.qualifying(track, time, Q.wx?.rain, ai);
   Q.quali = rows.map(r => ({ name: r.name, time: r.time }));
   Q.grid = rows.map(r => r.name); if (Q === SZ.season) SZ.saveSeason();
   const pos = rows.findIndex(r => r.player) + 1;

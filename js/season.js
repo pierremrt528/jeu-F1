@@ -121,12 +121,12 @@ export function lapEstimate(track, skill, perf, accMul = 1) {
 }
 
 // Temps des IA en qualifications ; le joueur fournit son temps (null = pas de temps)
-export function qualifying(track, playerTime, wet = false) {
+export function qualifying(track, playerTime, wet = false, prev = null) {   // prev : temps des IA déjà connus (séance jouée)
   const rows = [];
   for (const t of TEAMS) for (const d of t.drivers) {
     if (d.player) { rows.push({ name: d.name, team: t.name, color: t.color, player: true, time: playerTime }); continue; }
     const perf = t.perf + (season?.dev[t.name] || 0);
-    const time = lapEstimate(track, d.skill, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985 * (wet ? 1.12 : 1);
+    const time = prev?.find(r => r.name === d.name)?.time ?? lapEstimate(track, d.skill, perf) * (1 + 0.006 * (Math.random() - 0.3)) * 0.985 * (wet ? 1.12 : 1);
     rows.push({ name: d.name, team: t.name, color: t.color, time });
   }
   rows.sort((a, b) => (a.time || 1e9) - (b.time || 1e9));

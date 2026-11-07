@@ -1073,3 +1073,46 @@ button.dcard:hover, button.dcard:focus-visible { border-color: color-mix(in srgb
   .tbar .st b { font-size: 13px; }
   #tnGo { padding: 8px 18px; font-size: 16px; }
 }
+
+/* ---------- qualifications jouées : tour des temps, chrono de séance, secteurs S1/S2/S3 ---------- */
+#qTower, #qSec { display: none; text-shadow: none; }
+body.quali #qTower, body.quali #qSec { display: block; }
+body.quali .tl { display: none; }
+#qTower { position: absolute; left: calc(8px + env(safe-area-inset-left)); top: calc(8px + env(safe-area-inset-top)); width: 150px; overflow: hidden; border-radius: 4px;
+  border-top: 2px solid var(--acc); background: rgba(8,10,14,.8); font-size: 10.5px; font-weight: 700; }
+#qTower .qh { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 7px 2px; background: linear-gradient(90deg, rgba(255,61,46,.3), transparent);
+  font-family: var(--cond); font-stretch: condensed; font-style: italic; text-transform: uppercase; }
+#qTower .qh b { font-size: 12px; font-weight: 900; letter-spacing: .05em; }
+#qTower .qh span { font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#qTower .qh span.low { color: var(--gold); }
+#qTower > div:not(.qh) { display: grid; grid-template-columns: 16px 3px 27px minmax(0, 1fr); align-items: center; gap: 4px; height: 11.6px; padding: 0 6px 0 5px; line-height: 1; }
+#qTower > div:nth-child(even):not(.me) { background: rgba(255,255,255,.035); }
+#qTower b { color: var(--mut); font-weight: 700; font-variant-numeric: tabular-nums; }
+#qTower i { width: 3px; height: 9px; }
+#qTower em { font-style: normal; letter-spacing: .03em; }
+#qTower span { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: #dfe6ef; }
+#qTower span.st { color: var(--mut); font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; }
+#qTower .me { background: linear-gradient(90deg, rgba(255,61,46,.6), rgba(255,61,46,.28)); }
+#qTower .me b, #qTower .me span { color: #fff; }
+#qTower .grn { background: rgba(46,204,113,.38) !important; } #qTower .grn span { color: #b9f7cf; }
+#qTower .pur { background: rgba(168,85,247,.5) !important; } #qTower .pur span { color: #ecd9ff; }
+#qSec { position: absolute; top: calc(66px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 292px; overflow: hidden; border-radius: 4px; background: rgba(8,10,14,.78); }
+#qSec .q3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#qSec .qc { padding: 3px 8px 3px; border-top: 3px solid rgba(255,255,255,.16); border-left: 1px solid rgba(255,255,255,.08); }
+#qSec .qc:first-child { border-left: 0; }
+#qSec .qc small { display: block; font-size: 9px; letter-spacing: .12em; color: var(--mut); }
+#qSec .qc b { font-family: var(--cond); font-stretch: condensed; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#qSec .qc b i { font-style: normal; font-weight: 600; color: var(--mut); }
+#qSec .qc.pur { border-top-color: #b45cff; } #qSec .qc.pur b { color: #dcb6ff; }
+#qSec .qc.grn { border-top-color: #2ee07a; } #qSec .qc.grn b { color: #8ff0b6; }
+#qSec .qc.yel { border-top-color: #ffd43d; } #qSec .qc.yel b { color: #ffe68a; }
+#qSec .ql { display: flex; align-items: center; gap: 8px; padding: 3px 8px 4px; border-top: 1px solid rgba(255,255,255,.08); }
+#qSec .qt { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-size: 20px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#qSec .qt.dim { font-size: 13px; opacity: .85; text-transform: uppercase; letter-spacing: .04em; }
+#qSec .qd { padding: 0 6px; border-radius: 3px; font-family: var(--cond); font-stretch: condensed; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+#qSec .qd.neg { background: rgba(46,224,122,.2); color: #8ff0b6; } #qSec .qd.pos { background: rgba(255,90,74,.2); color: #ffab9f; }
+#qSec .ql small { margin-left: auto; font-size: 10px; color: var(--mut); white-space: nowrap; }
+#qSec .qp { white-space: nowrap; font-family: var(--cond); font-stretch: condensed; font-style: italic; font-size: 16px; font-weight: 900; text-transform: uppercase; }
+#qSec .qp.pur { color: #dcb6ff; } #qSec .qp.grn { color: #8ff0b6; }
+@media (orientation: landscape) { body.quali #carState { left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); } }
+@media (orientation: portrait) { #qSec { top: calc(268px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); transform: none; } }

@@ -2,6 +2,7 @@
 import { DS } from './track.js';
 import { SPEC } from './car.js';
 import { TYRES, MODES, fuelLaps, lifeBand } from './strategy.js';
+import { updateQuali, qualiHud } from './qsession.js';
 const LIFEC = { max: '#fff', bon: '#c8f07a', faible: '#ffb340', nul: '#ff5a4a' };
 
 // éléments mis en cache et écritures seulement si la valeur change (évite des recalculs de mise en page)
@@ -50,6 +51,7 @@ export function updateHud(R, fps) {
   tog('radio', 'show', radioOn);
   tog('scBanner', 'show', !!R.sc);
   if (frame % 6) return;
+  if (R.q) { updateQuali(R); qualiHud(R); }   // qualifications jouées : tour des temps, secteurs, chrono de séance
   // pneus, météo, dégâts, stand
   const T = TYRES[p.tyre];
   html('tyreChip', `<b style="--c:${T.color}">${p.tyre}</b><span style="color:${LIFEC[lifeBand(1 - p.wear)]}">${p.flat ? '💥' : Math.max(0, Math.round(100 - p.wear * 100)) + ' %'}</span>` + (p.box && !p.pit ? ` → <b style="--c:${TYRES[p.box.tyre].color}">${p.box.tyre}</b>` : ''));
