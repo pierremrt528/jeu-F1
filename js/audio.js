@@ -1,25 +1,51 @@
-// Sons : moteurs = vrais enregistrements (sons/*.wav, un par motoriste, voir sons/CREDITS.txt) joués en boucle
-// et accélérés selon le régime ; le reste est généré en Web Audio (crissements, vent, pluie, chocs, feux, radio).
-// Si un fichier manque, le moteur synthétique d'origine prend le relais.
+// Sons : moteurs = vrais enregistrements (sons/<motoriste>-<régime>.wav, voir sons/CREDITS.txt) : boucles à régime
+// constant (ralenti / bas / moyen / haut) fondues l'une dans l'autre selon le régime, chacune légèrement accélérée
+// autour de son régime d'origine ; accélérateur = plus fort et plus brillant, lever de pied = étouffé.
+// Le reste est généré en Web Audio (crissements, vent, pluie, chocs, feux, radio). Repli synthétique si un fichier manque.
 import { ENGINES, engineOf } from './career.js';
 let ctx = null, master, nodes = null, on = true;
-// vitesse de lecture au ralenti et au rupteur (l'enregistrement est à régime moyen-haut)
-const SAMPLE = { valdrin: [0.55, 1.35], orsetti: [0.5, 1.25], hexadyne: [0.55, 1.3], kiyora: [0.6, 1.4] };
+// couches de chaque motoriste : [fichier, régime nominal 0 (ralenti) → 1 (rupteur)] ; pitch = caractère global
+const ENG = {
+  valdrin: { pitch: 1.25, layers: [['idle', 0], ['low', 0.2], ['mid', 0.5], ['high', 0.85]] },
+  orsetti: { pitch: 0.9, layers: [['idle', 0], ['mid', 0.5]] },
+  hexadyne: { pitch: 1.05, layers: [['idle', 0], ['low', 0.25], ['mid', 0.55], ['high', 0.9]] },
+  kiyora: { pitch: 1.15, layers: [['idle', 0], ['high', 0.7]] },
+};
 const bufs = {};
 function loadSamples() {
-  for (const id in SAMPLE) fetch(`sons/${id}.wav`).then(r => r.ok ? r.arrayBuffer() : Promise.reject())
-    .then(a => new Promise((ok, ko) => ctx.decodeAudioData(a, ok, ko))).then(b => { bufs[id] = b; }).catch(() => {});
+  for (const id in ENG) for (const [l] of ENG[id].layers) fetch(`sons/${id}-${l}.wav`).then(r => r.ok ? r.arrayBuffer() : Promise.reject())
+    .then(a => new Promise((ok, ko) => ctx.decodeAudioData(a, ok, ko))).then(b => { bufs[id + l] = b; }).catch(() => {});
 }
-// une voix échantillonnée : boucle -> passe-bas -> volume ; démarrée dès que le fichier est décodé
-function voice(id, vol) {
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3000;
+const ready = id => ENG[id].layers.every(([l]) => bufs[id + l]);
+// un groupe = un moteur : ses boucles -> passe-bas -> volume. Créé à la demande, arrêté quand on change de moteur.
+function group(vol) {
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3000; f.Q.value = 0.7;
   const g = ctx.createGain(); g.gain.value = 0; f.connect(g).connect(master);
-  return { id, f, g, vol, src: null };
+  return { f, g, vol, id: null, L: [] };
 }
-function feed(v) {
-  if (v.src || !bufs[v.id]) return !!v.src;
-  const s = ctx.createBufferSource(); s.buffer = bufs[v.id]; s.loop = true;
-  s.connect(v.f); s.start(0, Math.random() * s.buffer.duration); v.src = s; return true;
+function useEngine(G, id) {
+  if (G.id === id) return G.L.length > 0;
+  for (const l of G.L) l.src.stop();
+  G.L = []; G.id = null;
+  if (!ready(id)) return false;
+  for (const [l, pos] of ENG[id].layers) {
+    const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = bufs[id + l]; src.loop = true; g.gain.value = 0;
+    src.connect(g).connect(G.f); src.start(0, Math.random() * src.buffer.duration); G.L.push({ src, g, pos });
+  }
+  G.id = id; return true;
+}
+// x = régime 0..1, th = accélérateur 0..1
+function drive(G, x, th, vol) {
+  const E = ENG[G.id], n = G.L.length, rpm = q => 0.3 + 0.7 * q;
+  for (let i = 0; i < n; i++) {
+    const l = G.L[i], a = i ? G.L[i - 1].pos : -1, b = i < n - 1 ? G.L[i + 1].pos : 2;
+    let w = x <= l.pos ? (x - a) / (l.pos - a) : (b - x) / (b - l.pos);
+    w = Math.max(0, Math.min(1, w)); w = Math.sin(w * Math.PI / 2); // fondu à puissance constante
+    set(l.g.gain, w, 0.05);
+    set(l.src.playbackRate, E.pitch * Math.max(0.75, Math.min(1.5, rpm(x) / rpm(l.pos))), 0.05);
+  }
+  set(G.f.frequency, 1200 + 7000 * (0.25 + 0.75 * th) * (0.5 + 0.5 * x));
+  set(G.g.gain, vol * (0.45 + 0.55 * th));
 }
 const engId = c => c.player || c.teamIdx === 0 ? (engineOf()?.id || 'orsetti') : ENGINES[(c.teamIdx || 0) % ENGINES.length].id;
 
@@ -56,8 +82,7 @@ export function initAudio(enabled) {
     master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
     nodes = { nb: noiseBuffer() };
     nodes.me = engine(0.22); nodes.other = engine(0.12);
-    nodes.sme = {}; nodes.soth = {};
-    for (const id in SAMPLE) { nodes.sme[id] = voice(id, 0.5); nodes.soth[id] = voice(id, 0.3); }
+    nodes.gme = group(0.5); nodes.goth = group(0.32);
     loadSamples();
     nodes.screech = noise('bandpass', 1500, 6);
     nodes.wind = noise('lowpass', 500);
@@ -98,15 +123,8 @@ export function updateAudio(R, camPos, active) {
   const p = R.player, vtop = 93 * p.perf;
   // moteur du joueur
   const r = rev(p, vtop), base = p.v < 0.5 ? 55 : 80 + 230 * r, myId = engId(p);
-  let real = false;
-  for (const id in nodes.sme) {
-    const v = nodes.sme[id], mine = id === myId && feed(v); real ||= mine;
-    if (!v.src) continue;
-    const [lo, hi] = SAMPLE[id], rr = p.v < 0.5 ? 0 : 0.12 + 0.88 * r;
-    set(v.src.playbackRate, lo + (hi - lo) * rr);
-    set(v.f.frequency, 900 + 6000 * (0.35 + 0.65 * p.throttle));
-    set(v.g.gain, mine && !p.out ? v.vol * (0.5 + 0.5 * p.throttle) : 0);
-  }
+  const real = useEngine(nodes.gme, myId), x = p.v < 0.5 ? 0 : 0.08 + 0.92 * r;
+  if (real) drive(nodes.gme, x, p.throttle, p.out ? 0 : nodes.gme.vol);
   set(nodes.me.o1.frequency, base); set(nodes.me.o2.frequency, base / 2);
   set(nodes.me.f.frequency, 500 + 2200 * r * (0.4 + 0.6 * p.throttle));
   set(nodes.me.g.gain, p.out || real ? 0 : nodes.me.vol * (0.45 + 0.55 * p.throttle));
@@ -114,13 +132,9 @@ export function updateAudio(R, camPos, active) {
   let best = null, bd = 1e9;
   for (const c of R.cars) { if (c === p || c.out) continue; const d = Math.hypot(c.x - camPos.x, c.z - camPos.z); if (d < bd) { bd = d; best = c; } }
   const near = best ? Math.max(0, 1 - bd / 60) : 0, oId = best && engId(best);
-  let oReal = false;
-  for (const id in nodes.soth) {
-    const v = nodes.soth[id], it = id === oId && feed(v); oReal ||= it;
-    if (!v.src) continue;
-    if (it) { const [lo, hi] = SAMPLE[id], rb = rev(best, 93 * best.perf); set(v.src.playbackRate, lo + (hi - lo) * (0.12 + 0.88 * rb)); }
-    set(v.g.gain, it ? v.vol * near : 0);
-  }
+  const oReal = !!best && useEngine(nodes.goth, oId);
+  if (oReal) drive(nodes.goth, best.v < 0.5 ? 0 : 0.08 + 0.92 * rev(best, 93 * best.perf), best.throttle ?? 1, nodes.goth.vol * near);
+  else if (nodes.goth.id) set(nodes.goth.g.gain, 0);
   if (best) {
     const rb = rev(best, 93 * best.perf), fb = best.v < 0.5 ? 50 : 85 + 220 * rb;
     set(nodes.other.o1.frequency, fb); set(nodes.other.o2.frequency, fb / 2);

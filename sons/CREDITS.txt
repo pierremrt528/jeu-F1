@@ -1,6 +1,9 @@
-Sons de moteur (Freesound), découpés en boucles de 1,5 à 2,5 s, mono 22 kHz.
+Sons de moteur : boucles à régime constant de Freesound (toutes en CC0 1.0, domaine public),
+recoupées en boucles de 2 s, mono 22 kHz. Fondues selon le régime dans js/audio.js.
 
-valdrin.wav  — « BCR F1 Car 19.wav » par LG — https://freesound.org/s/77919/ — CC BY 4.0 (attribution obligatoire, affichée au menu)
-orsetti.wav  — « v8 engine rev.wav » par overmedium — https://freesound.org/s/651534/ — CC0 1.0
-hexadyne.wav — « Import car revs on Chassis Dyno with Turbo.wav » par editboy23 — https://freesound.org/s/496171/ — CC0 1.0
-kiyora.wav   — « subaru impreza start up-idle-launch limiter.wav » par t33kno — https://freesound.org/s/369797/ — CC0 1.0
+valdrin-idle/low/mid/high — « S010/S009/S008/S007 Engine Idle/Low/Medium/High Rev Mono » par Pól — https://freesound.org/s/385929/ … /385932/
+orsetti-idle — « Muscle_Idle.ogg » par FreeCarSoundsGaming — https://freesound.org/s/535038/
+orsetti-mid  — « med.wav » (V8 LS6, 3000 tr/min) par cr4sht3st — https://freesound.org/s/157144/
+hexadyne-idle/low/mid/high — « SFX_Car_Engine_Outside_Idle/RPMLow/RPMMed/RPMHigh » par GiocoSound — https://freesound.org/s/401552/ /401556/ /401555/ /401551/
+kiyora-idle — « engine_idle.wav » par mhad — https://freesound.org/s/390788/
+kiyora-high — « engine_model_high_revs_3.wav » par mhad — https://freesound.org/s/390790/
