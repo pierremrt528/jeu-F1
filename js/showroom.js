@@ -68,11 +68,8 @@ function wallTex(name, acc, logo, abbr) {
   g.fillStyle = acc; g.fillRect(1024 - 70, Y(2.3), 140, 5);
   const t = tex(cv);
   // logo et abréviation au-dessus du nom (image SVG chargée à part)
-  if (logo) logoImage(logo, img => {
-    g.globalAlpha = 0.9; g.drawImage(img, 1024 - 50, Y(9.6), 100, 100); g.globalAlpha = 1;
-    if (abbr) { g.font = 'italic 900 34px "Roboto Condensed", "Arial Narrow", sans-serif'; g.fillStyle = 'rgba(255,255,255,.28)'; g.fillText(abbr, 1024, Y(5.7)); }
-    t.needsUpdate = true;
-  }); t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1;   // vu de l'intérieur du cylindre
+  const nw = g.measureText(name.toUpperCase()).width;
+  if (logo) logoImage(logo, img => { g.globalAlpha = 0.85; g.drawImage(img, 1024 - nw / 2 - 118, Y(3.9) - 48, 96, 96); g.globalAlpha = 1; t.needsUpdate = true; }); t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1;   // vu de l'intérieur du cylindre
   return t;
 }
 

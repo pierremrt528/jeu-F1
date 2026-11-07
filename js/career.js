@@ -150,7 +150,7 @@ export function openSetup(el, onDone, onCancel) {
     $('#suBack').textContent = step ? '← Retour' : 'Annuler';
   }
   $('#suNext').onclick = () => {
-    if (step < 4) { step++; return render(); }
+    if (step < 4) { step++; if (step === 1) preview3D(); return render(); }
     const tier = TIERS.find(t => t.id === pick.tier);
     el.classList.remove('room');
     career = { v: 2, name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, colors: { ...pick.colors }, tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
@@ -158,7 +158,7 @@ export function openSetup(el, onDone, onCancel) {
     Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam();
     onDone();
   };
-  $('#suBack').onclick = () => { if (step) { step--; render(); } else { el.classList.remove('room'); applyTheme(career?.colors || null); onCancel(); } };
+  $('#suBack').onclick = () => { if (step) { step--; render(); } else { el.classList.remove('room'); applyCareer(); onCancel(); } };
   // ---- étape Identité : nom, abréviation, logo (forme + 2 couleurs) ----
   const swatches = (cls, cur, dis = () => '') => PALETTE.map(c => { const why = dis(c.id); return `<button class="sw ${cur === c.id ? 'pick' : ''}" data-${cls}="${c.id}" style="--sw:#${c.hex.toString(16).padStart(6, '0')}" ${why ? `disabled title="${why}"` : ''} aria-label="${c.name}"><i></i><small>${c.name}</small></button>`; }).join('');
   function identityHTML() {
@@ -191,7 +191,7 @@ export function openSetup(el, onDone, onCancel) {
       <p class="cnote">${bad ? `⚠️ ${bad.name} roule déjà en ${colorOf(C.p).name.toLowerCase()} et ${colorOf(C.s).name.toLowerCase()} : choisis une autre secondaire.` : PALETTE.some(c => c.id !== C.p && clash(C.p, c.id)) ? `Grisées : couleurs déjà portées avec ta primaire par une écurie rivale (${TEAMS.slice(1).filter(t => PALETTE.some(c => clash(C.p, c.id) === t)).map(t => t.name).join(', ')}).` : ''}</p></div>`;
   }
   function bindColors() {
-    const set = () => { applyTheme(pick.colors); render(); };
+    const set = () => { preview3D(); render(); };
     el.querySelectorAll('[data-cp]').forEach(b => b.onclick = () => {
       const C = pick.colors; C.p = b.dataset.cp;
       if (C.s === C.p || clash(C.p, C.s)) C.s = PALETTE.find(c => c.id !== C.p && !clash(C.p, c.id) && c.id !== C.s)?.id || C.s;
@@ -199,6 +199,8 @@ export function openSetup(el, onDone, onCancel) {
     });
     el.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => { pick.colors.s = b.dataset.cs; set(); });
   }
+  // aperçu dans l'atelier 3D : nom, abréviation et logo choisis (rétablis par applyCareer si on annule)
+  function preview3D() { Object.assign(TEAMS[0], { name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo } }); applyTheme(pick.colors); }
   applyTheme(pick.colors);
   // négociation : réputation et place selon le niveau choisi ; le budget restant hors pilote
   const subOf = d => ({ kind: 'drv', key: d.name, name: d.name, from: d.from, r: rating(d), base: salary(d), sponsor: d.sponsor, color: /Formule B/.test(d.from) ? '#22d3c5' : /Vétéran/.test(d.from) ? '#b07cff' : '#8d96a3' });
