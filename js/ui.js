@@ -11,7 +11,7 @@ export function driverCard(s, { k, from = '', price = '', color, pick, disabled,
   const c = color ? hex(color) : /Formule B/.test(from) ? '#22d3c5' : /Vétéran/.test(from) ? '#b07cff' : '#8d96a3';
   const r = rating(s);
   return `<button class="copt drv ${pick ? 'pick' : ''} ${cur ? 'cur' : ''}" data-v="${k}" ${disabled ? 'disabled' : ''} style="--c:${c}">
-    <span class="dtop"><span class="av">${initials(s.name)}</span><span class="dn"><b>${s.name}</b><small>${from}</small></span><span class="ovr ${tierOf(r)}">${r}<small>note</small></span></span>
+    <span class="dtop"><span class="av">${initials(s.name)}</span><span class="dn"><b>${s.name}</b><small>${from}${s.age ? ` · ${s.age} ans` : ''}</small></span><span class="ovr ${tierOf(r)}">${r}<small>note</small></span></span>
     <span class="dstats">${mini('VIT', s.spd)}${mini('STR', s.strat)}${mini('PNE', s.tyre)}${mini('POT', s.pot)}</span>
     <em class="price">${price}</em></button>`;
 }

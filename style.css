@@ -1169,3 +1169,10 @@ body.quali .tl { display: none; }
 .spgoals h4 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut); margin-bottom: 4px; }
 .spgoals p { font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin: 2px 0; } .spgoals i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; } .spgoals small { margin-left: auto; color: #7ee2a8; }
 #rdGain small.good { color: #7ee2a8; } #rdGain small.bad { color: #ff8a7a; }
+/* scènes 3D de l'atelier (arrivée au QG, rendez-vous, signature) : écrans masqués */
+body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.scene3d .screen { background: none; }
+.cine.meet .ctitle, .cine.sign .ctitle { animation: none; }
+.cine.sign .ctitle { opacity: 0; animation: fadeIn .5s 3.3s forwards; }
+.flash3d { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: flash3d .9s 2.9s ease-out both; }
+@keyframes flash3d { 0% { opacity: 0; } 12% { opacity: .95; } 100% { opacity: 0; } }
+.nrow.two { grid-template-columns: 104px 34px 1fr 34px 34px 1fr 34px; } .nrow.two b { text-align: center; }

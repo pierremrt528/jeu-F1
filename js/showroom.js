@@ -6,7 +6,7 @@ import { buildCarMesh } from './carmodel.js';
 import { TEAMS } from './data.js';
 import { onTheme } from './theme.js';
 import { logoImage } from './logo.js';
-import { buildPilot } from './pilot3d.js';
+import { buildPilot, DEFAULT_LOOK } from './pilot3d.js';
 import { cineKind, cineT, end as endCine } from './cine.js';
 import SCENES from './config/scenes.js';
 
@@ -116,13 +116,14 @@ function build(renderer) {
   const pilot = buildPilot(t0.look, { p: t0.color, s: t0.accent }, t0.helmet || { m: 0, p: 0xffc21a, s: 0xffc21a });
   pilot.position.set(PILOT.x, 0, PILOT.z); pilot.rotation.y = -0.45; scene.add(pilot);
   const pm2 = pilot.clone(); pm2.scale.y = -1; scene.add(pm2);
+  const me = [pilot, pm2];
 
   // mur du fond
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(26, 26, 16, 48, 1, true, Math.PI * 0.55, Math.PI * 0.9), new THREE.MeshBasicMaterial({ map: wallTex(t0.name, acc, t0.logo, t0.abbr), side: THREE.BackSide }));
   wall.position.y = 6.5; scene.add(wall);
 
   const view = { d: 14, cx: 0.7, cy: 0.5, k: 0, x: 0, y: 0.55, z: 0 };
-  return { scene, camera, spin, view, rot: rot0 };
+  return { scene, camera, spin, view, rot: rot0, me };
 }
 
 // zone de l'écran (fractions 0-1) où la voiture doit apparaître ; transition douce entre deux cadrages
@@ -152,7 +153,8 @@ export function renderRoom(renderer, dt) {
   // distance pour que la voiture (sphère de 3,3 m) tienne dans la zone demandée
   const [x0, x1, y0, y1] = box;
   W.rot += dt * 0.2; spin.rotation.y = W.rot;
-  if (cineKind() === 'qg') return sceneCam(renderer, v);
+  if (SCENES[cineKind()]) return sceneCam(renderer, v);
+  if (W.cast) clearCast();
   const F = focusOn;
   const fit = Math.min(y1 - y0, (x1 - x0) * aspect), dist = F.r / (fit * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   const k = view.k ? 1 - Math.exp(-dt * 4) : 1; view.k = 1;
@@ -169,14 +171,49 @@ export function renderRoom(renderer, dt) {
 }
 // cinématique de l'atelier (config/scenes.js) : caméra entre des plans clés, lumière qui monte (exposition)
 const ease = t => t * t * (3 - 2 * t);
+// personnages des scènes : rôles fournis par setCast (guest, agent) ; 'me' = ton pilote
+let castSpec = {};
+export function setCast(spec) { castSpec = spec || {}; }
+function clearCast() {
+  for (const m of Object.values(W.cast)) { W.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  W.cast = null; W.me.forEach(m => { m.visible = true; });
+}
+function actor(role, pose) {
+  const key = role + ':' + pose, C = W.cast || (W.cast = {});
+  if (C[key]) return C[key];
+  const t0 = TEAMS[0], s = role === 'me' ? { look: t0.look, suit: { p: t0.color, s: t0.accent }, helmet: t0.helmet } : castSpec[role];
+  if (!s) return null;
+  const m = buildPilot(s.look, s.suit, pose === 'shake' ? null : s.helmet, pose);
+  W.scene.add(m);
+  return (C[key] = m);
+}
+function placeActors(S, t) {
+  const used = new Set();
+  for (const a of S.actors || []) {
+    if (t < a.on[0] || t >= a.on[1]) continue;
+    const m = actor(a.role, a.pose); if (!m) continue;
+    used.add(m);
+    const P = a.path; let i = 0; while (i < P.length - 2 && t >= P[i + 1][0]) i++;
+    const p = P[i], q = P[Math.min(i + 1, P.length - 1)], u = q === p ? 0 : Math.min(1, Math.max(0, (t - p[0]) / (q[0] - p[0])));
+    const moving = u > 0 && u < 1;
+    m.position.set(p[1] + (q[1] - p[1]) * u, moving ? Math.abs(Math.sin(t * 9)) * 0.035 : 0, p[2] + (q[2] - p[2]) * u);
+    m.rotation.y = p[3] + (q[3] - p[3]) * u + (moving ? Math.sin(t * 9) * 0.05 : 0);
+  }
+  if (W.cast) for (const m of Object.values(W.cast)) m.visible = used.has(m);
+  const meOn = (S.actors || []).some(a => a.role === 'me');
+  W.me.forEach(m => { m.visible = !meOn; });
+}
 function sceneCam(renderer, v) {
-  const S = SCENES.qg, t = cineT(), K = S.keys, { camera, scene } = W;
-  if (t >= S.dur) { endCine(true); return; }
+  const S = SCENES[cineKind()], t = cineT(), K = S.keys, { camera, scene } = W;
+  placeActors(S, t);
+  if (t >= S.dur) { if (W.cast) clearCast(); endCine(true); return; }
   let i = 0; while (i < K.length - 2 && t >= K[i + 1].t) i++;
   const a = K[i], b = K[i + 1], u = ease(Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t))));
   const L = (p, q) => p + (q - p) * u;
-  camera.position.set(L(a.pos[0], b.pos[0]), L(a.pos[1], b.pos[1]), L(a.pos[2], b.pos[2]));
-  camera.lookAt(L(a.look[0], b.look[0]), L(a.look[1], b.look[1]), L(a.look[2], b.look[2]));
+  // écran en portrait : la caméra recule pour garder le même cadrage en largeur
+  const lx = L(a.look[0], b.look[0]), ly = L(a.look[1], b.look[1]), lz = L(a.look[2], b.look[2]), asp = v.x / Math.max(1, v.y), back = asp < 1.2 ? Math.min(2.4, 1.2 / asp) : 1;
+  camera.position.set(lx + (L(a.pos[0], b.pos[0]) - lx) * back, ly + (L(a.pos[1], b.pos[1]) - ly) * back, lz + (L(a.pos[2], b.pos[2]) - lz) * back);
+  camera.lookAt(lx, ly, lz);
   camera.far = 120; scene.fog.near = 30; scene.fog.far = 90;
   camera.clearViewOffset(); camera.aspect = v.x / Math.max(1, v.y); camera.updateProjectionMatrix();
   const ex = renderer.toneMappingExposure; renderer.toneMappingExposure = ex * L(a.l, b.l);

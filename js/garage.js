@@ -2,7 +2,7 @@
 // 1 à 3 GP à être livrée ; une seule pièce en développement par pôle. Sauvegarde locale et écran.
 import { NO_UP } from './car.js';
 import { team, saveTeam } from './team.js';
-import { engineOf } from './career.js';
+import { engineOf, carRank } from './career.js';
 import { partDiscount, partDelay, parallelParts, pitBonus, renderInfra, infra } from './infra.js';
 import { CHIEFS, DEPTS, chiefOf, chiefMul, staff, saveStaff, chiefContract, chiefUntil, chiefRelease, signChief } from './staff.js';
 import { openNego, preview, previewHTML, fmtM } from './nego.js';
@@ -344,7 +344,7 @@ function renderChefs($) {
     floor: cur === c ? Math.round(ck.sal * 1.05 * 10) / 10 : 0 });
   // prolongation du chef en poste : le nouveau contrat démarre la saison suivante, seule la prime se paie tout de suite
   const nctx = c => ({ win: `${yr}-r${season?.round ?? 0}${preStep() < 3 ? 'p' + preStep() : ''}`,   // pré-saison : une fenêtre par étape
-    store: staff.talks = staff.talks || {}, rep: team.rep, pos: teamPos(), mid: false, team: TEAMS[0].name,
+    store: staff.talks = staff.talks || {}, rep: team.rep, pos: teamPos(), car: carRank(TEAMS[0].perf * perfFactor()), mid: false, team: TEAMS[0].name,
     year: yr + (cur === c ? 1 : 0), save: saveStaff, avail: () => team.budget,
     cost: k => {
       const ext = cur === c, rel = cur && !ext ? chiefRelease(dept) : 0, sal = ext ? 0 : k.sal;

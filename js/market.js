@@ -2,7 +2,7 @@
 // l'intersaison (prix normaux, on renouvelle aussi le contrat moteur). Utilise l'écran #setup.
 import { TEAMS } from './data.js';
 import { team, saveTeam } from './team.js';
-import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET, mateContract, untilOf, TIER_POS } from './career.js';
+import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET, mateContract, untilOf, TIER_POS, carRank } from './career.js';
 import { salaryCut } from './infra.js';
 import { driverCard, engineCard, steps as stepBar, rating } from './ui.js';
 import { season, saveSeason, teamStandings } from './season.js';
@@ -41,14 +41,14 @@ export function openMarket(el, kind, onDone, onCancel) {
   const left = () => r1(team.budget - (one ? 0 : engCost(eng) + due()));
   // indemnité de départ d'un équipier encore sous contrat qu'on libère : la moitié des saisons restantes
   const release = () => { const k = K(), n = untilOf(k) - year; return n > 0 && k.sal > 0 ? r1(0.5 * k.sal * n) : 0; };
-  const subOf = c => ({ kind: 'drv', key: c.s.name, name: c.s.name, from: c.cur ? c.s.from || '' : c.from, r: rating(c.s), cur: !!c.cur,
+  const subOf = c => ({ kind: 'drv', key: c.s.name, name: c.s.name, from: c.cur ? c.s.from || '' : c.from, age: c.s.age, rep: c.s.rep, r: rating(c.s), cur: !!c.cur,
     base: salary(c.s) * (c.s.sponsor ? 1 : salaryCut()), sponsor: c.s.sponsor, club: c.team ? TEAMS[c.team].name : null, color: colorOf(c),
     floor: c.cur && valid() && K().sal > 0 ? r1(K().sal * 1.05) : 0 });
   const costOf = (c, k, fee) => {
     const rel = c.cur || c.team ? 0 : release(), sal = mid ? r1(k.sal * 0.5) : k.sal;
     return { now: r1(fee + k.bonus + sal + rel), parts: [['indemnité', fee], ['prime', k.bonus], [mid ? 'demi-saison' : 'saison ' + ny, sal], ['départ de ' + career.mate.name, rel]] };
   };
-  const nctx = c => ({ win, store: T, rep: team.rep, pos: teamPos(), mid, feeMult: mid ? MID_MULT : 1, team: TEAMS[0].name, year: ny,
+  const nctx = c => ({ win, store: T, rep: team.rep, pos: teamPos(), car: carRank(TEAMS[0].perf), mid, feeMult: mid ? MID_MULT : 1, team: TEAMS[0].name, year: ny,
     swap: c.team ? career.mate.name : null, save: saveCareer, avail: () => r1(team.budget - (one ? 0 : engCost(eng))), cost: (k, fee) => costOf(c, k, fee) });
   function sign(c, k, fee) {
     const old = career.mate;
@@ -65,7 +65,7 @@ export function openMarket(el, kind, onDone, onCancel) {
       }
       career.mate = { ...c.s, from: c.team ? 'Ex-' + TEAMS[c.team].name : c.s.from };
     }
-    career.contract = { sal: k.sal, years: k.years, role: k.role, bonus: k.bonus, since: ny, paid: ny };
+    career.contract = { sal: k.sal, years: k.years, role: k.role, bonus: k.bonus, win: k.win || 0, pod: k.pod || 0, clause: k.clause || 0, since: ny, paid: ny };
     T.signed = win;
     (season.news = season.news || []).push(c.cur ? `✍️ ${c.s.name} prolonge chez ${TEAMS[0].name} jusqu’en ${ny + k.years - 1}.`
       : `✍️ ${c.s.name} signe chez ${TEAMS[0].name} jusqu’en ${ny + k.years - 1}${fee ? ` (indemnité de ${fmtM(fee)} M€ pour ${TEAMS[c.team].name})` : ''}.`);
@@ -156,6 +156,22 @@ export function aiMercato(kind) {
   const news = [], mid = kind === 'mid', taken = new Set();
   TEAMS.forEach(t => t.drivers.forEach(d => taken.add(d.name)));
   career.free.forEach(d => taken.add(d.name));
+  // clause libératoire : une écurie rivale peut la lever si ton équipier brille (elle paie, il part)
+  const K = career.contract, m = career.mate;
+  if (K?.clause && rating(m) >= 76 && Math.random() < (K.clause <= 3 * K.sal + 1e-6 ? 0.45 : 0.2)) {
+    const k = 1 + Math.floor(Math.random() * (TEAMS.length - 1)), t = TEAMS[k];
+    const slot = statsOf(t.drivers[0]).spd <= statsOf(t.drivers[1]).spd ? 0 : 1, out = t.drivers[slot];
+    career.free.push({ ...statsOf(out), name: out.name, from: 'Ex-' + t.name });
+    t.drivers[slot] = { name: m.name, skill: mateSkill(m.spd), stats: { ...m } };
+    career.rosters = career.rosters || {};
+    career.rosters[t.name] = t.drivers.map(d => ({ name: d.name, skill: d.skill, stats: d.stats }));
+    team.budget = r1(team.budget + K.clause);
+    const y = newYoungster(taken), yr = season?.year || 2027;
+    career.mate = { ...y, from: 'Pilote de réserve', spd: rnd(64, 70), strat: rnd(56, 64), tyre: rnd(58, 66), pot: rnd(62, 78) };
+    career.contract = { sal: 1, years: 1, role: 'n2', bonus: 0, since: yr, paid: yr };
+    news.push(`💸 ${t.name} lève la clause libératoire de ${m.name} : <b>+${fmtM(K.clause)} M€</b> pour toi. ${career.mate.name}, pilote de réserve, prend le volant.`);
+    saveCareer(); applyCareer(); saveTeam();
+  }
   // intersaison : une nouvelle promotion de Formule B arrive, les vétérans progressent moins
   if (!mid) {
     for (let k = 0; k < 3; k++) career.free.push(newYoungster(taken));

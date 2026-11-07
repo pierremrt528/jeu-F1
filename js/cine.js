@@ -30,7 +30,7 @@ export function end(run) {
   if (!C) return;
   const f = C.onEnd; C = null;
   const e = document.getElementById('cine');
-  e.className = 'cine hidden'; e.innerHTML = ''; document.body.classList.remove('cine');
+  e.className = 'cine hidden'; e.innerHTML = ''; document.body.classList.remove('cine', 'scene3d');
   if (run) f?.();
 }
 // survol avant le départ : la course est figée pendant ce temps (info : top, name, sub)
@@ -46,8 +46,9 @@ export function startOutro(R, info, onEnd) {
 
 // scène de l'atelier 3D (caméra gérée par showroom.js, plans dans config/scenes.js) : arrivée au QG…
 export function startScene(kind, info, onEnd) {
-  C = { kind, t0: performance.now(), onEnd };
-  open(kind, info);
+  document.body.classList.add('scene3d');
+  C = { kind, t0: performance.now(), onEnd: () => { document.body.classList.remove('scene3d'); onEnd?.(); } };
+  open(kind, info, kind === 'sign' ? '<i class="flash3d"></i>' : '');
 }
 // place la caméra pendant une cinématique ; false s'il n'y en a pas (temps réel : reste calé sur les animations CSS)
 export function cineCamera(camera) {

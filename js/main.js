@@ -218,7 +218,7 @@ const maxRatio = Math.min(devicePixelRatio, 1.5);
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (roomOn || $('setup').classList.contains('room')) {
+  if (roomOn || $('setup').classList.contains('room') || document.body.classList.contains('scene3d')) {
     if (now - menuDraw < 32) return;
     renderRoom(renderer, Math.min(0.1, (now - menuDraw) / 1000)); menuDraw = now; return;
   }
@@ -317,6 +317,12 @@ function showResults() {
       // contrats de sponsors : versement de la course et bonus des objectifs
       R.spons = career ? paySponsors(career, { pos: me.pos, dnf: me.dnf, gained: me.grid - me.pos, fastest, matePos: mate && !mate.dnf ? mate.pos : 99 }, SZ.nRounds()) : null;
       if (R.spons) { team.budget = Math.round((team.budget + R.spons.total) * 10) / 10; saveTeam(); }
+      // primes de l'équipier (contrat) : victoire ou, à défaut, podium
+      const K = career?.contract;
+      if (K && mate && !mate.dnf && mate.pos <= 3 && (K.win || K.pod)) {
+        const v = mate.pos === 1 && K.win ? K.win : K.pod || 0;
+        if (v) { R.mateBonus = { v, who: mate.name, win: mate.pos === 1 && !!K.win }; team.budget = Math.round((team.budget - v) * 10) / 10; saveTeam(); }
+      }
       if (S.done) R.review = seasonReview();
       else S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
       SZ.saveSeason();
@@ -334,6 +340,7 @@ function showResults() {
     (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '') +
     (R.mis ? `<br>🤝 Mission ${R.mis.sp} (${R.mis.txt.toLowerCase()}) : ${R.mis.ok ? `<b>réussie, +${R.mis.gain.toFixed(1)} M€</b>` : '<b class="bad">ratée, réputation −3</b>'}` : '') +
     (R.spons ? `<br>🤝 Contrats de sponsors : <b>+${R.spons.total.toFixed(1)} M€</b> · objectifs ${R.spons.met}/${R.spons.n}${R.spons.lines.map(l => ` <small class="${l.ok ? 'good' : 'bad'}">${l.ok ? '✓' : '✗'} ${l.name}</small>`).join('')}` : '') +
+    (R.mateBonus ? `<br>🏅 Prime de ${R.mateBonus.win ? 'victoire' : 'podium'} de ${R.mateBonus.who} : <b class="bad">−${R.mateBonus.v.toFixed(1)} M€</b>` : '') +
     (R.deals ? `<br>💼 Sponsors ponctuels : <b>+${R.deals.toFixed(1)} M€</b>` : '') +
     (R.conf != null && !R.free ? `<br>🏛️ Direction : confiance ${R.conf > 0 ? '+' : ''}${R.conf} → <b>${Math.round(team.conf)} %</b>` : '') +
     (R.review ? `<br>🏁 Bilan de la direction : ${R.review.met}/${R.review.n} objectifs atteints (${R.review.d > 0 ? '+' : ''}${R.review.d})${R.review.bonus ? ` · bonus <b>+${R.review.bonus} M€</b>` : ''}${R.review.fired ? ' · <b class="bad">la direction veut te remplacer…</b>' : ''}` : '');
@@ -382,9 +389,8 @@ function setupSeason() {
     Object.assign(settings, { abs: career.opts.abs, tc: career.opts.tc, line: career.opts.line }); save();
     SZ.newSeason(SZ.season ? SZ.season.year + 1 : 2027); SZ.recordPerf(playerPerf());
     // arrivée au QG : la caméra entre dans l'atelier, la voiture et le pilote aux couleurs de l'écurie
-    $('setup').classList.add('room', 'scene');
     const nat = natOf(career.player.nat);
-    startScene('qg', { top: 'Bienvenue au QG', name: TEAMS[0].name, sub: `${nat ? nat.flag + ' ' : ''}${career.player.name} · n°${career.player.num} · saison ${SZ.season.year}` }, () => { $('setup').classList.remove('room', 'scene'); openSeason(); });
+    startScene('qg', { top: 'Bienvenue au QG', name: TEAMS[0].name, sub: `${nat ? nat.flag + ' ' : ''}${career.player.name} · n°${career.player.num} · saison ${SZ.season.year}` }, () => openSeason());
   }, () => { refreshMenu(); show('menu'); }, settings);
 }
 // pré-saison : du 1er janvier au premier GP, le temps avance par étapes (présentation de la voiture, essais

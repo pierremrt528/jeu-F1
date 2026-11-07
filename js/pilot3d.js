@@ -23,7 +23,8 @@ export function helmetFn(h, cx, cy, cz, r) {
   };
 }
 
-export function buildPilot(look = DEFAULT_LOOK, suit = { p: 0xd81e1e, s: 0xffffff }, helmet = null) {
+// pose : 'stand' (bras le long du corps) ou 'shake' (main droite tendue pour une poignée de main)
+export function buildPilot(look = DEFAULT_LOOK, suit = { p: 0xd81e1e, s: 0xffffff }, helmet = null, pose = 'stand') {
   const parts = [];
   const add = (geo, col, x = 0, y = 0, z = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
     if (geo.index) geo = geo.toNonIndexed();
@@ -35,6 +36,15 @@ export function buildPilot(look = DEFAULT_LOOK, suit = { p: 0xd81e1e, s: 0xfffff
   for (const s of [-1, 1]) {
     add(new THREE.BoxGeometry(0.12, 0.08, 0.25), dark, s * 0.1, 0.04, 0.03);                                   // bottines
     add(new THREE.CapsuleGeometry(0.075, 0.6, 3, 8), suitFn, s * 0.1, 0.46, 0);                                 // jambes
+    if (pose === 'shake' && s < 0) {   // bras droit tendu vers l'avant, main au milieu
+      const sh = new THREE.Vector3(-0.22, 1.33, 0), hand = new THREE.Vector3(0, 1.13, 0.56), d = hand.clone().sub(sh), len = d.length();
+      const g = new THREE.CapsuleGeometry(0.055, len - 0.11, 3, 8).toNonIndexed();
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+      const m = sh.clone().add(hand).multiplyScalar(0.5); g.translate(m.x, m.y, m.z);
+      add(g, (x, y, z) => z > 0.42 ? suit.s : suit.p);
+      add(new THREE.SphereGeometry(0.058, 8, 6), glove, hand.x, hand.y, hand.z);
+      continue;
+    }
     add(new THREE.CapsuleGeometry(0.055, 0.46, 3, 8), (x, y) => y < 0.83 ? suit.s : suit.p, s * 0.245, 1.06, 0, s * 0.1);   // bras
     add(new THREE.SphereGeometry(0.058, 8, 6), glove, s * 0.272, 0.76, 0.01);                                   // gants
   }

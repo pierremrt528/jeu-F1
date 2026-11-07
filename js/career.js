@@ -12,6 +12,7 @@ import { frame, focus } from './showroom.js';
 import { SKINS, HAIRS, HAIR_COLS, HELMETS, DEFAULT_LOOK } from './pilot3d.js';
 import NATIONS from './config/nations.js';
 import ENGINES from './config/motoristes.js';
+import MARKET from './config/pilotes.js';
 import { offers, sponsorCard, spOf, MAX_SEC } from './sponsors.js';
 
 export const TIERS = [
@@ -21,17 +22,8 @@ export const TIERS = [
 ];
 // Motoristes inventés : config/motoristes.js (puissance, fiabilité, consommation, coût annuel)
 export { ENGINES };
-// Pilotes libres : vitesse, stratégie, gestion des pneus, potentiel (sur 100), salaire en M€ / saison
-export const MARKET = [
-  { name: 'V. Kessler', from: 'Vétéran', spd: 90, strat: 88, tyre: 85, pot: 40 },
-  { name: 'H. Sandoval', from: 'Vétéran', spd: 86, strat: 80, tyre: 90, pot: 45 },
-  { name: 'A. Rivière', from: 'Ex-équipier', spd: 80, strat: 75, tyre: 74, pot: 60 },
-  { name: 'L. Marchetti', from: 'Formule B · champion', spd: 84, strat: 66, tyre: 70, pot: 92 },
-  { name: 'S. Okoro', from: 'Formule B · 2e', spd: 79, strat: 70, tyre: 72, pot: 88 },
-  { name: 'E. Vasquez', from: 'Formule B · 4e', spd: 74, strat: 62, tyre: 76, pot: 82 },
-  { name: 'T. Aaltonen', from: 'Formule B · 7e', spd: 68, strat: 70, tyre: 66, pot: 75 },
-  { name: 'M. Dufresne', from: 'Payant (sponsor)', spd: 62, strat: 60, tyre: 64, pot: 50, sponsor: 4 },
-];
+// Pilotes libres : config/pilotes.js (stats, âge, réputation, origine)
+export { MARKET };
 export const salary = d => d.sponsor ? -d.sponsor : Math.round((Math.pow((d.spd * 0.6 + d.strat * 0.15 + d.tyre * 0.15 + d.pot * 0.1) / 100, 6) * 40) * 10) / 10;
 export const mateSkill = spd => 0.87 + spd * 0.001;   // 90 → 0.96
 export const enginePerf = e => 1 + (e.perf - 85) * 0.0012;
@@ -88,6 +80,8 @@ export function statsOf(d) {
 }
 applyCareer();
 export const engineOf = () => career && ENGINES.find(x => x.id === career.engine);
+// rang de la voiture (1 = la plus rapide) parmi les 10 écuries, pour l'intérêt des pilotes et des chefs
+export const carRank = perf => 1 + TEAMS.slice(1).filter(t => t.perf + (season?.dev?.[t.name] || 0) > perf).length;
 
 // Le potentiel fait progresser l'équipier après chaque course de la saison
 export function growMate() {
@@ -286,10 +280,11 @@ export function openSetup(el, onDone, onCancel, aids = {}) {
   function preview3D() { Object.assign(TEAMS[0], { name: cleanName(pick.name) || BASE.name, abbr: abbr(), logo: { ...pick.logo }, look: { ...pick.player.look }, helmet: helmetHex(pick.player.helmet) }); applyTheme(pick.colors); }
   applyTheme(pick.colors);
   // négociation : réputation et place selon le niveau choisi ; le budget restant hors pilote
-  const subOf = d => ({ kind: 'drv', key: d.name, name: d.name, from: d.from, r: rating(d), base: salary(d), sponsor: d.sponsor, color: /Formule B/.test(d.from) ? '#22d3c5' : /Vétéran/.test(d.from) ? '#b07cff' : '#8d96a3' });
+  const subOf = d => ({ kind: 'drv', key: d.name, name: d.name, from: d.from, age: d.age, rep: d.rep, r: rating(d), base: salary(d), sponsor: d.sponsor, color: /Formule B/.test(d.from) ? '#22d3c5' : /Vétéran/.test(d.from) ? '#b07cff' : '#8d96a3' });
   const nctx = () => {
     const tier = TIERS.find(t => t.id === pick.tier);
-    return { win: 'setup-' + pick.tier, store: talks, rep: tier.rep, pos: TIER_POS[tier.id], team: TEAMS[0].name, year,
+    const eng = ENGINES.find(e => e.id === pick.engine);
+    return { win: 'setup-' + pick.tier, store: talks, rep: tier.rep, pos: TIER_POS[tier.id], car: carRank(tier.perf * (eng ? enginePerf(eng) : 1)), team: TEAMS[0].name, year,
       avail: () => Math.round((left() + pick.cost) * 10) / 10, cost: k => ({ now: Math.round((k.sal + k.bonus) * 10) / 10, parts: [['prime', k.bonus], ['1re saison', k.sal]] }) };
   };
   render();
