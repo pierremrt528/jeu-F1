@@ -1,12 +1,13 @@
-// État de l'écurie du joueur : moral, budget (M€), réputation, bonus pour la prochaine course.
+// État de l'écurie du joueur : moral, budget (M€), réputation, bonus pour la prochaine course,
+// confiance de la direction (conf), contrats de sponsors ponctuels (deals : M€ par GP pendant n GP).
 // Sauvegarde locale (clé gpm-team).
 const KEY = 'gpm-team';
 export const team = (() => {
-  let s = { moral: 60, budget: 5, rep: 50, boost: {}, boostTxt: '' };
+  let s = { moral: 60, budget: 5, rep: 50, boost: {}, boostTxt: '', conf: 60, deals: [] };
   try { s = Object.assign(s, JSON.parse(localStorage.getItem(KEY)) || {}); } catch {}
   return s;
 })();
-export function resetTeam() { Object.assign(team, { moral: 60, budget: 5, rep: 50, boost: {}, boostTxt: '' }); saveTeam(); }
+export function resetTeam() { Object.assign(team, { moral: 60, budget: 5, rep: 50, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam(); }
 export function saveTeam() { try { localStorage.setItem(KEY, JSON.stringify(team)); } catch {} }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,6 +18,7 @@ export function applyFx(fx) {
   if (fx.moral) team.moral = clamp(team.moral + fx.moral, 0, 100);
   if (fx.budget) team.budget = Math.max(0, Math.round((team.budget + fx.budget) * 10) / 10);
   if (fx.rep) team.rep = clamp(team.rep + fx.rep, 0, 100);
+  if (fx.conf) team.conf = clamp((team.conf ?? 60) + fx.conf, 0, 100);
   if (fx.perf) for (const k in fx.perf) team.boost[k] = (team.boost[k] || 0) + fx.perf[k];
   team.boostTxt = describeBoost();
   saveTeam();

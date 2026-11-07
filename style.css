@@ -761,3 +761,27 @@ body.tilt #ctl .left { display: none; }
   .ncard.sgn { padding: 10px; gap: 4px; } .sgcard { padding: 10px 12px 8px; } .sgcard .av { width: 48px; height: 48px; } .sghead { font-size: 18px; } .sig { height: 26px; }
 }
 @media (orientation: portrait) { #gTree .node.chef .fee { white-space: normal; line-height: 1.25; } #gTree .node.chef .nint { display: flex; margin: 2px 0 0; } }
+/* direction, missions des sponsors */
+.board { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; padding: 7px 10px; border-radius: 6px; background: rgba(255,255,255,.04); border: 1px solid var(--line); font-size: 12px; }
+.board > b { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.board .bconf { display: flex; align-items: center; gap: 6px; color: #c3cad3; }
+.board .bconf i { width: 70px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; } .board .bconf em { display: block; height: 100%; background: #3ddc84; }
+.board.low { border-color: rgba(255,90,74,.5); background: rgba(255,90,74,.08); } .board.low .bconf em { background: #ff5a4a; }
+.board .obj { color: var(--mut); } .board .obj.ok { color: #8ff0b6; } .board .obj small { color: var(--mut); }
+.mission { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.35; background: rgba(255,200,61,.07); border: 1px dashed rgba(255,200,61,.4); }
+.mission b { color: var(--gold); } .mission button { flex: none; padding: 7px 12px; font-size: 12px; }
+.mission.on { border-style: solid; border-color: rgba(61,220,132,.5); background: rgba(61,220,132,.07); } .mission.on button { color: #8ff0b6; opacity: 1; }
+/* événements : flash info */
+.ncard.evc { max-width: 600px; gap: 10px; }
+.flash { display: flex; align-items: center; gap: 10px; margin: -12px -14px 0; padding: 9px 14px; background: linear-gradient(100deg, #c8160b, #ff3d2e 60%, #ff6a2b); overflow: hidden; animation: flashIn .5s cubic-bezier(.2,.8,.2,1) both; }
+.flash b { flex: none; font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 13px; padding: 2px 8px; background: #fff; color: #c8160b; animation: blink 1s .5s 3 both; }
+.flash span { font-family: var(--cond); font-stretch: condensed; font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 20px; line-height: 1.05; animation: rise .4s .25s both; }
+@keyframes flashIn { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes blink { 50% { opacity: .2; } }
+.evb { display: flex; gap: 12px; align-items: flex-start; animation: rise .4s .35s both; } .evi { font-size: 34px; line-height: 1; } .evb p { font-size: 15px; line-height: 1.4; }
+.evch { display: flex; flex-direction: column; gap: 6px; animation: rise .4s .5s both; } .evch button { text-align: left; padding: 10px 12px; font-size: 14px; line-height: 1.3; }
+.evch button.off { opacity: .35; } .evch button.chosen { border-color: var(--gold); background: #343a46; } .evch button:disabled { color: #fff; }
+.evout p { font-size: 14px; color: #c3cad3; } .evout p.bad { color: #ff9a8a; font-weight: 700; } .evout .main { margin-top: 8px; }
+@media (max-height: 480px) and (orientation: landscape) {
+  .flash span { font-size: 16px; } .evb p { font-size: 13px; } .evi { font-size: 26px; } .evch button { padding: 7px 10px; font-size: 13px; } .ncard.evc { gap: 6px; }
+}

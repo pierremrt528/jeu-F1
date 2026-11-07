@@ -132,7 +132,7 @@ export function openSetup(el, onDone, onCancel) {
     const tier = TIERS.find(t => t.id === pick.tier);
     career = { tier: pick.tier, engine: pick.engine, mate: { ...pick.mate }, contract: { ...pick.k, since: year, paid: year } };
     saveCareer(); applyCareer();
-    Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '' }); saveTeam();
+    Object.assign(team, { budget: left(), rep: tier.rep, moral: tier.moral, boost: {}, boostTxt: '', conf: 60, deals: [] }); saveTeam();
     onDone();
   };
   $('#suBack').onclick = () => { if (step) { step--; render(); } else onCancel(); };

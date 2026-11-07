@@ -53,6 +53,8 @@ export function signChief(c, k, cost, extend) {
   staff.contracts[c.dept] = { sal: k.sal, years: k.years, bonus: k.bonus, since: year() + (extend ? 1 : 0), paid: year() };
   saveStaff();
 }
+// un chef débauché par une écurie rivale : le poste est libéré
+export function loseChief(dept) { delete staff.hired[dept]; if (staff.contracts) delete staff.contracts[dept]; saveStaff(); }
 // intersaison : salaires des contrats qui continuent ; un contrat terminé libère le poste
 export function renewStaff(ny) {
   let total = 0;

@@ -55,6 +55,98 @@ const Q = [
     ["Le potentiel est là, mais il faut plus d'investissements.", { budget: 2.1, rep: -1 }],
     ['Un meilleur tour ne rapporte pas de trophée. On veut gagner.', { moral: 3, perf: { acc: 0.01 } }],
   ] },
+  // contexte de la course : abandon, pluie, stratégie, crevaison, voiture de sécurité, pénalité
+  { when: c => c.dnf, res: true, q: c => `Abandon à ${c.circuit}. Fiabilité ou erreur de pilotage ?`, a: [
+    ["C'est ma faute, j'ai poussé au-delà de la limite.", { moral: 4, rep: 3, conf: 1 }],
+    ["La voiture m'a lâché. L'usine doit se remettre en question.", { moral: -6, rep: -2, conf: -3 }],
+    ["La malchance fait partie de la course. On repart de l'avant.", { moral: 2 }],
+  ] },
+  { when: c => c.wet, q: c => 'La pluie a tout chamboulé aujourd’hui. Aimez-vous ces conditions ?', a: [
+    ["Sous la pluie, c'est le pilote qui fait la différence. J'adore.", { moral: 4, rep: 2, perf: { mu: 0.006 } }],
+    ['Trop dangereux, on aurait dû attendre derrière la voiture de sécurité.', { rep: -2, moral: 1 }],
+    ["Le choix des pneus était un vrai casse-tête pour le muret.", { moral: 2 }],
+  ] },
+  { when: c => c.stops >= 2, q: c => `${c.stops} arrêts aujourd'hui. La stratégie était-elle la bonne ?`, a: [
+    ["Oui, des pneus frais au bon moment, c'est ce qui a payé.", { moral: 3, rep: 1 }],
+    ["On a été trop prudents. Il faudra oser plus.", { moral: -2, perf: { acc: 0.008 } }],
+    ['Le muret a pris les décisions, je fais confiance aux ingénieurs.', { moral: 4, conf: 1 }],
+  ] },
+  { when: c => c.stops === 0 && !c.dnf, q: c => 'Aucun arrêt au stand : un pari très risqué, non ?', a: [
+    ['Qui ne tente rien n’a rien. Les pneus ont tenu.', { moral: 4, rep: 3 }],
+    ['On savait que les pneus tiendraient, tout était calculé.', { rep: 2, conf: 1 }],
+    ["J'avais les pneus en lambeaux à la fin, plus jamais !", { moral: 2, rep: -1 }],
+  ] },
+  { when: c => c.flat, q: c => 'Une crevaison a ruiné votre course. Avez-vous trop tiré sur les pneus ?', a: [
+    ['Oui, on a voulu aller trop loin. Leçon retenue.', { moral: 2, rep: 3 }],
+    ['Les pneus de ce manufacturier ne sont pas fiables.', { rep: -4, moral: 2 }],
+    ["C'est la course. On aura plus de chance la prochaine fois.", { moral: 1 }],
+  ] },
+  { when: c => c.sc, q: c => 'La voiture de sécurité a redistribué les cartes. Chanceux ?', a: [
+    ['On a su saisir l’occasion au bon moment, c’est du travail d’équipe.', { moral: 4, rep: 2 }],
+    ["Elle m'a volé une meilleure place, c'est frustrant.", { moral: -2, rep: -1 }],
+    ['Ça fait partie du spectacle.', { rep: 2 }],
+  ] },
+  { when: c => c.pen > 0, q: c => `Une pénalité de ${c.pen} secondes aujourd'hui. Justifiée ?`, a: [
+    ["Oui, j'ai fait une erreur, je l'assume.", { rep: 4, moral: -1 }],
+    ['Non, les commissaires se sont trompés.', { rep: -5, moral: 3 }],
+    ["Pas de commentaire, je ne veux pas d'amende.", { moral: -1 }],
+  ] },
+  // championnat, saison, direction
+  { when: c => c.champ === 1 && c.round > 2, q: c => 'Vous êtes en tête du championnat. Pouvez-vous tenir jusqu’au bout ?', a: [
+    ['On prend course après course, rien n’est fait.', { moral: 4, rep: 3, conf: 2 }],
+    ['Le titre est pour nous, les autres le savent.', { moral: 6, rep: -4, perf: { vtop: 0.006 } }],
+    ['La pression est sur les autres, pas sur nous.', { moral: 3, rep: 1 }],
+  ] },
+  { when: c => c.champ > 1 && c.champ <= 3 && c.round > 3, q: c => `P${c.champ} au championnat : le titre est-il encore possible ?`, a: [
+    ['Bien sûr, tant que les maths le permettent on y croit.', { moral: 5, conf: 2 }],
+    ['Il faudra des nouvelles pièces rapidement.', { budget: 1.2, moral: -1 }],
+    ['On vise d’abord le podium du championnat.', { moral: 2, rep: 2 }],
+  ] },
+  { when: c => c.mid, q: c => 'La moitié de la saison est passée. Quel bilan faites-vous ?', a: [
+    ['Positif, on progresse et l’usine travaille bien.', { moral: 4, conf: 2 }],
+    ['Mitigé. On doit frapper fort au mercato.', { moral: -2, rep: 2, conf: -1 }],
+    ['Je ne fais les bilans qu’à la fin.', { moral: 1 }],
+  ] },
+  { when: c => c.round >= c.n - 3 && !c.last, q: c => `Plus que ${c.n - c.round} courses. Quel objectif pour finir la saison ?`, a: [
+    ['Finir fort pour préparer l’an prochain.', { moral: 3, conf: 2 }],
+    ['Tout donner, il reste des points à prendre.', { moral: 4, perf: { acc: 0.008 } }],
+    ['Penser déjà à la voiture de l’an prochain.', { moral: -2, budget: 1 }],
+  ] },
+  { when: c => c.last, q: c => 'La saison est terminée. Un mot pour votre équipe ?', a: [
+    ['Merci à tous, cette saison restera gravée.', { moral: 8, rep: 3 }],
+    ["On n'a pas été à la hauteur, il faudra tout changer.", { moral: -6, conf: 3 }],
+    ['Vivement l’année prochaine !', { moral: 4 }],
+  ] },
+  { when: c => c.role === 'n2', q: c => `${c.mate || 'Votre équipier'} a le statut de numéro 2. Est-ce juste ?`, a: [
+    ['Les consignes servent l’écurie, il le comprend.', { conf: 2, moral: -1 }],
+    ['Il aura sa chance s’il est plus rapide que moi.', { moral: 3, rep: 1 }],
+    ['Je préfère ne pas commenter la stratégie interne.', { moral: -1 }],
+  ] },
+  { when: c => c.role === 'n1', q: c => `${c.mate || 'Votre équipier'} est le numéro 1 de l'écurie. Vous l'acceptez ?`, a: [
+    ["Il l'a mérité, je dois faire mieux.", { moral: 3, rep: 3 }],
+    ['Sur la piste, il n’y a pas de numéro 1.', { moral: 2, rep: -2, perf: { vtop: 0.005 } }],
+    ['Ça changera vite, croyez-moi.', { moral: 4, conf: -2 }],
+  ] },
+  { when: c => c.conf != null && c.conf < 35, q: c => 'On dit que la direction perd patience. Votre poste est-il menacé ?', a: [
+    ['Je sais que les résultats doivent arriver. Ils arriveront.', { conf: 3, moral: 2 }],
+    ['La direction devrait plutôt nous donner plus de moyens.', { conf: -6, budget: 2, rep: 1 }],
+    ['Je ne lis pas les rumeurs.', { moral: -2 }],
+  ] },
+  { when: c => c.tier === 'new', q: c => 'Une nouvelle écurie peut-elle vraiment exister face aux géants ?', a: [
+    ['Chaque géant a commencé petit. Rendez-vous dans deux ans.', { rep: 4, moral: 3 }],
+    ['Il nous faut de nouveaux partenaires, l’appel est lancé.', { budget: 2, rep: -2 }],
+    ['On est là pour apprendre, sans pression.', { moral: 3, conf: -1 }],
+  ] },
+  { when: c => c.tier === 'top', q: c => 'Avec votre budget, tout autre résultat que la victoire est-il un échec ?', a: [
+    ['Oui. Nous sommes là pour gagner, point.', { conf: 3, moral: -2, perf: { acc: 0.008 } }],
+    ["L'argent ne fait pas tout, la concurrence est rude.", { conf: -3, rep: 2 }],
+    ['Nous visons le titre, et nous travaillons pour.', { conf: 2, moral: 1 }],
+  ] },
+  { when: c => c.reg, q: c => 'Le nouveau règlement va rebattre les cartes. Une chance pour vous ?', a: [
+    ['Oui, nos ingénieurs ont déjà des idées.', { moral: 4, conf: 1 }],
+    ['C’est un coût énorme pour les petites écuries.', { budget: 1.5, rep: 1 }],
+    ['On verra en début de saison prochaine.', { moral: 1 }],
+  ] },
   { q: c => 'Des rumeurs vous envoient dans une autre écurie la saison prochaine. Info ou intox ?', a: [
     ["Intox. Je suis bien ici et je veux gagner avec cette équipe.", { moral: 8, rep: 2 }],
     ['Je ne ferme aucune porte. Le meilleur projet gagnera.', { moral: -8, budget: 2.4, rep: 2 }],
@@ -85,6 +177,31 @@ const Q = [
     ['Certaines décisions étaient incompréhensibles.', { rep: -5, moral: 3 }],
     ["Je préfère parler de pilotage.", { moral: 1 }],
   ] },
+  { q: c => 'Les jeunes de Formule B frappent à la porte. Faut-il leur faire confiance ?', a: [
+    ['Oui, la jeunesse fait avancer ce sport.', { rep: 4, moral: 1 }],
+    ["L'expérience compte plus que tout en course.", { rep: -1, moral: 2 }],
+    ["Notre académie va justement en accueillir.", { rep: 2, budget: -0.5, moral: 2 }],
+  ] },
+  { q: c => 'Vingt-deux Grands Prix dans l’année : le calendrier est-il trop chargé ?', a: [
+    ['Les fans en veulent toujours plus, on est là pour eux.', { rep: 4, moral: -2 }],
+    ['Les mécaniciens sont épuisés, il faut les protéger.', { moral: 6, rep: 1, conf: -1 }],
+    ['Plus de courses, plus de revenus.', { budget: 1, rep: -2 }],
+  ] },
+  { q: c => 'Les écuries dépensent-elles trop d’argent ?', a: [
+    ['Oui, un plafond de dépenses serait juste.', { rep: 3 }],
+    ['Chacun investit comme il veut.', { rep: -2, budget: 0.8 }],
+    ['Nous, on compte chaque euro.', { conf: 2, moral: 1 }],
+  ] },
+  { q: c => 'Un message pour vos fans ?', a: [
+    ['Merci pour votre soutien, on se bat pour vous.', { rep: 4, moral: 2 }],
+    ['Venez nombreux au prochain Grand Prix !', { rep: 2, budget: 0.6 }],
+    ['Restez patients, les grands moments arrivent.', { moral: 3 }],
+  ] },
+  { q: c => 'Quel est votre plus grand défaut en piste ?', a: [
+    ["L'impatience. Je veux toujours dépasser trop tôt.", { rep: 3, moral: 1 }],
+    ["Je n'en ai pas.", { rep: -4, moral: 4 }],
+    ['La gestion des pneus, j’y travaille.', { moral: 1, perf: { mu: 0.005 } }],
+  ] },
   { q: c => 'Comment gérez-vous la pression avant le départ ?', a: [
     ["Je reste avec mes mécaniciens, ça me détend.", { moral: 6 }],
     ["Je n'ai pas de pression, c'est aux autres d'en avoir.", { rep: -3, moral: 3, perf: { acc: 0.008 } }],
@@ -108,11 +225,12 @@ export function buildQuestions(ctx, n = 3) {
   return list.map((q, k) => ({ text: q.q(ctx), who: people[k], answers: q.a.map(([t, fx]) => [typeof t === 'function' ? t(ctx) : t, fx]) }));
 }
 
-const fxText = fx => {
+export const fxText = fx => {
   const out = [];
   if (fx.moral) out.push([`Moral ${fx.moral > 0 ? '+' : ''}${fx.moral}`, fx.moral > 0]);
   if (fx.budget) out.push([`Budget ${fx.budget > 0 ? '+' : ''}${fx.budget.toFixed(1)} M€`, fx.budget > 0]);
   if (fx.rep) out.push([`Réputation ${fx.rep > 0 ? '+' : ''}${fx.rep}`, fx.rep > 0]);
+  if (fx.conf) out.push([`Confiance de la direction ${fx.conf > 0 ? '+' : ''}${fx.conf}`, fx.conf > 0]);
   if (fx.perf) for (const k in fx.perf) out.push([`${fx.perf[k] > 0 ? '+' : ''}${(fx.perf[k] * 100).toFixed(1).replace('.0', '')} % ${FXNAMES[k]} (prochaine course)`, fx.perf[k] > 0]);
   return out.map(([t, good]) => `<span class="${good ? 'up' : 'down'}">${t}</span>`).join('');
 };

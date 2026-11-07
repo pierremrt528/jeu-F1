@@ -16,6 +16,7 @@ import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
 import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
 import { showPreraceScreen } from './prerace.js';
+import { eventCtx, pickEvent, showEvent, boardAfterRace, seasonReview, isFired, boardHTML, makeMission, checkMission, missionHTML, payDeals } from './events.js';
 import { initAudio, updateAudio } from './audio.js';
 import { initFx, updateFx } from './fx.js';
 import { initDebris, updateDebris, clearDebris } from './debris.js';
@@ -125,6 +126,12 @@ function raceFormat() {
 let raceOpts = {};
 if (params.has('debug')) { window.gpm = () => R; window.gpmCam = camera; window.gpmTrack = () => track; }   // tests : accès à la course, caméra et circuit
 function startRace(opts = raceOpts) {
+  const S = SZ.season;
+  if (opts.season && S?.gridPen && opts.gridOrder) {   // pénalité de grille : on recule de n places
+    const g = opts.gridOrder.filter(n => n !== 'Toi'), i = opts.gridOrder.indexOf('Toi');
+    g.splice(Math.min(g.length, i + S.gridPen), 0, 'Toi');
+    opts = { ...opts, gridOrder: g }; S.gridPen = 0; SZ.saveSeason();
+  }
   raceOpts = opts;
   initAudio(settings.sound);
   if (R) clearRace();
@@ -253,7 +260,8 @@ function showResults() {
     // contexte pour la presse
     const mate = rows.find(r => !r.player && r.team === me.team);
     R.pressCtx = { pos: me.pos, grid: me.grid, gained: me.grid - me.pos, circuit: def.name, winner: rows[0].name,
-      rival: me.pos > 1 && Math.random() < 0.6 ? rows[me.pos - 2].name : null, mate: mate?.name, mateAhead: mate && mate.pos < me.pos, fastest };
+      rival: me.pos > 1 && Math.random() < 0.6 ? rows[me.pos - 2].name : null, mate: mate?.name, mateAhead: mate && mate.pos < me.pos, fastest,
+      dnf: me.dnf, wet: R.wet > 0.3, stops: me.stops, flat: (R.player.flats || 0) > 0, sc: !!R.scUsed, pen: me.pen };
     R.pressDone = false;
     if (R.season) {
       SZ.recordRace(rows); R.grow = growMate();
@@ -263,6 +271,22 @@ function showResults() {
       // annonce du règlement de la saison suivante à la mi-saison (ou en fin de saison pour les anciennes sauvegardes)
       if ((S.round === SZ.midRound() || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
       SZ.recordPerf(playerPerf());
+      // direction, mission du sponsor, sponsors ponctuels, événement d'ici le prochain GP
+      R.conf = boardAfterRace(me.pos, me.dnf);
+      const m = S.mission, ahead = SZ.driverStandings();
+      if (m?.acc) {
+        const rp = rows.find(r => r.name === m.who);
+        R.mis = { ...m, ok: checkMission(m, { pos: me.pos, dnf: me.dnf, gained: me.grid - me.pos, fastest, matePos: mate ? mate.pos : 99, rivalPos: rp ? (rp.dnf ? 99 : rp.pos) : 99 }) };
+        if (R.mis.ok) team.budget = Math.round((team.budget + m.gain) * 10) / 10; else team.rep = Math.max(0, team.rep - 3);
+        saveTeam();
+      }
+      S.mission = null;
+      R.deals = payDeals();
+      if (S.done) R.review = seasonReview();
+      else if (Math.random() < 0.65) S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
+      SZ.saveSeason();
+      Object.assign(R.pressCtx, { champ: ahead.findIndex(d => d.player) + 1, round: S.round, n: SZ.nRounds(), mid: S.round === SZ.midRound(), last: S.done,
+        role: career?.contract?.role, conf: team.conf, tier: career?.tier, reg: !!S.reg?.length });
     }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
@@ -275,7 +299,11 @@ function showResults() {
     (R.parts.done.length ? `<br>🔧 Pièce${R.parts.done.length > 1 ? 's' : ''} livrée${R.parts.done.length > 1 ? 's' : ''} : <b>${R.parts.done.join(', ')}</b>` : '') +
     (R.parts.late.length ? `<br>⏱ Retard aux essais : <b>${R.parts.late.join(', ')}</b>` : '') +
     (R.parts.fail.length ? `<br>❌ Recherche ratée (argent perdu) : <b class="bad">${R.parts.fail.join(', ')}</b>` : '') +
-    (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '');
+    (R.grow ? `<br>📈 ${career.mate.name} progresse : vitesse ${Math.round(career.mate.spd)} (+${R.grow})` : '') +
+    (R.mis ? `<br>🤝 Mission ${R.mis.sp} (${R.mis.txt.toLowerCase()}) : ${R.mis.ok ? `<b>réussie, +${R.mis.gain.toFixed(1)} M€</b>` : '<b class="bad">ratée, réputation −3</b>'}` : '') +
+    (R.deals ? `<br>💼 Sponsors ponctuels : <b>+${R.deals.toFixed(1)} M€</b>` : '') +
+    (R.conf != null && !R.free ? `<br>🏛️ Direction : confiance ${R.conf > 0 ? '+' : ''}${R.conf} → <b>${Math.round(team.conf)} %</b>` : '') +
+    (R.review ? `<br>🏁 Bilan de la direction : ${R.review.met}/${R.review.n} objectifs atteints (${R.review.d > 0 ? '+' : ''}${R.review.d})${R.review.bonus ? ` · bonus <b>+${R.review.bonus} M€</b>` : ''}${R.review.fired ? ' · <b class="bad">la direction veut te remplacer…</b>' : ''}` : '');
   $('pressBtn').classList.toggle('hidden', R.pressDone);
   $('resultTitle').textContent = (me.dnf ? 'Abandon' : me.pos === 1 ? 'Victoire !' : me.pos <= 3 ? `Podium : P${me.pos}` : `Arrivée : P${me.pos}`) + (R.sim ? ' · course simulée' : '');
   show('results');
@@ -327,20 +355,30 @@ function openSeason() {
   if (R) { clearRace(); R = null; }
   paused = true;
   $('szTitle').textContent = `Championnat ${S.year}` + (S.done ? ' · terminé' : ` · manche ${S.round + 1}/${SZ.nRounds()}`);
+  if (S.done && career) seasonReview();
+  if (isFired()) {   // la direction a perdu confiance : fin de la carrière
+    $('szTitle').textContent = 'Licencié !';
+    $('szCal').innerHTML = SZ.calendarHTML(); $('szState').innerHTML = teamLine();
+    $('szNext').innerHTML = `<h3>🏛️ La direction te remercie</h3><p>Confiance rompue (${Math.round(team.conf)} %). ${S.review?.fired ? `Objectifs atteints : ${S.review.met}/${S.review.n}.` : 'Les résultats sont trop loin des attentes.'} Une autre écurie te donnera peut-être ta chance…</p>`;
+    $('szActions').innerHTML = `<button class="main" id="szFired">Nouvelle carrière</button>`;
+    $('szFired').onclick = resetAll;
+    return show('season');
+  }
   $('szCal').innerHTML = SZ.calendarHTML();
   $('szState').innerHTML = teamLine();
   const me = SZ.driverStandings().findIndex(d => d.player) + 1, myPts = S.pts['Toi'] || 0;
   if (S.done) {
     const ch = SZ.driverStandings()[0], tc = SZ.teamStandings()[0];
     const tp = SZ.teamStandings().findIndex(t => t.player) + 1;
-    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, salaires des chefs de département, contrat moteur, contrat de ton équipier et transferts sans surcoût.</p>` + regHTML(S) + newsHTML(S);
+    $('szNext').innerHTML = `<h3>${ch.player ? '🏆 Tu es champion du monde !' : `Champion : ${ch.name}`}</h3><p>Tu termines P${me} avec ${myPts} pts. Écuries : ${tc.name} championne, ton écurie P${tp}.</p><p>Intersaison : dotation, salaires des chefs de département, contrat moteur, contrat de ton équipier et transferts sans surcoût.</p>` + (career ? boardHTML() : '') + regHTML(S) + newsHTML(S);
     $('szActions').innerHTML = `<button class="main" id="szNew">Intersaison : moteur et transferts →</button>`;
     $('szNew').onclick = () => offSeason(tp);
   } else {
     const c = SZ.roundCircuit();
     if (def.id !== c.id) loadCircuit(c.id);
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
-    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts</p>` + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
+    if (career && !S.mission && !S.grid) { const ds = SZ.driverStandings(), k = ds.findIndex(d => d.player); S.mission = makeMission(ds[k ? k - 1 : 1]?.name); SZ.saveSeason(); }
+    $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (career ? boardHTML() + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
     const mid = S.round === SZ.midRound() && career;
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
@@ -348,6 +386,7 @@ function openSeason() {
       `<button id="szSimGP">⏩ Simuler le Grand Prix${S.grid ? '' : ' (qualifs + course)'}</button><p id="szSimProg" class="dim small"></p>` +
       (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(indemnités ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
     document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
+    const ms = $('szMis'); if (ms) ms.onclick = () => { S.mission.acc = true; SZ.saveSeason(); openSeason(); };
     const mk = $('szMarket'); if (mk) mk.onclick = () => {
       show('setup');
       openMarket($('setup'), 'mid', name => { S.midSign = name || S.midSign; SZ.saveSeason(); openSeason(); }, () => openSeason());
@@ -366,6 +405,8 @@ function openSeason() {
     const rc = $('szRace'); if (rc) rc.onclick = async () => { await enableTilt(settings.tilt); showPrerace({ season: true, gridOrder: S.grid, perfBonus: S.dev, wx: S.wx }); };
   }
   show('season');
+  // événement survenu depuis le dernier GP : il faut trancher avant de continuer
+  if (S.event && !S.done) showEvent(S.event, () => { S.event = null; SZ.saveSeason(); openSeason(); });
 }
 const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartiront de zéro ${S.reg.length > 1 ? "dans ces domaines" : "dans ce domaine"} : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées à l’intersaison. Inutile d’y investir gros d’ici là !</div>` : '';
 const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';

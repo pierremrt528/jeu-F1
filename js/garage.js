@@ -150,6 +150,13 @@ export function tickDevelopment(days) {
   return out;
 }
 
+// événements : retard (+) ou avance (−) de toutes les recherches en cours, en jours
+export function shiftDev(days) {
+  for (const k in garage.dev) garage.dev[k].left = Math.max(1, garage.dev[k].left + days);
+  save();
+}
+export const devCount = () => Object.keys(garage.dev).length;
+
 // ---------- écran ----------
 const STATS = [
   ['Vitesse de pointe', u => u.vtop - 1, 0.09], ['Accélération', u => u.acc - 1, 0.3], ['Appui aéro', u => u.kd - 1, 0.4],
