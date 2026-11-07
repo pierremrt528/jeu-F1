@@ -4,18 +4,51 @@ import { TEAMS, CIRCUITS } from './data.js';
 import { SPEC } from './car.js';
 import { DS } from './track.js';
 
-export const CALENDAR = ['valmont', 'sahrane', 'portazur', 'kerlan', 'sierra', 'veldmar', 'solenza', 'neokyara', 'varenne', 'brekka'];
-// Rythme d'une vraie saison : jours entre deux GP (week-ends consécutifs, doublés, pause d'été), puis l'intersaison
-export const GAPS = [14, 7, 21, 7, 14, 35, 7, 14, 7], OFF_DAYS = 90;
+// Calendrier : 22 Grands Prix de mars à début décembre ; la saison va du 1er janvier au 31 décembre.
+export const CALENDAR = ['qaltara', 'sahrane', 'coralia', 'neokyara', 'miravel', 'castelmare', 'valmont', 'sorrane', 'brumenval', 'rocheval', 'veldmar',
+  'oberthal', 'sierra', 'varenne', 'kerlan', 'nordfjell', 'solenza', 'aurelia', 'kasbara', 'portazur', 'tessaline', 'brekka'];
+// jours entre deux GP : week-ends consécutifs (7), 2 ou 3 semaines, pause d'été de 5 semaines (mercato)
+export const GAPS = [14, 21, 7, 14, 14, 7, 14, 7, 14, 7, 35, 7, 14, 7, 21, 14, 7, 14, 7, 14, 7];
+// anciennes sauvegardes : saison à 10 manches
+const OLD_CAL = ['valmont', 'sahrane', 'portazur', 'kerlan', 'sierra', 'veldmar', 'solenza', 'neokyara', 'varenne', 'brekka'], OLD_GAPS = [14, 7, 21, 7, 14, 35, 7, 14, 7];
+export const cal = () => season?.cal || (season ? OLD_CAL : CALENDAR);
+const gaps = () => season?.gaps || (season ? OLD_GAPS : GAPS);
+export const nRounds = () => cal().length;
+export const midRound = () => Math.floor(nRounds() / 2);   // mercato d'été et annonce du règlement
 const MOIS = ['janv.', 'févr.', 'mars', 'avril', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+export const MOIS_LONG = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 // date du GP k : premier départ le 2e dimanche de mars
 export function raceDate(k, year = season?.year || 2027) {
   const d = new Date(year, 2, 8); d.setDate(d.getDate() + (7 - d.getDay()) % 7);
-  d.setDate(d.getDate() + GAPS.slice(0, k).reduce((a, b) => a + b, 0));
+  d.setDate(d.getDate() + gaps().slice(0, k).reduce((a, b) => a + b, 0));
   return d;
 }
-export const fmtDate = d => `${d.getDate()} ${MOIS[d.getMonth()]}`;
-export const daysAfter = k => k < GAPS.length ? GAPS[k] : OFF_DAYS;   // jours entre le GP k et le suivant
+export const fmtDate = d => `${d.getDate() === 1 ? '1er' : d.getDate()} ${MOIS[d.getMonth()]}`;
+// jours entre le GP k et le suivant (après le dernier : jusqu'au premier GP de la saison suivante)
+export const daysAfter = k => k < gaps().length ? gaps()[k] : Math.round((raceDate(0, (season?.year || 2027) + 1) - raceDate(k)) / 864e5);
+// date du jour dans la carrière : 1er janvier avant la première course, sinon le lendemain du dernier GP
+export function today() {
+  if (!season) return new Date(2027, 0, 1);
+  if (season.done) return new Date(season.year, 11, 15);
+  if (!season.round) return new Date(season.year, 0, 1);
+  const d = raceDate(season.round - 1); d.setDate(d.getDate() + 1); return d;
+}
+// rendez-vous de la saison hors Grands Prix (affichés dans le calendrier)
+export function seasonEvents(year = season?.year || 2027) {
+  const n = nRounds(), m = midRound(), f = raceDate(0, year), last = raceDate(n - 1, year);
+  const launch = new Date(f); launch.setDate(f.getDate() - 30);
+  const tests = new Date(f); tests.setDate(f.getDate() - 16);
+  const summer = raceDate(m - 1, year); summer.setDate(summer.getDate() + 1);
+  const gala = new Date(last); gala.setDate(last.getDate() + 7);
+  return [
+    { d: new Date(year, 0, 1), ic: '🎆', t: 'Début de la saison', s: 'contrats et budget de l’année' },
+    { d: launch, ic: '🚗', t: 'Présentation de la voiture', s: 'nouvelle livrée devant la presse' },
+    { d: tests, ic: '🧪', t: 'Essais hivernaux', s: '3 jours de roulage avant le premier GP' },
+    { d: summer, ic: '☀️', t: 'Pause estivale · mercato d’été', s: `${gaps()[m - 1] || 35} jours sans course, transferts possibles` },
+    { d: gala, ic: '🏆', t: 'Gala de fin de saison', s: 'remise des trophées, puis intersaison' },
+    { d: new Date(year, 11, 31), ic: '🔁', t: 'Fin de la saison', s: 'contrats, moteur et transferts pour l’an prochain' },
+  ];
+}
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 const KEY = 'gpm-season';
 const DRIVERS = () => TEAMS.flatMap(t => t.drivers.map(d => ({ name: d.name, team: t.name, color: t.color, player: !!d.player })));
@@ -28,7 +61,7 @@ export function newSeason(year, carry = false, nReg = 0) {
   // carry : les écuries rivales gardent la moitié de leurs progrès ; un nouveau règlement les
   // fait reculer et rebat les cartes (certaines écuries comprennent mieux les nouvelles règles)
   const dev = carry && season ? Object.fromEntries(TEAMS.slice(1).map(t => [t.name, (season.dev[t.name] || 0) * 0.5 - nReg * 0.004 + (Math.random() - 0.5) * 0.008 * nReg])) : {};
-  season = { year: year || (season ? season.year + 1 : 2027), round: 0, pts: {}, results: [], dev, hist: [], grid: null, quali: null, done: false };
+  season = { year: year || (season ? season.year + 1 : 2027), cal: CALENDAR.slice(), gaps: GAPS.slice(), round: 0, pts: {}, results: [], dev, hist: [], grid: null, quali: null, done: false };
   for (const d of DRIVERS()) season.pts[d.name] = 0;
   saveSeason();
   return season;
@@ -42,12 +75,12 @@ export function recordPerf(playerPerf) {
 export function perfChartHTML() {
   const H = season?.hist || [];
   if (!H.length) return '<p class="hint">Les courbes apparaîtront après la première course.</p>';
-  const W = 330, Ht = 170, L = 30, T = 8, B = 18, n = Math.max(10, H.length - 1);
+  const W = 330, Ht = 170, L = 30, T = 8, B = 18, n = Math.max(nRounds(), H.length - 1);
   const vals = H.flatMap(h => Object.values(h)), lo = Math.min(...vals) - 0.003, hi = Math.max(...vals) + 0.003;
   const X = i => L + (W - L - 6) * i / n, Y = v => T + (Ht - T - B) * (1 - (v - lo) / (hi - lo));
   let g = '';
   for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4; g += `<line x1="${L}" x2="${W - 6}" y1="${Y(v)}" y2="${Y(v)}" stroke="rgba(255,255,255,.08)"/><text x="${L - 3}" y="${Y(v) + 3}" text-anchor="end">${(v * 100).toFixed(1)}</text>`; }
-  for (let i = 0; i <= n; i++) g += `<text x="${X(i)}" y="${Ht - 4}" text-anchor="middle">${i ? i : 'D'}</text>`;
+  for (let i = 0; i <= n; i += n > 12 ? 2 : 1) g += `<text x="${X(i)}" y="${Ht - 4}" text-anchor="middle">${i ? i : 'D'}</text>`;
   const teams = TEAMS.map(t => ({ t, me: t.drivers.some(d => d.player), last: H[H.length - 1][t.name] })).sort((a, b) => a.me - b.me);
   for (const { t, me } of teams) {
     const pts = H.map((h, i) => `${X(i).toFixed(1)},${Y(h[t.name] ?? lo).toFixed(1)}`).join(' ');
@@ -62,7 +95,7 @@ export function perfChartHTML() {
 }
 export function quitSeason() { season = null; try { localStorage.removeItem(KEY); } catch {} }
 
-export const roundCircuit = () => CIRCUITS.find(c => c.id === CALENDAR[season.round]);
+export const roundCircuit = () => CIRCUITS.find(c => c.id === cal()[season.round]);
 
 // Estimation d'un tour lancé pour un pilote IA (même modèle que la physique : profil de vitesse
 // × niveau, limité par l'accélération) + un peu d'aléa
@@ -100,11 +133,12 @@ export function recordRace(rows) {
     return { name: r.name, pos: r.pos, pts: p };
   });
   const me = rows.find(r => r.player);
-  season.results.push({ circuit: CALENDAR[season.round], pos: me.pos, pts: res.find(r => r.name === me.name).pts, podium: rows.slice(0, 3).map(r => r.name), fast: fast?.name });
+  season.results.push({ circuit: cal()[season.round], pos: me.pos, pts: res.find(r => r.name === me.name).pts, podium: rows.slice(0, 3).map(r => r.name), fast: fast?.name });
   // les écuries rivales progressent un peu à chaque course
-  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + 0.0012 + Math.random() * 0.0018;
+  const k = Math.sqrt(10 / nRounds());   // saison plus longue : progrès par course un peu plus faibles
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k;
   season.round++; season.grid = null; season.quali = null; season.wx = null;
-  if (season.round >= CALENDAR.length) season.done = true;
+  if (season.round >= nRounds()) season.done = true;
   saveSeason();
 }
 
@@ -121,13 +155,22 @@ function bestFinish() { return 0; }
 // ---------- rendu HTML ----------
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 export function calendarHTML() {
-  return CALENDAR.map((id, k) => {
-    const c = CIRCUITS.find(x => x.id === id), r = season.results[k];
+  const C = cal(), y = season.year, items = [];
+  C.forEach((id, k) => items.push({ d: raceDate(k), k, id }));
+  for (const e of seasonEvents(y)) items.push({ d: e.d, ev: e });
+  items.sort((a, b) => a.d - b.d || (a.ev ? -1 : 1));
+  const now = today();
+  let h = '', month = -1;
+  for (const it of items) {
+    if (it.d.getMonth() !== month) { month = it.d.getMonth(); h += `<h5 class="calm">${MOIS_LONG[month]} ${y}</h5>`; }
+    if (it.ev) { h += `<div class="cal ev ${it.d < now ? 'past' : ''}"><span>${it.ev.ic}</span><div>${it.ev.t}<small>${fmtDate(it.d)} · ${it.ev.s}</small></div><em></em></div>`; continue; }
+    const k = it.k, c = CIRCUITS.find(x => x.id === it.id), r = season.results[k];
     const cls = k === season.round && !season.done ? 'next' : r ? 'past' : '';
     const res = r ? `<b class="${r.pos <= 3 ? 'pod' : ''}">P${r.pos}</b> <small>+${r.pts} pts</small>` : k === season.round ? '<b>À suivre</b>' : '';
-    const gap = k ? GAPS[k - 1] : 0, tag = !k ? '' : gap === 7 ? '<i class="gap b2b">enchaîné</i>' : gap >= 28 ? `<i class="gap long">pause ${gap / 7} sem.</i>` : `<i class="gap">${gap / 7} sem.</i>`;
-    return `<div class="cal ${cls}"><span>${k + 1}</span><div>${c.name}<small>${fmtDate(raceDate(k))} · ${c.type}</small></div><em>${res || tag}</em></div>`;
-  }).join('');
+    const gap = k ? gaps()[k - 1] : 0, tag = !k ? '<i class="gap">ouverture</i>' : gap === 7 ? '<i class="gap b2b">enchaîné</i>' : gap >= 28 ? `<i class="gap long">pause ${gap / 7} sem.</i>` : `<i class="gap">${gap / 7} sem.</i>`;
+    h += `<div class="cal ${cls}"><span>${k + 1}</span><div>${c.name}<small>${fmtDate(it.d)} · ${c.type}</small></div><em>${res || tag}</em></div>`;
+  }
+  return h;
 }
 export function standingsHTML(kind) {
   if (kind === 'perf') return perfChartHTML();

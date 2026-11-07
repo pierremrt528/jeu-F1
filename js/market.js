@@ -6,7 +6,7 @@ import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, M
 import { salaryCut } from './infra.js';
 import { driverCard, engineCard, steps as stepBar } from './ui.js';
 
-export const MID_ROUND = 5, MID_MULT = 2.5;
+export const MID_MULT = 2.5;
 const r1 = v => Math.round(v * 10) / 10;
 
 function candidates(mid) {

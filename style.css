@@ -684,3 +684,8 @@ body.tilt #ctl .left { display: none; }
   #settings .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
   #settings .row button { min-width: 0; width: 150px; padding: 8px 6px; }
 }
+/* calendrier de la saison : mois, Grands Prix et rendez-vous */
+.calm { margin: 8px 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--acc2); font-weight: 800; }
+.calm:first-child { margin-top: 0; }
+.cal.ev { background: rgba(34,211,197,.06); border: 1px dashed rgba(34,211,197,.25); font-size: 13px; }
+.cal.ev span { font-size: 15px; } .cal.ev.past { opacity: .55; }
