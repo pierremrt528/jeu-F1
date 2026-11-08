@@ -8,6 +8,7 @@ export const INFRA = [
   { id: 'hosp', name: 'Espace partenaires', icon: '🤝', desc: 'Attire plus de sponsors : revenus à chaque Grand Prix.', lv: ['+1 M€ par GP', '+2 M€ par GP', '+3,5 M€ par GP'] },
   { id: 'media', name: 'Centre médias', icon: '📺', desc: 'Plus de visibilité : primes de course et réputation.', lv: ['Primes +10 %', 'Primes +20 %', 'Primes +30 %'] },
   { id: 'acad', name: 'Académie de pilotes', icon: '🎓', desc: 'Ton équipier progresse plus vite, les salaires baissent.', lv: ['Progression ×1,5 · salaires −5 %', 'Progression ×2 · salaires −10 %', 'Progression ×2,5 · salaires −15 %'] },
+  { id: 'shop', name: 'Ateliers', icon: '🏭', desc: 'Plus de recherches en même temps dans l’usine (tous pôles confondus).', lv: ['+1 atelier', '+2 ateliers', '+3 ateliers'] },
   { id: 'pitc', name: 'Centre des mécaniciens', icon: '🔧', desc: 'Des arrêts au stand plus rapides.', lv: ['Arrêts −0,3 s', 'Arrêts −0,6 s', 'Arrêts −1 s'] },
 ];
 const COST = [8, 16, 30], TIME = [14, 28, 42];   // M€ et jours de chantier par niveau
@@ -75,6 +76,6 @@ export function renderInfra(root, sel, onPick, refresh) {
       infra.build = { id: x.id, left: TIME[l], days: 1 }; save(); refresh();
     };
   } else $('#gDetail').innerHTML = `<p class="hint">Touche un bâtiment. Un seul chantier à la fois ; il est payé tout de suite et dure 2 à 6 semaines selon le niveau.</p>`;
-  $('#gStats').innerHTML = `<h4>Effets des bâtiments</h4><p class="istat">🤝 Sponsors : <b>+${sponsorIncome()} M€</b> par GP</p><p class="istat">📺 Primes de course : <b>×${prizeBonus().toFixed(1)}</b></p>` +
+  $('#gStats').innerHTML = `<h4>Effets des bâtiments</h4><p class="istat">🤝 Partenaires : <b>+${sponsorIncome()} M€</b> par GP</p><p class="istat">📺 Primes de course : <b>×${prizeBonus().toFixed(1)}</b></p>` +
     `<p class="istat">🔬 Prix des pièces : <b>${Math.round(partDiscount() * 100)} %</b></p><p class="istat">🔧 Arrêts : <b>${pitBonus() ? pitBonus() + ' s' : 'normaux'}</b></p>`;
 }

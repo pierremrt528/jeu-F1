@@ -1,5 +1,5 @@
 // Cache hors-ligne. Incrémenter VERSION à chaque mise à jour du jeu.
-const VERSION = 'gpm-v46';
+const VERSION = 'gpm-v47';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.json', 'icon-192.png', 'icon-512.png',
   'lib/three.module.min.js', 'js/main.js', 'js/data.js', 'js/track.js', 'js/car.js', 'js/ai.js', 'js/race.js', 'js/input.js', 'js/hud.js', 'js/scenery.js', 'js/carmodel.js', 'js/textures.js', 'js/garage.js', 'js/team.js', 'js/press.js', 'js/season.js', 'js/career.js', 'js/strategy.js', 'js/safety.js', 'js/audio.js', 'js/fx.js', 'js/infra.js', 'js/market.js', 'js/ui.js', 'js/staff.js', 'js/prerace.js', 'js/nego.js', 'js/events.js', 'js/cine.js', 'js/debris.js', 'js/showroom.js', 'js/art.js', 'js/tuning.js', 'js/qsession.js', 'js/theme.js', 'js/logo.js', 'js/config/couleurs.js', 'js/config/nations.js', 'js/config/scenes.js', 'js/pilot3d.js', 'js/sponsors.js', 'js/config/sponsors.js', 'js/config/motoristes.js', 'js/config/pilotes.js',
   'assets/asphalte.jpg', 'assets/asphalte-normal.jpg', 'assets/herbe.jpg', 'assets/sable.jpg', 'assets/gravier.jpg', 'assets/nuages.jpg', 'assets/nuages-alpha.jpg',

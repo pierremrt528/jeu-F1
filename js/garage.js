@@ -2,8 +2,8 @@
 // 1 à 3 GP à être livrée ; une seule pièce en développement par pôle. Sauvegarde locale et écran.
 import { NO_UP } from './car.js';
 import { team, saveTeam } from './team.js';
-import { engineOf, carRank } from './career.js';
-import { partDiscount, partDelay, parallelParts, pitBonus, renderInfra, infra } from './infra.js';
+import { engineOf, carRank, career } from './career.js';
+import { partDiscount, partDelay, parallelParts, pitBonus, renderInfra, infra, level } from './infra.js';
 import { CHIEFS, DEPTS, chiefOf, chiefMul, staff, saveStaff, chiefContract, chiefUntil, chiefRelease, signChief } from './staff.js';
 import { openNego, preview, previewHTML, fmtM } from './nego.js';
 import { teamPos } from './market.js';
@@ -158,6 +158,9 @@ export function shiftDev(days) {
   save();
 }
 export const devCount = () => Object.keys(garage.dev).length;
+// ateliers de l'usine : recherches simultanées tous pôles confondus (selon le niveau de départ + bâtiment « Ateliers »)
+const WS_BASE = { new: 2, mid: 3, top: 4 };
+export const workshops = () => (WS_BASE[career?.tier] ?? 3) + level('shop');
 
 // ---------- écran ----------
 const STATS = [
@@ -273,7 +276,7 @@ function renderRD($, ov) {
 
 function renderOverview($) {
   const total = TREES.reduce((s, t) => s + t.nodes.length, 0), [mt, mc] = moraleTxt(team.moral);
-  const cap = TREES.length * parallelParts(), used = devCount();
+  const cap = Math.min(TREES.length * parallelParts(), workshops()), used = devCount();
   const eff = [partDiscount() < 1 ? `coûts −${Math.round((1 - partDiscount()) * 100)} %` : '', partDelay(100) < 100 ? `délais −${100 - Math.round(partDelay(100))} %` : ''].filter(Boolean).join(' · ') || 'coûts et délais standard';
   const cards = TREES.map(t => {
     const n = t.nodes.filter(x => owned(x.id)).length, w = slots(t).map(k => garage.dev[k]).filter(Boolean), c = chiefOf(t.id);
@@ -285,7 +288,7 @@ function renderOverview($) {
   }).join('');
   const all = Object.values(garage.dev).sort((a, b) => a.left - b.left);
   const next = `<div class="dcard next"><span class="dn">Usine</span><span class="dd">Moral <b class="${mc}">${mt}</b> · ${eff}</span>` +
-    `<span class="slots"><small>Recherches</small>${Array.from({ length: cap }, (_, k) => `<i class="${k < used ? 'on' : ''}"></i>`).join('')}<i class="n">${used}/${cap}</i></span>` +
+    `<span class="slots"><small>Ateliers</small>${Array.from({ length: Math.max(cap, used) }, (_, k) => `<i class="${k < used ? 'on' : ''}"></i>`).join('')}<i class="n">${used}/${cap}</i></span>` +
     (all.length ? '<div class="nxl">' + all.slice(0, 3).map(d => `<span class="nx" style="--c:${treeById(TREE_OF[d.id]).color}">${art(d.id)}<b>${NODES[d.id].name}</b><em>${left(d)} j</em></span>`).join('') + '</div>'
       : '<p class="hint">Aucune recherche en cours : touche un pôle pour lancer une pièce.</p>') + '</div>';
   $('#gRD').innerHTML = `<div class="ov"><div class="ovcards">${cards}${next}</div><div class="ovside"><div class="cmp">${cmpHTML()}</div></div></div>`;
@@ -294,10 +297,10 @@ function renderOverview($) {
 
 function renderTree($) {
   const t = treeById(tab), chief = chiefOf(tab), T = tall();
-  const free = slots(t).find(k => !garage.dev[k]), money = n => team.budget >= price(n);
+  const shopFull = devCount() >= workshops(), free = !shopFull && slots(t).find(k => !garage.dev[k]), money = n => team.budget >= price(n);
   const n0 = t.nodes.filter(x => owned(x.id)).length, lv = Math.max(...t.nodes.map(n => n.at[0]));
   $('#gInfo').innerHTML = `<span class="st"><small>${tname(t)}</small><b>${n0}<i>/${t.nodes.length}</i>${chain(t)}</b></span><span class="st"><small>Chef de pôle</small><b>${chief ? chief.name : '—'}</b></span>` +
-    `<span class="st"><small>Recherches</small><b class="slots">${slots(t).map(k => `<i class="${garage.dev[k] ? 'on' : ''}"></i>`).join('')}<i class="n">${free ? 'libre' : 'occupé'}</i></b></span>`;
+    `<span class="st"><small>Recherches</small><b class="slots">${slots(t).map(k => `<i class="${garage.dev[k] ? 'on' : ''}"></i>`).join('')}<i class="n">${free ? 'libre' : 'occupé'}</i></b></span><span class="st"><small>Ateliers</small><b>${devCount()}<i>/${workshops()}</i></b></span>`;
   const tree = $('#gTree');
   tree.style.setProperty('--lv', lv);
   tree.innerHTML = `<svg id="gLines"></svg>` + t.nodes.map(n => {
@@ -316,7 +319,7 @@ function renderTree($) {
   if (n && !owned(n.id)) for (const k in n.fx) u2[k] += n.fx[k];
   if (n) {
     const w = devOf(n.id), can = !owned(n.id) && !w && unlocked(n) && free && money(n), rk = risk(n);
-    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${fr((price(n) - team.budget).toFixed(1))} M€.` : '';
+    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : shopFull && slots(t).some(k => !garage.dev[k]) ? `Tous les ateliers de l’usine sont occupés (${devCount()}/${workshops()}) : attends une livraison ou construis des Ateliers aux Installations.` : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${fr((price(n) - team.budget).toFixed(1))} M€.` : '';
     const reqs = (n.req || n.reqAny || []).map(r => `<span class="${owned(r) ? 'ok' : ''}">${owned(r) ? '✓' : '○'} ${NODES[r].name}</span>`).join(n.reqAny ? '<em>ou</em>' : '');
     D.innerHTML = `<div class="ph"><span class="pimg">${art(n.id)}</span><span class="pt"><small>Pôle ${tname(t)} · ${n.id.toUpperCase()}</small><b>${n.name}</b></span></div><p class="desc">${n.desc}</p>` +
       `<p class="fx">${Object.entries(n.fx).map(([k, v]) => `<span class="${good(k, v) ? '' : 'bad'}">${good(k, v) ? '▲' : '▼'} ${pct(k, v)} ${FXN[k]}</span>`).join('')}</p>` +
