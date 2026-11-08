@@ -125,9 +125,9 @@ int32 AGPMCar::Gear() const
 	if (V < 0.5f) return 0;
 	static const float T[] = { 0.16f, 0.27f, 0.38f, 0.49f, 0.60f, 0.71f, 0.83f };
 	const float F = V / (VTop * Perf);
-	int32 G = 1;
-	for (float t : T) if (F > t) ++G;
-	return G;
+	int32 Gr = 1;
+	for (float t : T) if (F > t) ++Gr;
+	return Gr;
 }
 
 void AGPMCar::ToggleCamera()

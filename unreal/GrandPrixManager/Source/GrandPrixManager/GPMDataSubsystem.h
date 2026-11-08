@@ -7,7 +7,7 @@
 #include "GPMDataSubsystem.generated.h"
 
 /**
- * Charge les données exportées du jeu web (Content/Data/*.json, voir unreal/tools/export-data.mjs).
+ * Charge les données exportées du jeu web (fichiers JSON de Content/Data, voir unreal/tools/export-data.mjs).
  * Accès typé aux écuries, gommes et circuits ; accès brut (JSON) à tout le reste,
  * en attendant le portage de chaque système (garage, événements, presse…).
  */
