@@ -5,7 +5,7 @@ P="$PWD/GrandPrixManager.uproject"
 mkdir -p Saved
 # Cherche une installation complète d'Unreal (le Launcher peut créer des dossiers imbriqués, ex. UE_5.5/UE_5.5/UE_5.5)
 UE=""
-for B in $(find "/Users/Shared/Epic Games" -maxdepth 6 -path "*/Engine/Build/BatchFiles/Mac/Build.sh" 2>/dev/null | sort -r | tr ' ' '|'); do
+for B in $(find "/Users/Shared/Epic Games" -maxdepth 9 -path "*/Engine/Build/BatchFiles/Mac/Build.sh" 2>/dev/null | sort -r | tr ' ' '|'); do
   B="${B//|/ }"; R="${B%/Engine/Build/BatchFiles/Mac/Build.sh}"
   if [ -e "$R/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" ]; then UE="$R"; break; fi
 done
