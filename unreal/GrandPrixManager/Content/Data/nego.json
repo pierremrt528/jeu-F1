@@ -1,0 +1,74 @@
+{
+ "CLAUSES": {
+  "none": [
+   "Aucune",
+   0
+  ],
+  "high": [
+   "Élevée",
+   6
+  ],
+  "low": [
+   "Basse",
+   3
+  ]
+ },
+ "INT": [
+  [
+   70,
+   "très intéressé",
+   "hi"
+  ],
+  [
+   50,
+   "intéressé",
+   "ok"
+  ],
+  [
+   35,
+   "hésitant",
+   "mid"
+  ],
+  [
+   20,
+   "réticent",
+   "low"
+  ],
+  [
+   -1,
+   "refuse de discuter",
+   "no"
+  ]
+ ],
+ "PERS": {
+  "ambitieux": {
+   "name": "Ambitieux",
+   "greed": 1,
+   "pat": 3,
+   "d": "veut gagner : très sensible aux résultats de l’écurie"
+  },
+  "mercenaire": {
+   "name": "Mercenaire",
+   "greed": 1.15,
+   "pat": 2,
+   "d": "l’argent avant tout, peu patient"
+  },
+  "fidele": {
+   "name": "Fidèle",
+   "greed": 0.92,
+   "pat": 4,
+   "d": "cherche un projet stable, patient"
+  },
+  "jeune": {
+   "name": "Jeune loup",
+   "greed": 0.95,
+   "pat": 3,
+   "d": "veut un volant et du temps pour progresser"
+  }
+ },
+ "ROLES": {
+  "n1": "N°1",
+  "eq": "Égalité",
+  "n2": "N°2"
+ }
+}

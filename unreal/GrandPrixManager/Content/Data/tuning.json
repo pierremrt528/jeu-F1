@@ -1,0 +1,29 @@
+{
+ "SETUPS": [
+  {
+   "name": "Appui maxi",
+   "kd": 0.0375,
+   "vtop": -0.04
+  },
+  {
+   "name": "Appui élevé",
+   "kd": 0.025,
+   "vtop": -0.02
+  },
+  {
+   "name": "Équilibré",
+   "kd": 0,
+   "vtop": 0
+  },
+  {
+   "name": "Vitesse élevée",
+   "kd": -0.025,
+   "vtop": 0.02
+  },
+  {
+   "name": "Vitesse maxi",
+   "kd": -0.05,
+   "vtop": 0.03
+  }
+ ]
+}

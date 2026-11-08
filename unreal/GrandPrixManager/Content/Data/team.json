@@ -1,0 +1,10 @@
+{
+ "FXNAMES": {
+  "vtop": "vitesse de pointe",
+  "acc": "accélération",
+  "mu": "adhérence",
+  "brake": "freinage",
+  "kd": "appui",
+  "steer": "agilité"
+ }
+}

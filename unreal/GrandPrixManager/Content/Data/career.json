@@ -1,0 +1,186 @@
+{
+ "DEFAULT_LOGO": {
+  "shape": 0,
+  "p": "rouge",
+  "s": "blanc"
+ },
+ "ENGINES": [
+  {
+   "id": "valdrin",
+   "name": "Valdrin",
+   "perf": 94,
+   "fiab": 72,
+   "conso": 108,
+   "price": 40,
+   "color": "#e5483b"
+  },
+  {
+   "id": "orsetti",
+   "name": "Orsetti Motori",
+   "perf": 88,
+   "fiab": 90,
+   "conso": 100,
+   "price": 34,
+   "color": "#3aa0ff"
+  },
+  {
+   "id": "brennhall",
+   "name": "Brennhall",
+   "perf": 85,
+   "fiab": 80,
+   "conso": 92,
+   "price": 27,
+   "color": "#b07cff"
+  },
+  {
+   "id": "hexadyne",
+   "name": "Hexadyne",
+   "perf": 80,
+   "fiab": 82,
+   "conso": 98,
+   "price": 20,
+   "color": "#f2b632"
+  },
+  {
+   "id": "kiyora",
+   "name": "Kiyora",
+   "perf": 70,
+   "fiab": 94,
+   "conso": 90,
+   "price": 10,
+   "color": "#3ddc84"
+  }
+ ],
+ "MARKET": [
+  {
+   "name": "V. Kessler",
+   "from": "Vétéran",
+   "age": 35,
+   "rep": 78,
+   "spd": 90,
+   "strat": 88,
+   "tyre": 85,
+   "pot": 40
+  },
+  {
+   "name": "H. Sandoval",
+   "from": "Vétéran",
+   "age": 33,
+   "rep": 70,
+   "spd": 86,
+   "strat": 80,
+   "tyre": 90,
+   "pot": 45
+  },
+  {
+   "name": "A. Rivière",
+   "from": "Ex-équipier",
+   "age": 27,
+   "rep": 52,
+   "spd": 80,
+   "strat": 75,
+   "tyre": 74,
+   "pot": 60
+  },
+  {
+   "name": "L. Marchetti",
+   "from": "Formule B · champion",
+   "age": 20,
+   "rep": 64,
+   "spd": 84,
+   "strat": 66,
+   "tyre": 70,
+   "pot": 92
+  },
+  {
+   "name": "S. Okoro",
+   "from": "Formule B · 2e",
+   "age": 21,
+   "rep": 50,
+   "spd": 79,
+   "strat": 70,
+   "tyre": 72,
+   "pot": 88
+  },
+  {
+   "name": "E. Vasquez",
+   "from": "Formule B · 4e",
+   "age": 19,
+   "rep": 40,
+   "spd": 74,
+   "strat": 62,
+   "tyre": 76,
+   "pot": 82
+  },
+  {
+   "name": "T. Aaltonen",
+   "from": "Formule B · 7e",
+   "age": 22,
+   "rep": 32,
+   "spd": 68,
+   "strat": 70,
+   "tyre": 66,
+   "pot": 75
+  },
+  {
+   "name": "M. Dufresne",
+   "from": "Payant (sponsor)",
+   "age": 24,
+   "rep": 25,
+   "spd": 62,
+   "strat": 60,
+   "tyre": 64,
+   "pot": 50,
+   "sponsor": 4
+  }
+ ],
+ "TIERS": [
+  {
+   "id": "new",
+   "name": "Nouvelle écurie",
+   "desc": "Petit budget, voiture en retrait, ni pièces ni bâtiments : tout est à construire.",
+   "budget": 30,
+   "perf": 0.955,
+   "rep": 30,
+   "moral": 70
+  },
+  {
+   "id": "mid",
+   "name": "Milieu de peloton",
+   "desc": "Budget moyen, quelques pièces et bâtiments déjà en place. Objectif : les points.",
+   "budget": 70,
+   "perf": 0.96,
+   "parts": 1,
+   "infra": {
+    "rd": 1,
+    "hosp": 1,
+    "pitc": 1
+   },
+   "rep": 50,
+   "moral": 60
+  },
+  {
+   "id": "top",
+   "name": "Top team",
+   "desc": "Énorme budget, voiture développée et usine moderne. Obligation de gagner.",
+   "budget": 140,
+   "perf": 0.97,
+   "parts": 2,
+   "infra": {
+    "rd": 2,
+    "wind": 1,
+    "hosp": 2,
+    "media": 1,
+    "acad": 1,
+    "pitc": 2
+   },
+   "rep": 80,
+   "moral": 55
+  }
+ ],
+ "TIER_POS": {
+  "new": 9,
+  "mid": 5,
+  "top": 2
+ }
+}

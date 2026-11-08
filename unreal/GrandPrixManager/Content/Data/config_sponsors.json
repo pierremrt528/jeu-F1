@@ -1,0 +1,160 @@
+{
+ "SPONSORS": [
+  {
+   "id": "kairo",
+   "kind": "main",
+   "name": "Kairo Télécom",
+   "sector": "Télécoms",
+   "year": 16,
+   "sign": 3,
+   "goal": "finish",
+   "bonus": 0.4,
+   "rep": 0,
+   "color": "#2ec4b6"
+  },
+  {
+   "id": "pixelune",
+   "kind": "main",
+   "name": "Pixelune",
+   "sector": "Jeux vidéo",
+   "year": 12,
+   "sign": 4,
+   "goal": "beatMate",
+   "bonus": 0.6,
+   "rep": 0,
+   "color": "#9b5de5"
+  },
+  {
+   "id": "norvex",
+   "kind": "main",
+   "name": "Norvex Banque",
+   "sector": "Banque",
+   "year": 24,
+   "sign": 4,
+   "goal": "gain",
+   "bonus": 0.7,
+   "rep": 40,
+   "color": "#1d4e89"
+  },
+  {
+   "id": "aurelia",
+   "kind": "main",
+   "name": "Aurélia Énergie",
+   "sector": "Énergie",
+   "year": 32,
+   "sign": 5,
+   "goal": "pts",
+   "bonus": 0.9,
+   "rep": 50,
+   "color": "#f4a259"
+  },
+  {
+   "id": "sablier",
+   "kind": "main",
+   "name": "Sablier",
+   "sector": "Horlogerie",
+   "year": 42,
+   "sign": 7,
+   "goal": "podium",
+   "bonus": 1.6,
+   "rep": 70,
+   "color": "#c9a227"
+  },
+  {
+   "id": "brindille",
+   "kind": "sec",
+   "name": "Brindille Café",
+   "sector": "Café",
+   "year": 3,
+   "sign": 0.5,
+   "goal": "finish",
+   "bonus": 0.2,
+   "rep": 0,
+   "color": "#8b5a2b"
+  },
+  {
+   "id": "cobalt",
+   "kind": "sec",
+   "name": "Cobalt Outils",
+   "sector": "Outillage",
+   "year": 3.5,
+   "sign": 0.5,
+   "goal": "beatMate",
+   "bonus": 0.3,
+   "rep": 0,
+   "color": "#3a86ff"
+  },
+  {
+   "id": "fulgor",
+   "kind": "sec",
+   "name": "Fulgor",
+   "sector": "Boissons",
+   "year": 5,
+   "sign": 1,
+   "goal": "fl",
+   "bonus": 0.5,
+   "rep": 0,
+   "color": "#ffd60a"
+  },
+  {
+   "id": "lumen",
+   "kind": "sec",
+   "name": "Lumen Optique",
+   "sector": "Lunettes",
+   "year": 4,
+   "sign": 0.8,
+   "goal": "pts",
+   "bonus": 0.4,
+   "rep": 20,
+   "color": "#00b4d8"
+  },
+  {
+   "id": "orbis",
+   "kind": "sec",
+   "name": "Orbis Logistique",
+   "sector": "Transport",
+   "year": 6,
+   "sign": 1,
+   "goal": "gain",
+   "bonus": 0.3,
+   "rep": 30,
+   "color": "#ef476f"
+  },
+  {
+   "id": "vireo",
+   "kind": "sec",
+   "name": "Vireo Assurances",
+   "sector": "Assurances",
+   "year": 7,
+   "sign": 1.5,
+   "goal": "finish",
+   "bonus": 0.3,
+   "rep": 45,
+   "color": "#06d6a0"
+  },
+  {
+   "id": "mistral",
+   "kind": "sec",
+   "name": "Mistral Parfums",
+   "sector": "Parfums",
+   "year": 5,
+   "sign": 1,
+   "goal": "top5",
+   "bonus": 0.6,
+   "rep": 50,
+   "color": "#e0aaff"
+  },
+  {
+   "id": "nebula",
+   "kind": "sec",
+   "name": "Nébula Cloud",
+   "sector": "Informatique",
+   "year": 8,
+   "sign": 2,
+   "goal": "podium",
+   "bonus": 0.9,
+   "rep": 60,
+   "color": "#4361ee"
+  }
+ ]
+}

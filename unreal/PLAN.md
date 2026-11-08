@@ -25,7 +25,7 @@ Règles communes à toutes les étapes :
 **Prompt :** « Crée le projet Unreal C++ `GrandPrixManager` dans `unreal/GrandPrixManager/` : `.uproject` (plugins Chaos Vehicles, Enhanced Input, CommonUI), module C++ et cibles Game/Editor, `.gitignore` et `.gitattributes` (LFS pour uasset/umap/wav/png/fbx), config mobile : renderer mobile forward, MSAA 4×, pas de Lumen/Nanite/ombres virtuelles, Vulkan Android + Metal iOS, orientation paysage, profils de scalabilité Bas/Moyen/Haut, résolution adaptative (`r.MobileContentScaleFactor`, `r.ScreenPercentage`). Ajoute un `GameMode` C++ vide et une carte de démarrage à créer à la main. Écris un README qui dit comment ouvrir et compiler sur Mac. »
 **Test :** double-clic sur `GrandPrixManager.uproject` → « Oui » pour compiler → l'éditeur s'ouvre.
 
-## Étape 2 — Données du jeu
+## Étape 2 — Données du jeu ✅ (préparée)
 **Prompt :** « Écris un script Node `unreal/tools/export-data.mjs` qui importe les modules de `js/` (data.js, config/*.js, garage TREES, infra INFRA, staff CHIEFS, strategy TYRES/FORMATS/MODES, season CALENDAR/GAPS, events EVENTS, stories STORIES/EXTRA, press) et les écrit en JSON dans `unreal/GrandPrixManager/Content/Data/`. Côté C++, crée les structs `FTeamRow`, `FCircuitRow`, `FThemeRow`, `FPartRow`, `FInfraRow`, `FChiefRow`, `FTyreRow`, `FEventRow`… (`USTRUCT(BlueprintType)` héritant de `FTableRowBase`) et un `UGPMDataSubsystem` (GameInstanceSubsystem) qui charge ces JSON au démarrage. »
 
 ## Étape 3 — Circuits procéduraux
