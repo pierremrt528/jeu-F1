@@ -55,6 +55,23 @@ struct FGPMTrackData
 	UPROPERTY(BlueprintReadOnly) TArray<float> Curvature;     // 1/m
 	UPROPERTY(BlueprintReadOnly) TArray<float> AISpeed;       // vitesse de référence de l'IA (m/s)
 
+	// Repère du jeu web (m), pour la physique portée de js/car.js : x, z au sol, y altitude ; tangente (TX, TZ), cap H = atan2(TX, TZ)
+	TArray<float> WX, WY, WZ, TX, TZ, H;
+
+	/** Point le plus proche autour de Idx (comme locate() de track.js). */
+	int32 Locate(float X, float Z, int32 Idx) const
+	{
+		const int32 N = WX.Num();
+		int32 Best = Idx; float Bd = TNumericLimits<float>::Max();
+		for (int32 k = -12; k <= 24; ++k)
+		{
+			const int32 i = ((Idx + k) % N + N) % N;
+			const float D = FMath::Square(WX[i] - X) + FMath::Square(WZ[i] - Z);
+			if (D < Bd) { Bd = D; Best = i; }
+		}
+		return Best;
+	}
+
 	static FVector ToWorld(double X, double Alt, double Z) { return FVector(X * 100.0, Z * 100.0, Alt * 100.0); }
 	int32 Num() const { return Points.Num(); }
 };

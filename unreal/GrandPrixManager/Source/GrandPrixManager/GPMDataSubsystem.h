@@ -37,6 +37,6 @@ public:
 private:
 	TSharedPtr<FJsonObject> LoadFile(const FString& RelPath);
 	TMap<FString, TSharedPtr<FJsonObject>> Files;
-	TMap<FString, FGPMTrackData> TrackCache;
+	TMap<FString, TSharedPtr<FGPMTrackData>> TrackCache;   // pointeurs stables : la voiture et le circuit les gardent
 	TArray<FString> CircuitIds;
 };

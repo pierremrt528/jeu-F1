@@ -5,10 +5,11 @@
 #include "GPMGameMode.generated.h"
 
 class AGPMTrack;
+class AGPMCar;
 
 /**
  * Mode de jeu de base. Étape 3 : charge un circuit (option ?circuit=<id>, comme le jeu web, ou commande GPM.Circuit <id>)
- * et place la caméra libre au-dessus de la ligne de départ.
+ * place la lumière et la monoplace du joueur sur la grille.
  */
 UCLASS()
 class GRANDPRIXMANAGER_API AGPMGameMode : public AGameModeBase
@@ -24,5 +25,7 @@ public:
 
 private:
 	UPROPERTY() TObjectPtr<AGPMTrack> Track;
-	void PlaceViewer();
+	UPROPERTY() TObjectPtr<AGPMCar> Car;
+	void SetupWorld();
+	void PlaceCar();
 };

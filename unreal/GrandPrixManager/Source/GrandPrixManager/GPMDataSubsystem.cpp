@@ -101,11 +101,12 @@ TArray<FString> UGPMDataSubsystem::GetCircuitIds() const
 
 const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 {
-	if (const FGPMTrackData* Cached = TrackCache.Find(Id)) return Cached;
+	if (const TSharedPtr<FGPMTrackData>* Cached = TrackCache.Find(Id)) return Cached->Get();
 	TSharedPtr<FJsonObject> O = LoadFile(FString::Printf(TEXT("tracks/%s.json"), *Id));
 	if (!O.IsValid()) return nullptr;
 
-	FGPMTrackData T;
+	TSharedPtr<FGPMTrackData> Ptr = MakeShared<FGPMTrackData>();
+	FGPMTrackData& T = *Ptr;
 	T.Id = Id;
 	T.Name = O->GetStringField(TEXT("name"));
 	T.Length = O->GetNumberField(TEXT("length"));
@@ -116,6 +117,18 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	ReadFloats(O, TEXT("Z"), Z);
 	T.Points.Reserve(X.Num());
 	for (int32 i = 0; i < X.Num(); ++i) T.Points.Add(FGPMTrackData::ToWorld(X[i], Y.IsValidIndex(i) ? Y[i] : 0.f, Z[i]));
+	T.WX = X; T.WY = Y; T.WZ = Z;
+	if (T.WY.Num() != X.Num()) T.WY.Init(0.f, X.Num());
+	{
+		const int32 N = X.Num();
+		T.TX.SetNum(N); T.TZ.SetNum(N); T.H.SetNum(N);
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float Tx = X[(i + 1) % N] - X[(i - 1 + N) % N], Tz = Z[(i + 1) % N] - Z[(i - 1 + N) % N];
+			const float L = FMath::Max(1e-4f, FMath::Sqrt(Tx * Tx + Tz * Tz));
+			T.TX[i] = Tx / L; T.TZ[i] = Tz / L; T.H[i] = FMath::Atan2(T.TX[i], T.TZ[i]);
+		}
+	}
 	ReadFloats(O, TEXT("WL"), T.WallLeft);
 	ReadFloats(O, TEXT("WR"), T.WallRight);
 	ReadFloats(O, TEXT("C"), T.Curvature);
@@ -123,7 +136,8 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 
 	Files.Remove(FString::Printf(TEXT("tracks/%s.json"), *Id));   // le JSON brut n'est plus utile
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s : %d points, %.0f m"), *T.Name, T.Num(), T.Length);
-	return &TrackCache.Add(Id, MoveTemp(T));
+	TrackCache.Add(Id, Ptr);
+	return Ptr.Get();
 }
 
 TSharedPtr<FJsonValue> UGPMDataSubsystem::GetRaw(const FString& File, const FString& Key)
