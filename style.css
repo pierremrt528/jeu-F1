@@ -1176,3 +1176,4 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 .flash3d { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: flash3d .9s 2.9s ease-out both; }
 @keyframes flash3d { 0% { opacity: 0; } 12% { opacity: .95; } 100% { opacity: 0; } }
 .nrow.two { grid-template-columns: 104px 34px 1fr 34px 34px 1fr 34px; } .nrow.two b { text-align: center; }
+.ncard.evc.story .flash { background: linear-gradient(100deg, #4a1fa8, #7a3cff 60%, #b06cff); } .ncard.evc.story .flash b { color: #4a1fa8; } .stend { font-size: 13px; color: #c9b6ff; margin: 4px 0 0; }
