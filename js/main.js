@@ -36,7 +36,7 @@ import { resetTeam, saveTeam } from './team.js';
 import { resetStaff, renewStaff } from './staff.js';
 import { tickInfra, sponsorIncome, prizeBonus, resetInfra, grantInfra } from './infra.js';
 const playerPerf = () => TEAMS[0].perf * perfFactor();
-import { openMarket, aiMercato, MID_MULT } from './market.js';
+import { openMarket, aiMercato, MID_MULT, rotateMarket } from './market.js';
 import { TIERS } from './career.js';
 
 const $ = id => document.getElementById(id);
@@ -300,6 +300,7 @@ function showResults() {
       // ouverture du mercato : les écuries IA font leurs transferts
       const S = SZ.season;
       if (career && (S.round === SZ.midRound() || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
+      if (career && !S.done) R.mkt = rotateMarket();   // nouveaux pilotes et chefs libres
       // annonce du règlement de la saison suivante à la mi-saison (ou en fin de saison pour les anciennes sauvegardes)
       if ((S.round === SZ.midRound() || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
       SZ.recordPerf(playerPerf());
@@ -334,6 +335,7 @@ function showResults() {
   $('resGarageBtn').classList.toggle('hidden', R.free);
   $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Partenaires : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
     (R.regNews ? `<br>📜 <b>Annonce officielle</b> : nouveau règlement ${SZ.season.year + 1} pour <b>${R.regNews}</b>. Tes pièces ${R.regN > 1 ? 'de ces domaines' : 'de ce domaine'} repartiront de zéro l’an prochain.` : '') +
+    (R.mkt && (R.mkt.drv || R.mkt.chief) ? `<br>🆕 Marché : <b>${R.mkt.drv} pilote${R.mkt.drv > 1 ? 's' : ''}</b> et <b>${R.mkt.chief} chef${R.mkt.chief > 1 ? 's' : ''} de pôle</b> libres arrivent` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
     (R.season ? `<br>📅 ${SZ.season?.done ? `Fin de saison dans <b>${R.days} jours</b> (31 déc.), puis pré-saison` : `Prochain GP dans <b>${R.days} jours</b>`} : l’usine travaille pendant ce temps.` : '') +
     devNews(R.parts, R.built) +
@@ -411,8 +413,9 @@ function preSeason(S, pre) {
   $('szPre').onclick = () => {
     const parts = tickDevelopment(days), built = tickInfra(days);
     SZ.devRivals(days);
+    const mk = rotateMarket();
     S.pre = pre + 1;
-    S.preLog = `<p class="prelog">🏭 <b>${days} jours d’usine</b> (${SZ.fmtDate(D[pre])} → ${SZ.fmtDate(D[pre + 1])})${devNews(parts, built) || ' : rien de livré.'}</p>`;
+    S.preLog = `<p class="prelog">🏭 <b>${days} jours d’usine</b> (${SZ.fmtDate(D[pre])} → ${SZ.fmtDate(D[pre + 1])})${devNews(parts, built) || ' : rien de livré.'}${mk.drv + mk.chief ? ` · 🆕 ${mk.drv} pilote${mk.drv > 1 ? 's' : ''} et ${mk.chief} chef${mk.chief > 1 ? 's' : ''} libres` : ''}</p>`;
     if (S.pre < 3) S.event = { id: S.pre === 1 ? 'launch' : 'tests', ctx: eventCtx({}) };   // choix à faire
     SZ.saveSeason(); openSeason();
   };
@@ -451,12 +454,12 @@ function openSeason() {
     if (!S.wx) { S.wx = forecast(c.theme); SZ.saveSeason(); }
     if (career && !S.mission && !S.grid) { const ds = SZ.driverStandings(), k = ds.findIndex(d => d.player); S.mission = makeMission(ds[k ? k - 1 : 1]?.name); SZ.saveSeason(); }
     $('szNext').innerHTML = `<h3>${c.name}</h3><p>${c.type} · ${(track.length / 1000).toFixed(2)} km · ${FORMATS[fmtKey()].name} : ${raceFormat().laps} tours · arrêt au stand ≈ ${Math.round(pitLane(track).loss)} s</p><p>📅 Aujourd’hui : ${SZ.fmtDate(SZ.today())} ${S.year} · GP le <b>${SZ.fmtDate(SZ.raceDate(S.round))}</b>${S.round ? (S.round === SZ.midRound() ? ' · retour de la pause estivale' : ` · ${SZ.daysAfter(S.round - 1)} jours après le GP précédent`) : ' · ouverture de la saison'}</p><p>Météo : ${wxText(S.wx)}</p><p>Toi : P${me} au championnat, ${myPts} pts${S.gridPen ? ` · <b class="bad">pénalité de ${S.gridPen} places sur la grille</b>` : ''}</p>` + (!S.round ? S.preLog || '' : '') + (career ? boardHTML() + sponsorGoalsHTML(career) + missionHTML(S.mission) : '') + regHTML(S) + (S.round === SZ.midRound() ? newsHTML(S) : '');
-    const mid = S.round === SZ.midRound() && career;
+    const mid = S.round === SZ.midRound() && career;   // pause estivale
     $('szActions').innerHTML = (S.grid ? '' : `<div class="seg mini"><label>Format</label><div>${['sprint', 'long'].map(f => `<button data-cfmt="${f}" class="${settings.format === f ? 'sel' : ''}">${FORMATS[f].name}<small>~${FORMATS[f].minutes} min</small></button>`).join('')}</div></div>`) + (S.grid
       ? `<button class="main" id="szRace">Départ de la course (P${S.grid.indexOf('Toi') + 1} sur la grille)</button>`
       : `<button class="main" id="szQuali">Qualifications : réglages de la voiture →</button>`) +
       `<button id="szSimGP">⏩ Simuler le Grand Prix${S.grid ? '' : ' (qualifs + course)'}</button><p id="szSimProg" class="dim small"></p>` +
-      (mid ? `<button id="szMarket">🔁 Mercato de mi-saison <small>(indemnités ×${String(MID_MULT).replace(".", ",")}, ferme au départ)</small></button>` : '');
+      (career && !S.grid ? `<button id="szMarket">🔁 Mercato${mid ? ' d’été' : ''} : pilotes libres et des écuries rivales <small>(indemnités ×${String(MID_MULT).replace(".", ",")})</small></button>` : '');
     document.querySelectorAll('[data-cfmt]').forEach(b => b.onclick = () => { settings.format = b.dataset.cfmt; save(); openSeason(); });
     const ms = $('szMis'); if (ms) ms.onclick = () => { S.mission.acc = true; SZ.saveSeason(); openSeason(); };
     const mk = $('szMarket'); if (mk) mk.onclick = () => {

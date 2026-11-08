@@ -1,6 +1,7 @@
 // Saison : calendrier des 10 circuits, qualifications, points, classements pilotes et écuries,
 // progression des écuries rivales, sauvegarde locale (clé gpm-season).
 import { TEAMS, CIRCUITS, DIFF, dname } from './data.js';
+import { rivalDevMul } from './staff.js';
 import { SPEC } from './car.js';
 import { DS } from './track.js';
 
@@ -42,7 +43,7 @@ export function today() {
 // les écuries rivales travaillent aussi pendant l'hiver : progrès au prorata des jours (≈ 16,6 jours par GP)
 export function devRivals(days) {
   const k = Math.sqrt(10 / nRounds()) * days / 16.6;
-  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k;
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name);   // ses chefs de pôle accélèrent ou freinent
   saveSeason();
 }
 // rendez-vous de la saison hors Grands Prix (affichés dans le calendrier)
@@ -154,7 +155,7 @@ export function recordRace(rows) {
   season.results.push({ circuit: cal()[season.round], pos: me.pos, pts: res.find(r => r.name === me.name).pts, podium: rows.slice(0, 3).map(r => r.name), fast: fast?.name });
   // les écuries rivales progressent un peu à chaque course
   const k = Math.sqrt(10 / nRounds());   // saison plus longue : progrès par course un peu plus faibles
-  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k;
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name);   // ses chefs de pôle accélèrent ou freinent
   season.round++; season.grid = null; season.quali = null; season.wx = null;
   if (season.round >= nRounds()) season.done = true;
   saveSeason();

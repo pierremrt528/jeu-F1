@@ -5,7 +5,8 @@ import { team, saveTeam } from './team.js';
 import { career, saveCareer, applyCareer, salary, mateSkill, statsOf, ENGINES, MARKET, mateContract, untilOf, TIER_POS, carRank } from './career.js';
 import { salaryCut } from './infra.js';
 import { driverCard, engineCard, steps as stepBar, rating } from './ui.js';
-import { season, saveSeason, teamStandings } from './season.js';
+import { season, saveSeason, teamStandings, midRound } from './season.js';
+import { rotateStaff } from './staff.js';
 import { openNego, preview, previewHTML, fmtM, ROLES } from './nego.js';
 
 export const MID_MULT = 2.5;
@@ -31,7 +32,10 @@ const colorOf = c => c.team ? hex(TEAMS[c.team].color) : c.cur ? '#ff3d2e' : /Fo
 // ou 'off' (intersaison : moteur puis pilote). Chaque pilote se négocie (nego.js) ; la signature est payée tout de suite.
 export function openMarket(el, kind, onDone, onCancel) {
   const mid = kind === 'mid', one = mid || kind === 'pre', $ = s => el.querySelector(s);   // one : saison en cours, pilote seulement
-  const year = season.year, ny = one ? year : year + 1, win = `${year}-${kind}`;   // ny : 1re saison des nouveaux contrats
+  const summer = mid && season.round === midRound();
+  // ny : 1re saison des nouveaux contrats ; en saison, une fenêtre par GP (on peut recruter entre chaque course)
+  const year = season.year, ny = one ? year : year + 1, win = mid ? `${year}-r${season.round}` : `${year}-${kind}`;
+  const fresh = new Set(career.fresh || []);
   const T = career.talks = career.talks || {};
   const steps = one ? ['drv'] : ['eng', 'drv'];
   let list = candidates(), eng = career.engine, step = 0;
@@ -83,9 +87,9 @@ export function openMarket(el, kind, onDone, onCancel) {
   }
   function render() {
     const what = steps[step], k = K(), u = untilOf(k), lock = T.signed === win;
-    $('#suTitle').textContent = mid ? 'Mercato' : one ? 'Mercato d’hiver' : what === 'eng' ? 'Contrat moteur' : 'Transferts';
+    $('#suTitle').textContent = mid ? (summer ? 'Mercato d’été' : 'Mercato') : one ? 'Mercato d’hiver' : what === 'eng' ? 'Contrat moteur' : 'Transferts';
     stepBar($('#suSteps'), one ? [] : ['Moteur', 'Pilote'], step);
-    $('#suHint').textContent = mid ? `Mi-saison : indemnités de transfert ×${String(MID_MULT).replace('.', ',')} et agents plus gourmands. Touche un pilote pour négocier. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux.`
+    $('#suHint').textContent = mid ? `${summer ? 'Pause estivale' : 'En cours de saison'} : indemnités de transfert ×${String(MID_MULT).replace('.', ',')} et agents plus gourmands. Touche un pilote pour négocier. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux. Les pilotes libres changent après chaque GP (🆕).`
       : one ? `Pré-saison : prix normaux jusqu’au premier GP, le salaire de la saison ${year} se paie à la signature. Touche un pilote pour négocier. Un pilote d’une écurie rivale prend la place de ton équipier, qui part chez eux.`
       : what === 'eng' ? 'Intersaison : renouvelle ou change de motoriste pour la saison prochaine. ' + (season.offNote || '')
       : lock ? 'Recrutement bouclé pour cette intersaison.'
@@ -102,7 +106,7 @@ export function openMarket(el, kind, onDone, onCancel) {
       if (c.cur) return driverCard(c.s, { k: i, from: `Ton équipier · ${ROLES[k.role]}`, color: '#ff3d2e', cur: true, pick: !one && valid(),
         price: (one || valid() ? `Sous contrat jusqu’en ${u}${!mid ? ` · ${fmtM(k.sal)} M€` : ''}` : 'Contrat terminé') + (!one && !lock ? previewHTML(preview(subOf(c), nctx(c))) : '') });
       const v = preview(subOf(c), nctx(c));
-      return driverCard(c.s, { k: i, from: c.from, color: colorOf(c), disabled: v.off || lock,
+      return driverCard(c.s, { k: i, from: (fresh.has(c.s.name) && !c.team ? '🆕 ' : '') + c.from, color: colorOf(c), disabled: v.off || lock,
         price: (v.sal < 0 ? `apporte ${fmtM(-v.sal)} M€` : v.sal != null ? `≈ ${fmtM(v.sal)} M€ / saison` : '') + (v.fee ? `<small> + indemnité ${fmtM(v.fee)} M€</small>` : '') + previewHTML(v) });
     }).join('');
     $('#suList').innerHTML = h;
@@ -229,4 +233,30 @@ export function aiMercato(kind) {
   career.free = career.free.sort((a, b) => val(b) + b.pot * 0.2 - val(a) - a.pot * 0.2).slice(0, 14);
   saveCareer(); applyCareer();
   return news;
+}
+
+// ---------- rotation du marché ----------
+// Après chaque GP et à chaque étape de la pré-saison : 1-2 pilotes libres trouvent un volant ailleurs
+// (autre championnat, retour en Formule B, retraite), 1-2 nouveaux arrivent ; les chefs libres changent aussi.
+// Renvoie { drv, chief } : nombre de nouveaux candidats.
+const VET_FROM = ['Vétéran · endurance', 'Vétéran · ex-titulaire', 'Vétéran · tourisme'];
+function newVeteran(taken) {
+  const y = newYoungster(taken);
+  return { name: y.name, from: VET_FROM[rnd(0, 2)], spd: rnd(78, 89), strat: rnd(74, 88), tyre: rnd(74, 90), pot: rnd(35, 55) };
+}
+export function rotateMarket() {
+  if (!career) return { drv: 0, chief: 0 };
+  if (!career.free) career.free = MARKET.filter(d => d.name !== career.mate.name).map(d => ({ ...d }));
+  const taken = new Set([career.mate.name]);
+  TEAMS.forEach(t => t.drivers.forEach(d => taken.add(d.name)));
+  career.free.forEach(d => taken.add(d.name));
+  for (let n = rnd(1, 2); n > 0 && career.free.length > 6; n--) career.free.splice(rnd(0, career.free.length - 1), 1);
+  career.fresh = [];
+  for (let n = rnd(1, 2); n > 0; n--) {
+    const d = Math.random() < 0.6 ? newYoungster(taken) : newVeteran(taken);
+    career.free.push(d); career.fresh.push(d.name);
+  }
+  career.free = career.free.slice(-14);
+  saveCareer();
+  return { drv: career.fresh.length, chief: rotateStaff() };
 }

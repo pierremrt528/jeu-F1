@@ -664,7 +664,7 @@ body.tilt #ctl .left { display: none; }
 #gTree .node.chef .fee { color: var(--gold); font-weight: 800; font-size: 12px; margin-top: 2px; }
 #gTree .node.chef.own { border-color: var(--c); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 30%, #12151c), #12151c); } #gTree .node.chef.own .fee { color: #8ff0b6; }
 #gTree .node.chef.poor .fee { color: #ff8a7a; }
-#garage .garage.infra #gTree:has(.chef) { grid-template-columns: repeat(2, 1fr); }
+#garage .garage.infra #gTree:has(.chef) { grid-template-columns: repeat(2, 1fr); grid-auto-rows: max-content; }
 #gStats .istat small { color: #8ff0b6; margin-left: 4px; }
 .cal .gap { font-style: normal; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.06); color: var(--mut); }
 .cal .gap.b2b { background: color-mix(in srgb, var(--acc) 16%, transparent); color: #ff9a8a; } .cal .gap.long { background: rgba(34,211,197,.14); color: var(--acc2); }
@@ -1176,3 +1176,5 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 .flash3d { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: flash3d .9s 2.9s ease-out both; }
 @keyframes flash3d { 0% { opacity: 0; } 12% { opacity: .95; } 100% { opacity: 0; } }
 .nrow.two { grid-template-columns: 104px 34px 1fr 34px 34px 1fr 34px; } .nrow.two b { text-align: center; }
+#gTree .chsec { grid-column: 1 / -1; margin: 6px 2px 0; color: var(--mut); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+#gTree .node.chef .cf i { font-style: normal; }
