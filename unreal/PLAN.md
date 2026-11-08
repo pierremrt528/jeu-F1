@@ -28,7 +28,7 @@ Règles communes à toutes les étapes :
 ## Étape 2 — Données du jeu ✅ (préparée)
 **Prompt :** « Écris un script Node `unreal/tools/export-data.mjs` qui importe les modules de `js/` (data.js, config/*.js, garage TREES, infra INFRA, staff CHIEFS, strategy TYRES/FORMATS/MODES, season CALENDAR/GAPS, events EVENTS, stories STORIES/EXTRA, press) et les écrit en JSON dans `unreal/GrandPrixManager/Content/Data/`. Côté C++, crée les structs `FTeamRow`, `FCircuitRow`, `FThemeRow`, `FPartRow`, `FInfraRow`, `FChiefRow`, `FTyreRow`, `FEventRow`… (`USTRUCT(BlueprintType)` héritant de `FTableRowBase`) et un `UGPMDataSubsystem` (GameInstanceSubsystem) qui charge ces JSON au démarrage. »
 
-## Étape 3 — Circuits procéduraux
+## Étape 3 — Circuits procéduraux 🟡 (piste, vibreurs, herbe, murs faits ; décor, ponts et stands à venir)
 **Prompt :** « Porte `js/track.js` et `js/scenery.js` : un acteur `AGPMTrack` lit un `FCircuitRow` (points de contrôle ou `layout` S/L/R + `elev`), construit une spline Catmull-Rom ré-échantillonnée tous les 2 m (mêmes formules que track.js : courbure, trajectoire idéale, profil de vitesse IA), puis génère avec `UDynamicMeshComponent`/`ProceduralMeshComponent` : asphalte, vibreurs (zones de courbure > 1/220), herbe/gravier, murs variables (`WL`/`WR`), ponts aux croisements, voie des stands (`pitLane`). Décor (arbres, tribunes, panneaux, immeubles, montagnes selon `THEMES`) en HISM avec LOD. Collision simple (murs = boîtes, sol = mesh). Commande console `GPM.Circuit <id>` pour charger chacun des 22 circuits. »
 
 ## Étape 4 — Monoplace et physique (Chaos Vehicle)

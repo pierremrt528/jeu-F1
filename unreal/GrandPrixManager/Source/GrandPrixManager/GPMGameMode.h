@@ -4,7 +4,12 @@
 #include "GameFramework/GameModeBase.h"
 #include "GPMGameMode.generated.h"
 
-/** Mode de jeu de base : la course et les menus s'y brancheront aux étapes suivantes. */
+class AGPMTrack;
+
+/**
+ * Mode de jeu de base. Étape 3 : charge un circuit (option ?circuit=<id>, comme le jeu web, ou commande GPM.Circuit <id>)
+ * et place la caméra libre au-dessus de la ligne de départ.
+ */
 UCLASS()
 class GRANDPRIXMANAGER_API AGPMGameMode : public AGameModeBase
 {
@@ -13,4 +18,11 @@ class GRANDPRIXMANAGER_API AGPMGameMode : public AGameModeBase
 public:
 	AGPMGameMode();
 	virtual void BeginPlay() override;
+
+	/** Remplace le circuit affiché. */
+	UFUNCTION(BlueprintCallable, Category = "GPM") void LoadCircuit(const FString& Id);
+
+private:
+	UPROPERTY() TObjectPtr<AGPMTrack> Track;
+	void PlaceViewer();
 };
