@@ -5,7 +5,8 @@ import { team, applyFx, saveTeam } from './team.js';
 import { career, saveCareer, applyCareer, mateContract } from './career.js';
 import { chiefOf, chiefContract, DEPTS, loseChief } from './staff.js';
 import { shiftDev, devCount } from './garage.js';
-import { season, saveSeason, teamStandings } from './season.js';
+import { season, saveSeason, teamStandings, nRounds } from './season.js';
+import { STORIES, EXTRA } from './stories.js';
 import { fxText } from './press.js';
 import { ROLES } from './nego.js';
 
@@ -343,17 +344,37 @@ export function eventCtx(res) {
     chief: c ? { name: c.name } : null, chiefKey: d, chiefDept: d ? DEPTS[d] : '', chiefFee: c ? r1(Math.max(1, chiefContract(d).sal * 0.8)) : 0 };
 }
 // après chaque GP : un événement presque toujours, parfois une brève en plus (enchaînées dans la même fenêtre).
-// Les suites débloquées par un choix précédent passent en priorité ; les gros événements restent plus rares.
+// Les suites débloquées par un choix précédent passent en priorité. Une histoire à épisodes peut démarrer,
+// ses épisodes passent avant le reste. Historique d'une partie à l'autre (gpm-ev-hist) : on évite ce qu'on a déjà vu.
+const HIST = 'gpm-ev-hist';
+const hist = () => { try { return JSON.parse(localStorage.getItem(HIST)) || []; } catch { return []; } };
+const remember = id => { try { localStorage.setItem(HIST, JSON.stringify([id, ...hist().filter(x => x !== id)].slice(0, 70))); } catch {} };
+const ALL = () => EVENTS.concat(EXTRA);
+// tirage qui préfère ce qui n'a pas été vu récemment (même dans une partie précédente)
+function fresh(pool) { const h = hist(), f = pool.filter(e => !h.includes(e.id)); return f.length && Math.random() < 0.85 ? f : pool; }
+function storyEv(ctx) {
+  const st = season.story;
+  if (st && st.due <= season.round) return { story: st.id, step: st.step, ctx, v: st.v, ep: st.ep, k: jit() };
+  if (st || !career || season.round < 1 || season.round > nRounds() - 7 || Math.random() > 0.5) return null;
+  const done = season.seenSt || [], pool = STORIES.filter(x => !done.includes(x.id) && (!x.when || x.when(ctx)));
+  if (!pool.length) return null;
+  const S = pick(fresh(pool)), first = Object.keys(S.steps)[0];
+  season.seenSt = [...done, S.id]; remember(S.id);
+  season.story = { id: S.id, step: first, due: season.round, v: S.init ? S.init() : {}, ep: 1 };
+  return { story: S.id, step: first, ctx, v: season.story.v, ep: 1, k: jit() };
+}
 export function pickEvent(ctx, n = Math.random() < 0.4 ? 2 : 1) {
   const seen = season.seenEv || [];
-  let pool = EVENTS.filter(e => !e.pre && !seen.includes(e.id) && (!e.when || e.when(ctx)));
+  let pool = ALL().filter(e => !e.pre && !seen.includes(e.id) && (!e.when || e.when(ctx)));
+  const sev = storyEv(ctx);
+  const add = ev => { if (n > 1) { pool = fresh(pool.filter(x => x.lite && x.id !== ev.id)); if (pool.length) { const f = pick(pool); season.seenEv.push(f.id); remember(f.id); ev.next = { id: f.id, ctx, k: jit() }; } } return ev; };
+  season.seenEv = seen.slice();
+  if (sev) return add(sev);
   if (!pool.length) return null;
   const follow = pool.filter(e => e.when && /flags\./.test(e.when.toString()));
-  const e = follow.length && Math.random() < 0.6 ? pick(follow) : pick(pool.flatMap(x => x.lite ? [x, x] : [x]));
-  season.seenEv = [...seen, e.id];
-  const ev = { id: e.id, ctx, k: jit() };
-  if (n > 1) { pool = pool.filter(x => x.lite && x !== e); if (pool.length) { const f = pick(pool); season.seenEv.push(f.id); ev.next = { id: f.id, ctx, k: jit() }; } }
-  return ev;
+  const e = follow.length && Math.random() < 0.6 ? pick(follow) : pick(fresh(pool));
+  season.seenEv.push(e.id); remember(e.id);
+  return add({ id: e.id, ctx, k: jit() });
 }
 // chaque partie est différente : l'ampleur des effets varie de ±25 % (moral, réputation, confiance, performance)
 const jit = () => r1(0.75 + Math.random() * 0.5) || 1;
@@ -364,7 +385,7 @@ function jitter(fx, k) {
   if (o.perf) { o.perf = { ...o.perf }; for (const p in o.perf) o.perf[p] = Math.round(o.perf[p] * k * 1e4) / 1e4; }
   return o;
 }
-const val = (v, c) => typeof v === 'function' ? v(c) : v;
+const val = (v, c, sv) => typeof v === 'function' ? v(c, sv) : v;
 
 // applique les effets étendus d'un choix
 export function applyEvent(fx) {
@@ -378,6 +399,13 @@ export function applyEvent(fx) {
   if (fx.dev) shiftDev(fx.dev);
   if (fx.deal) (team.deals = team.deals || []).push({ ...fx.deal });
   if (fx.chief) loseChief(fx.chief);
+  // histoire : le pilote de l'histoire devient l'équipier (l'ancien rejoint les pilotes libres)
+  if (fx.sign?.d && career) {
+    const y = season?.year || 2027, k = fx.sign;
+    (career.free = career.free || []).push({ ...career.mate, from: 'Ex-équipier' });
+    career.mate = { ...k.d }; career.contract = { sal: k.sal, years: k.years, role: k.role, bonus: 0, since: y, paid: y };
+    saveCareer(); applyCareer();
+  }
   if (fx.grid && season) { season.gridPen = (season.gridPen || 0) + fx.grid; saveSeason(); }
   if (fx.flag && season) { (season.evFlags = season.evFlags || {})[fx.flag] = season.round; saveSeason(); }
   saveTeam();
@@ -389,7 +417,8 @@ export function evFxText(fx) {
   if (fx.wage) tag(`Salaire de l’équipier +${fmtM(fx.wage)} M€ par saison`, false);
   if (fx.role) tag(`Statut de l’équipier : ${ROLES[fx.role]}`, false);
   if (fx.dev) tag(`Recherches ${fx.dev > 0 ? '+' + fx.dev + ' jours de retard' : 'en avance de ' + -fx.dev + ' jours'}`, fx.dev < 0);
-  if (fx.deal) tag(`${fx.deal.name} : +${fmtM(fx.deal.gp)} M€ par GP pendant ${fx.deal.n} GP`, true);
+  if (fx.deal) tag(fx.deal.gp >= 0 ? `${fx.deal.name} : +${fmtM(fx.deal.gp)} M€ par GP pendant ${fx.deal.n} GP` : `${fx.deal.name} : −${fmtM(-fx.deal.gp)} M€ par GP pendant ${fx.deal.n} GP`, fx.deal.gp >= 0);
+  if (fx.sign?.d) tag(`Nouvel équipier : ${fx.sign.d.name} (${fx.sign.years} saison${fx.sign.years > 1 ? 's' : ''})`, true);
   if (fx.chief) tag('Le poste de chef est vacant', false);
   if (fx.grid) tag(`${fx.grid} places de pénalité sur la grille`, false);
   return fxText(fx) + out.join('');
@@ -397,22 +426,35 @@ export function evFxText(fx) {
 
 // fenêtre « flash info » : le joueur doit trancher ; onDone() une fois la conséquence affichée
 export function showEvent(ev, onDone) {
-  const E = EVENTS.find(e => e.id === ev.id), c = ev.ctx, el = document.getElementById('nego');
-  if (!E) return onDone();
-  el.innerHTML = `<div class="ncard evc in" style="--c:#ff3d2e">
-    <div class="flash"><b>${E.lite ? 'En bref' : 'Flash info'}</b><span>${E.title}</span></div>
-    <div class="evb"><span class="evi">${E.icon}</span><p>${E.text(c)}</p></div>
-    <div class="evch">${E.ch.map((x, i) => `<button data-c="${i}">${val(x.t, c)}</button>`).join('')}</div>
+  const SD = ev.story && STORIES.find(x => x.id === ev.story), E = SD ? SD.steps[ev.step] : ALL().find(e => e.id === ev.id);
+  const c = ev.ctx, sv = ev.v || {}, el = document.getElementById('nego');
+  if (!E) { if (SD && season) { season.story = null; saveSeason(); } return onDone(); }
+  const head = SD ? `<b>Histoire · épisode ${ev.ep || 1}</b><span>${SD.icon} ${SD.title} — ${E.title}</span>` : `<b>${E.lite ? 'En bref' : 'Flash info'}</b><span>${E.title}</span>`;
+  el.innerHTML = `<div class="ncard evc in ${SD ? 'story' : ''}" style="--c:${SD ? '#b06cff' : '#ff3d2e'}">
+    <div class="flash">${head}</div>
+    <div class="evb"><span class="evi">${E.icon}</span><p>${E.text(c, sv)}</p></div>
+    <div class="evch">${E.ch.map((x, i) => `<button data-c="${i}">${val(x.t, c, sv)}</button>`).join('')}</div>
     <div class="evout hidden"></div></div>`;
   el.classList.remove('hidden');
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => {
     const x = E.ch[+b.dataset.c], bad = x.risk && Math.random() < x.risk.p;
-    const fx = jitter(val(bad ? x.risk.fx : x.fx, c), ev.k), out = val(bad ? x.risk.out : x.out, c);
+    let fx = jitter(val(bad ? x.risk.fx : x.fx, c, sv), ev.k);
+    const out = val(bad ? x.risk.out : x.out, c, sv);
+    if (typeof fx.deal?.name === 'function') fx = { ...fx, deal: { ...fx.deal, name: fx.deal.name(sv) } };
+    if (fx.sign) fx = { ...fx, sign: { ...fx.sign, d: sv[fx.sign.drv] } };
     applyEvent(fx);
+    // histoire : épisode suivant dans quelques GP, ou fin
+    let end = '';
+    if (SD && season) {
+      const nx = x.next && SD.steps[x.next];
+      if (nx) season.story = { ...season.story, step: x.next, due: season.round + (x.gap ?? 1 + ((Math.random() * 2) | 0)), ep: (ev.ep || 1) + 1 };
+      else { season.story = null; end = `<p class="stend">📕 Fin de l’histoire « ${SD.title} ».</p>`; }
+      saveSeason();
+    }
     el.querySelectorAll('[data-c]').forEach(y => { y.disabled = true; if (y !== b) y.classList.add('off'); });
     b.classList.add('chosen');
     const o = el.querySelector('.evout');
-    o.innerHTML = `<p class="${bad ? 'bad' : ''}">${bad ? '⚠️ ' : ''}${out}</p><div class="pfx">${evFxText(fx) || '<span>Aucun effet</span>'}</div><button class="main" id="evOk">Continuer</button>`;
+    o.innerHTML = `<p class="${bad ? 'bad' : ''}">${bad ? '⚠️ ' : ''}${out}</p>${SD && !end ? '<p class="stend">📖 À suivre…</p>' : end}<div class="pfx">${evFxText(fx) || '<span>Aucun effet</span>'}</div><button class="main" id="evOk">Continuer</button>`;
     o.classList.remove('hidden');
     el.querySelector('#evOk').onclick = () => { el.classList.add('hidden'); el.innerHTML = ''; ev.next ? showEvent(ev.next, onDone) : onDone(); };
   });
