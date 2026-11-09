@@ -32,7 +32,13 @@ private:
 	void BuildCity();
 	void BuildStands();
 	void BuildMountains();
-	UHierarchicalInstancedStaticMeshComponent* AddLayer(const TCHAR* Shape, FLinearColor Color);
+	/**
+	 * Calque de formes instanciées. Avec les matériaux de Tools/gpm_assets.py, chaque instance a sa propre teinte
+	 * (entre Color et Color2, plus ou moins claire) ; Windows : bandeaux vitrés des immeubles.
+	 */
+	UHierarchicalInstancedStaticMeshComponent* AddLayer(const TCHAR* Shape, FLinearColor Color, FLinearColor Color2 = FLinearColor::Transparent, float Rough = 0.9f, bool bWindows = false);
+	/** Teinte de chaque instance (données d'instance), une fois tout le décor posé. */
+	void TintInstances();
 	/** Distance (m) au point de piste le plus proche, et son altitude (m). */
 	float NearTrack(float X, float Y, float* OutAlt = nullptr, int32* OutIdx = nullptr) const;
 

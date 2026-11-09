@@ -7,6 +7,7 @@
 
 class UProceduralMeshComponent;
 class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 /**
  * Circuit généré à partir des données du jeu web (portage de js/scenery.js, partie piste).
@@ -35,12 +36,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "GPM|Matériaux") TObjectPtr<UMaterialInterface> GrassMaterial;
 	UPROPERTY(EditAnywhere, Category = "GPM|Matériaux") TObjectPtr<UMaterialInterface> WallMaterial;
 
+	/** Piste mouillée (0 sèche … 1 trempée) : asphalte plus sombre et brillant (matériaux de Tools/gpm_assets.py). */
+	void SetWet(float Wet);
+
 	/** Seuil de courbure au-delà duquel on pose des vibreurs (même valeur que le jeu web). */
 	static constexpr float KerbCurvature = 1.f / 220.f;
 
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UProceduralMeshComponent> Mesh;
 	const FGPMTrackData* Track = nullptr;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> RoadMID;
 
 	FVector Right(int32 i) const;   // vecteur latéral (côté WR) au point i, horizontal
 };

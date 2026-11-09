@@ -116,10 +116,21 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 	{
 		TArray<int32> Tri; Tri.SetNum(CM->P.Num());
 		TArray<FLinearColor> Col; Col.SetNum(CM->P.Num());
+		// matériau éclairé de Tools/gpm_assets.py : la rugosité de chaque pièce passe par l'alpha du sommet
+		// (palette de car.json : livrée, accent, casque, carbone, noir, visière, écran, rétroviseur, feu, gris, jantes)
+		UMaterialInstanceDynamic* CarMat = GPMArt::Make(TEXT("M_GPM_Lit"), this);
+		static const float Rough[11] = { 0.3f, 0.3f, 0.22f, 0.42f, 0.85f, 0.05f, 0.3f, 0.1f, 0.3f, 0.6f, 0.45f };
 		for (int32 i = 0; i < CM->P.Num(); ++i)
 		{
 			const int32 K = CM->K[i];
 			Col[i] = K == 0 ? Main : K <= 2 ? Accent : CM->Fixed.IsValidIndex(K) ? CM->Fixed[K] : FLinearColor::Black;
+			Col[i].A = CarMat ? Rough[FMath::Clamp(K, 0, 10)] : 1.f;
+		}
+		if (CarMat)
+		{
+			CarMat->SetScalarParameterValue(TEXT("Rough"), 1.f);
+			CarMat->SetScalarParameterValue(TEXT("Metal"), 0.3f);
+			CarMat->SetScalarParameterValue(TEXT("Spec"), 0.6f);
 		}
 		// sens des triangles selon la normale (Unreal : normale de face = −(B−A)×(C−A))
 		for (int32 i = 0; i + 2 < CM->P.Num(); i += 3)
@@ -129,7 +140,8 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 			Tri[i] = i; Tri[i + 1] = bFlip ? i + 2 : i + 1; Tri[i + 2] = bFlip ? i + 1 : i + 2;
 		}
 		Model->CreateMeshSection_LinearColor(0, CM->P, Tri, CM->N, TArray<FVector2D>(), Col, TArray<FProcMeshTangent>(), false);
-		if (VertexColorMat) Model->SetMaterial(0, VertexColorMat);
+		if (CarMat) Model->SetMaterial(0, CarMat);
+		else if (VertexColorMat) Model->SetMaterial(0, VertexColorMat);
 		for (UStaticMeshComponent* P : MainParts) P->SetVisibility(false);
 		for (UStaticMeshComponent* P : AccentParts) P->SetVisibility(false);
 		for (UStaticMeshComponent* W : Wheels) W->SetVisibility(false);

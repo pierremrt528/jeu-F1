@@ -14,6 +14,9 @@
 #include "Engine/SkyLight.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
+#include "Components/VolumetricCloudComponent.h"
+#include "UnrealClient.h"
+#include "Misc/Paths.h"
 #include "GPMScenery.h"
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
@@ -87,6 +90,13 @@ void AGPMGameMode::SetupWorld()
 		Sky->SetRootComponent(C);
 		C->RegisterComponent();
 	}
+	// nuages volumétriques (matériau de nuages fourni avec le moteur) : vrai ciel en relief, éclairé par le soleil
+	if (AActor* Clouds = W->SpawnActor<AActor>())
+	{
+		UVolumetricCloudComponent* VC = NewObject<UVolumetricCloudComponent>(Clouds);
+		Clouds->SetRootComponent(VC);
+		VC->RegisterComponent();
+	}
 	SkyLight = W->SpawnActor<ASkyLight>();
 	if (SkyLight)
 	{
@@ -106,6 +116,8 @@ void AGPMGameMode::SetupWorld()
 		S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.25f;
 		S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f);
 		S.bOverride_AutoExposureBias = true; S.AutoExposureBias = 0.3f;
+		S.bOverride_ColorContrast = true; S.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
+		S.bOverride_LensFlareIntensity = true; S.LensFlareIntensity = 0.25f;
 	}
 }
 
@@ -448,6 +460,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
 	}
 	UpdateCine(DeltaSeconds);
+	AutoCapture(DeltaSeconds);
 	// pointeur de la souris visible dans les menus et les écrans de résultats (sur ordinateur), caché en course
 	if (APlayerController* PCur = GetWorld()->GetFirstPlayerController())
 	{
@@ -547,6 +560,27 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	if (Phase == EPhase::Done)
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+}
+
+// Une capture d'écran par écran et par partie (interface comprise), écrasée à la partie suivante : Saved/Captures/<écran>.png
+void AGPMGameMode::AutoCapture(float Dt)
+{
+	static const TCHAR* Names[] = { TEXT("Qualifs"), TEXT("QualifsFin"), TEXT("Feux"), TEXT("Course"), TEXT("Arrivee"), TEXT("Saison"), TEXT("Usine"),
+		TEXT("Accueil"), TEXT("Creation"), TEXT("Solo"), TEXT("Reglages"), TEXT("Presse"), TEXT("Mercato"), TEXT("ReglagesVoiture"), TEXT("Strategie"),
+		TEXT("Licencie"), TEXT("Survol"), TEXT("Podium") };
+	static_assert(UE_ARRAY_COUNT(Names) == int32(EPhase::Outro) + 1, "un nom par phase");
+	if (Phase != CapPhase) { CapPhase = Phase; CapT = 0.f; }
+	CapT += Dt;
+	FString Name = Names[int32(Phase)];
+	float Wait = 1.5f;
+	if (Phase == EPhase::Race) { Wait = 12.f; if (CapT > 45.f) { Name += TEXT("2"); Wait = 45.f; } }
+	else if (Phase == EPhase::Quali) Wait = 8.f;
+	else if (Phase == EPhase::Intro || Phase == EPhase::Outro) Wait = 3.f;
+	if (Phase == EPhase::Setup) Name += FString::FromInt(SetupStep + 1);
+	if (CapT < Wait || Captured.Contains(Name)) return;
+	Captured.Add(Name);
+	const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Captures") / Name + TEXT(".png"));
+	FScreenshotRequest::RequestScreenshot(File, true, false);
 }
 
 void AGPMGameMode::RequestSafety(bool bForce)

@@ -3,6 +3,7 @@
 #include "GrandPrixManager.h"
 #include "ProceduralMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "UObject/ConstructorHelpers.h"
@@ -89,6 +90,24 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	};
 
 	FSection Road, Kerbs, Green, Walls, Floor, Start, Pit;
+
+	// Vrais matériaux (Tools/gpm_assets.py) : asphalte et bas-côtés en photo, vibreurs et murs éclairés.
+	// Sans eux : couleurs par sommet. Avec : sommets blancs (la photo donne la couleur), bandes de tonte en nuances.
+	const FString Verge = Track->Theme.Surface == TEXT("sand") ? FString(TEXT("sand")) : Track->Theme.Surface == TEXT("concrete") ? FString(TEXT("concrete")) : FString(TEXT("grass"));
+	UMaterialInstanceDynamic* RoadM = GPMArt::Surface(TEXT("asphalt"), 6.f, this);
+	UMaterialInstanceDynamic* GreenM = GPMArt::Surface(Verge, 9.f, this);
+	UMaterialInstanceDynamic* FloorM = GPMArt::Surface(Verge, 30.f, this);
+	UMaterialInstanceDynamic* KerbM = GPMArt::Make(TEXT("M_GPM_Lit"), this);
+	UMaterialInstanceDynamic* WallM = GPMArt::Make(TEXT("M_GPM_Lit"), this);
+	const bool bArt = RoadM && GreenM && FloorM && KerbM && WallM;
+	if (bArt)
+	{
+		KerbM->SetScalarParameterValue(TEXT("Rough"), 0.5f);
+		WallM->SetScalarParameterValue(TEXT("Rough"), 0.8f);
+	}
+	RoadMID = bArt ? RoadM : nullptr;
+	const FLinearColor RoadC = bArt ? FLinearColor::White : Asphalt;
+	const FLinearColor GroundC = bArt ? FLinearColor::White : Ground;
 	float MinZ = TNumericLimits<float>::Max();
 	float Dist = 0.f;
 
@@ -102,14 +121,15 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const float U = Dist / 10.f;   // UV : 1 répétition tous les 10 m
 
 		// Asphalte : 2 sommets par point (gauche = -R, droite = +R)
-		Road.Add(P - R * Half, Up, FVector2D(0, U), Asphalt);
-		Road.Add(P + R * Half, Up, FVector2D(1, U), Asphalt);
+		Road.Add(P - R * Half, Up, FVector2D(0, U), RoadC);
+		Road.Add(P + R * Half, Up, FVector2D(1, U), RoadC);
 		if (i > 0) { const int32 b = Road.V.Num() - 4; Road.Quad(b, b + 1, b + 2, b + 3); }
 
 		// Herbe de chaque côté, du bord de la piste jusqu'au mur (légèrement plus basse)
 		const float DL = WallDist(Track->WallLeft, j), DR = WallDist(Track->WallRight, j);
 		const FVector Low = -Up * 3.f;
-		const FLinearColor GrassC = (i / 5) % 2 ? Grass : Grass * 1.18f;   // bandes de tonte tous les 10 m
+		const FLinearColor GrassC = bArt ? ((i / 5) % 2 ? FLinearColor(0.86f, 0.86f, 0.86f) : FLinearColor::White)
+			: ((i / 5) % 2 ? Grass : Grass * 1.18f);   // bandes de tonte tous les 10 m
 		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), GrassC);
 		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), GrassC);
 		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), GrassC);
@@ -152,9 +172,19 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const int32 i = ((K % N) + N) % N;
 		const FVector P = Track->Points[i] + Up * 2.f, R = Right(i);
 		const float L = Track->PitLatAt(K) * 100.f;
-		const FLinearColor C = (K >= -125 && K <= -125 + 9 * 13 && ((K + 125) % 13) == 0) ? KerbWhite : Asphalt;
-		Pit.Add(P + R * (L - 400.f), Up, FVector2D(0, K / 5.f), C);
-		Pit.Add(P + R * (L + 400.f), Up, FVector2D(1, K / 5.f), C);
+		const bool bMark = K >= -125 && K <= -125 + 9 * 13 && ((K + 125) % 13) == 0;   // emplacement d'un box
+		Pit.Add(P + R * (L - 400.f), Up, FVector2D(0, K / 5.f), bArt ? FLinearColor::White : bMark ? KerbWhite : Asphalt);
+		Pit.Add(P + R * (L + 400.f), Up, FVector2D(1, K / 5.f), bArt ? FLinearColor::White : bMark ? KerbWhite : Asphalt);
+		if (bArt && bMark)
+		{
+			// marque blanche peinte au sol (avec la photo d'asphalte, une couleur de sommet ne suffit plus)
+			const FVector Tg = FVector(R.Y, -R.X, 0.f) * 20.f, Lift = Up * 1.f;
+			const int32 a = Start.Add(P + R * (L - 400.f) - Tg + Lift, Up, FVector2D(0, 0), KerbWhite);
+			Start.Add(P + R * (L + 400.f) - Tg + Lift, Up, FVector2D(1, 0), KerbWhite);
+			Start.Add(P + R * (L - 400.f) + Tg + Lift, Up, FVector2D(0, 1), KerbWhite);
+			Start.Add(P + R * (L + 400.f) + Tg + Lift, Up, FVector2D(1, 1), KerbWhite);
+			Start.Quad(a, a + 1, a + 2, a + 3);
+		}
 		if (K > Track->PitE0) { const int32 b = Pit.V.Num() - 4; Pit.Quad(b, b + 1, b + 2, b + 3); }
 	}
 
@@ -175,10 +205,10 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const FVector C = B.GetCenter();
 		const float S = FMath::Max(B.GetExtent().X, B.GetExtent().Y) + 60000.f;   // 600 m de marge
 		const float Z = MinZ - 800.f;   // sous le relief du décor (GPMScenery)
-		const int32 a = Floor.Add(FVector(C.X - S, C.Y - S, Z), Up, FVector2D(0, 0), Ground);
-		Floor.Add(FVector(C.X + S, C.Y - S, Z), Up, FVector2D(1, 0), Ground);
-		Floor.Add(FVector(C.X - S, C.Y + S, Z), Up, FVector2D(0, 1), Ground);
-		Floor.Add(FVector(C.X + S, C.Y + S, Z), Up, FVector2D(1, 1), Ground);
+		const int32 a = Floor.Add(FVector(C.X - S, C.Y - S, Z), Up, FVector2D(0, 0), GroundC);
+		Floor.Add(FVector(C.X + S, C.Y - S, Z), Up, FVector2D(1, 0), GroundC);
+		Floor.Add(FVector(C.X - S, C.Y + S, Z), Up, FVector2D(0, 1), GroundC);
+		Floor.Add(FVector(C.X + S, C.Y + S, Z), Up, FVector2D(1, 1), GroundC);
 		Floor.Quad(a, a + 1, a + 2, a + 3);
 	}
 
@@ -200,17 +230,22 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		Mesh->CreateMeshSection_LinearColor(Index, S.V, S.I, S.N, S.UV, S.Col, NoTangents, bCollide);
 		if (M) Mesh->SetMaterial(Index, M);
 	};
-	Make(0, Road, AsphaltMaterial, true);
-	Make(1, Kerbs, KerbMaterial, false);
-	Make(2, Green, GrassMaterial, true);
-	Make(3, Walls, WallMaterial, true);
-	Make(4, Floor, GrassMaterial, true);
-	Make(5, Start, KerbMaterial, false);
-	Make(6, Pit, AsphaltMaterial, false);
+	Make(0, Road, bArt ? RoadM : AsphaltMaterial.Get(), true);
+	Make(1, Kerbs, bArt ? KerbM : KerbMaterial.Get(), false);
+	Make(2, Green, bArt ? GreenM : GrassMaterial.Get(), true);
+	Make(3, Walls, bArt ? WallM : WallMaterial.Get(), true);
+	Make(4, Floor, bArt ? FloorM : GrassMaterial.Get(), true);
+	Make(5, Start, bArt ? KerbM : KerbMaterial.Get(), false);
+	Make(6, Pit, bArt ? RoadM : AsphaltMaterial.Get(), false);
 
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s construit : %d points, %d triangles"), *Track->Name, N,
 		(Road.I.Num() + Kerbs.I.Num() + Green.I.Num() + Walls.I.Num() + 6) / 3);
 	return true;
+}
+
+void AGPMTrack::SetWet(float Wet)
+{
+	if (RoadMID) RoadMID->SetScalarParameterValue(TEXT("Wet"), FMath::Clamp(Wet, 0.f, 1.f));
 }
 
 FTransform AGPMTrack::GetStartTransform() const

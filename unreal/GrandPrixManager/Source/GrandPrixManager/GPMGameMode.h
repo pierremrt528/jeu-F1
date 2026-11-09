@@ -158,6 +158,11 @@ private:
 	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f;
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
 	bool bTyreWarn = false;
+	// captures d'écran automatiques (Saved/Captures, une par écran et par partie) pour régler l'interface et les graphismes
+	void AutoCapture(float Dt);
+	TSet<FString> Captured;
+	EPhase CapPhase = EPhase::Lights;
+	float CapT = 0.f;
 	void BaseUps();
 	void ApplySetup();
 	void SimRace();
