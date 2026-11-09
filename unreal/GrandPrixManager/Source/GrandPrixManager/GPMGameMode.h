@@ -80,6 +80,9 @@ public:
 	// réglages (sauvegardés dans GameUserSettings.ini)
 	bool bSetABS = true, bSetTC = true, bSetStab = true, bSetCockpit = false;
 	void SaveSettings();
+	/** Images par seconde (moyenne glissante) et résolution adaptative en %. */
+	float Fps = 60.f;
+	int32 ScreenPct = 100;
 
 	// --- Cinématiques (étape 16, cine.js) : seule la caméra bouge ---
 	enum class ECine : uint8 { None, Menu, Intro, Podium, Welcome };
@@ -128,6 +131,8 @@ private:
 	void LoadSettings();
 	void ApplySettings();
 	void UpdateCine(float Dt);
+	void UpdatePerf(float Dt);
+	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f;
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
 	bool bTyreWarn = false;
 };

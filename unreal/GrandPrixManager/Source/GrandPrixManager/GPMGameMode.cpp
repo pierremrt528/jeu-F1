@@ -92,7 +92,7 @@ void AGPMGameMode::SetupWorld()
 	{
 		USkyLightComponent* L = SkyLight->GetLightComponent();
 		L->SetMobility(EComponentMobility::Movable);
-		L->bRealTimeCapture = true;
+		L->bRealTimeCapture = false;   // capture unique du ciel (au chargement de chaque circuit) : beaucoup moins cher
 		L->SetIntensity(1.f);
 		L->RecaptureSky();
 	}
@@ -122,7 +122,8 @@ void AGPMGameMode::ApplyTheme(const FGPMTrackData* T)
 		F->SetFogInscatteringColor(Th.Horizon * 0.6f);
 		Fog->SetActorLocation(FVector(0, 0, T->Points.Num() ? T->Points[0].Z : 0.f));
 	}
-	if (SkyLight) SkyLight->GetLightComponent()->RecaptureSky();
+	// capture du ciel une fois le soleil placé (à l'image suivante, quand le ciel est à jour)
+	if (SkyLight) GetWorldTimerManager().SetTimerForNextTick([this]() { if (SkyLight) SkyLight->GetLightComponent()->RecaptureSky(); });
 	if (!Scenery) Scenery = GetWorld()->SpawnActor<AGPMScenery>();
 	if (Scenery) Scenery->Build(T);
 }
@@ -223,6 +224,32 @@ void AGPMGameMode::StageGrid()
 		All[k]->Field = All;
 	}
 	Order = All;
+}
+
+// Fluidité : résolution adaptative (comme le jeu web) pour tenir 60 i/s, et i/s notés dans le journal
+void AGPMGameMode::UpdatePerf(float Dt)
+{
+	if (Dt <= 0.f || Dt > 0.5f) return;
+	FrameAvg = FrameAvg * 0.95f + Dt * 0.05f;
+	Fps = 1.f / FMath::Max(0.001f, FrameAvg);
+	PerfT += Dt; PerfLogT += Dt;
+	if (PerfT >= 1.5f)
+	{
+		PerfT = 0.f;
+		int32 Want = ScreenPct;
+		if (Fps < 50.f) Want -= 10; else if (Fps < 56.f) Want -= 5; else if (Fps > 59.f) Want += 5;
+		Want = FMath::Clamp(Want, 55, 100);
+		if (Want != ScreenPct)
+		{
+			ScreenPct = Want;
+			if (IConsoleVariable* CV = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"))) CV->Set(float(ScreenPct), ECVF_SetByCode);
+		}
+	}
+	if (PerfLogT >= 15.f)
+	{
+		PerfLogT = 0.f;
+		UE_LOG(LogGPM, Log, TEXT("Fluidité : %.0f i/s, résolution %d %%"), Fps, ScreenPct);
+	}
 }
 
 void AGPMGameMode::LoadSettings()
@@ -402,6 +429,7 @@ void AGPMGameMode::StartRace()
 void AGPMGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdatePerf(DeltaSeconds);
 	if (Cars.Num() == 0) return;
 	if (EngineSound && Car)
 	{

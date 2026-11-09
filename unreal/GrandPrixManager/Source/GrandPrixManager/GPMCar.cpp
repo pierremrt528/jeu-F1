@@ -243,6 +243,13 @@ void AGPMCar::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateTransform();
+	// sensation de vitesse : le champ de vision s'ouvre avec la vitesse (caméra du joueur seulement)
+	if (bPlayerControlled && Cast<APlayerController>(GetController()))
+	{
+		const float K = FMath::Clamp(V / 85.f, 0.f, 1.f);
+		ChaseCam->SetFieldOfView(FMath::FInterpTo(ChaseCam->FieldOfView, 70.f + 14.f * K, DeltaSeconds, 2.5f));
+		CockpitCam->SetFieldOfView(FMath::FInterpTo(CockpitCam->FieldOfView, 78.f + 10.f * K, DeltaSeconds, 2.5f));
+	}
 }
 
 // Portage de stepCar() (js/car.js) sans garage, carburant, dégâts ni aspiration (étapes 7-8).

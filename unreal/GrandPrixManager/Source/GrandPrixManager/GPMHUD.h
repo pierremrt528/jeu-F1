@@ -59,6 +59,15 @@ private:
 	FString Nm(const FString& Driver) const;
 	bool bConfirmNew = false;
 
+	// Course (GPMHUDRace.cpp) : tour des positions façon télé, compte-tours, pause
+	void DrawRace(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
+	void DrawTower(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
+	void DrawCluster(class AGPMCar* Car, float W, float H);
+	void DrawPause(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
+	void SetPaused(bool bPause);
+	FString Code3(const FString& Driver) const;
+	bool bShowFps = false;
+
 	FButton Left, Right, Gas, Brake, Box;
 	bool bLeft = false, bRight = false, bGas = false, bBrake = false, bBoxBtn = false, bBoxWas = false;
 	float Scale = 1.f;
