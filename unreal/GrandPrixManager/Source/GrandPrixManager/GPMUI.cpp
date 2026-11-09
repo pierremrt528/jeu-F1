@@ -506,7 +506,7 @@ TSharedRef<SWidget> FGPMUI::SoloScreen(AGPMGameMode* GM)
 			Button(FString::Printf(TEXT("%d tours"), L), GM->SoloLaps == L ? Acc : CNeutral, [WGM, L]() { if (WGM.IsValid()) WGM->SoloLaps = L; }, true, 120.f, 46.f, 16)
 		];
 
-	const FString CInfo = T ? FString::Printf(TEXT("Circuit %d / %d · %.2f km · largeur %.0f m"), GM->SoloIdx + 1, Ids.Num(), T->WX.Num() * 2.f / 1000.f, T->Width) : FString();
+	const FString TrackLine = T ? FString::Printf(TEXT("Circuit %d / %d · %.2f km · largeur %.0f m"), GM->SoloIdx + 1, Ids.Num(), T->WX.Num() * 2.f / 1000.f, T->Width) : FString();
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 24.f))
 		[
@@ -521,7 +521,7 @@ TSharedRef<SWidget> FGPMUI::SoloScreen(AGPMGameMode* GM)
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()[ Txt(T ? T->Name : Ids[GM->SoloIdx], 34, CGold, true, false, true) ]
-					+ SVerticalBox::Slot().AutoHeight()[ Txt(CInfo, 15, CDim, false, false, true) ]
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(TrackLine, 15, CDim, false, false, true) ]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[ Button(TEXT(">"), CNeutral, [WGM]() { if (WGM.IsValid()) ++WGM->SoloIdx; }, true, 64.f, 64.f, 26) ],

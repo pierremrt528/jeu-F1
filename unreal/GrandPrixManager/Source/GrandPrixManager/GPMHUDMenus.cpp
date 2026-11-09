@@ -17,7 +17,6 @@ namespace
 {
 	const FLinearColor Grey(0.25f, 0.27f, 0.3f, 1.f);
 }
-}
 
 FString AGPMHUD::Nm(const FString& Driver) const
 {
