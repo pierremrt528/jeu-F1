@@ -568,7 +568,7 @@ void AGPMGameMode::AutoCapture(float Dt)
 	static const TCHAR* Names[] = { TEXT("Qualifs"), TEXT("QualifsFin"), TEXT("Feux"), TEXT("Course"), TEXT("Arrivee"), TEXT("Saison"), TEXT("Usine"),
 		TEXT("Accueil"), TEXT("Creation"), TEXT("Solo"), TEXT("Reglages"), TEXT("Presse"), TEXT("Mercato"), TEXT("ReglagesVoiture"), TEXT("Strategie"),
 		TEXT("Licencie"), TEXT("Survol"), TEXT("Podium") };
-	static_assert(UE_ARRAY_COUNT(Names) == int32(EPhase::Outro) + 1, "un nom par phase");
+	static_assert(int32(UE_ARRAY_COUNT(Names)) == int32(EPhase::Outro) + 1, "un nom par phase");
 	if (Phase != CapPhase) { CapPhase = Phase; CapT = 0.f; }
 	CapT += Dt;
 	FString Name = Names[int32(Phase)];
