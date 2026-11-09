@@ -49,10 +49,10 @@ Règles communes à toutes les étapes :
 ## Étape 9 — Graphismes mobile « haut de gamme » 🟡 (soleil avec ombres, lumière du ciel, post-traitement, brouillard par thème, relief, arbres, immeubles, tribunes, stands, montagnes, mer faits ; vrais matériaux texturés et Niagara à faire dans l'éditeur)
 **Prompt :** « Matériaux : asphalte avec relief et humidité (paramètre global `Wetness`), herbe, gravier, vibreurs, livrée par masque de couleurs (`TEAMS.color/accent`), carrosserie à reflets (capture de réflexion par circuit). Ciel : `SkyAtmosphere` + nuages en dôme texturé (pas de nuages volumétriques sur mobile), brouillard exponentiel, soleil directionnel avec une cascade d'ombres. Niagara : gerbes d'eau, fumée de pneus, étincelles, confettis. Post-traitement mobile léger (bloom, tonemapper). Profils Bas/Moyen/Haut testés sur iPhone et Android milieu de gamme, objectif 60 i/s. Textures CC0 uniquement (crédits dans `Content/CREDITS.md`). »
 
-## Étape 10 — Sons
+## Étape 10 — Sons 🟡 (moteur V10 généré en temps réel selon le régime et la charge, crissements, vent : UGPMEngineSound ; IA proches, radio, chocs, foule à faire)
 **Prompt :** « MetaSounds : moteur à 4 boucles par motoriste (idle/low/mid/high, fichiers de `sons/`) fondues selon le régime et la charge, voiture la plus proche, crissements selon le glissement, vent, pluie, chocs, feux, radio filtrée. Atténuation et concurrence limitées pour le mobile. Réglage Son dans les options. »
 
-## Étape 11 — Cœur de la gestion (sauvegarde, écurie, saison)
+## Étape 11 — Cœur de la gestion (sauvegarde, écurie, saison) 🟡 (saison de 22 GP, points + meilleur tour, classements pilotes et écuries, sauvegarde gpm-season, écran de saison faits ; budget, réputation, création de l'écurie à faire)
 **Prompt :** « Porte en C++ (UObjects tenus par un `UGPMCareerSubsystem`) `js/team.js`, `js/career.js`, `js/season.js`, `js/sponsors.js` : écurie (moral, budget, réputation, confiance), calendrier daté de 22 GP (12/16/22), pré-saison en 3 étapes, points, classements pilotes/écuries, courbes de performance, sponsors et missions. Sauvegarde unique `UGPMSaveGame` (USaveGame, slot `gpm`) qui remplace les clés localStorage `gpm-*`. Tests d'automatisation (`IMPLEMENT_SIMPLE_AUTOMATION_TEST`) qui simulent une saison complète et comparent les points/budget aux résultats de la version web pour une même graine aléatoire. »
 
 ## Étape 12 — Usine : recherche, infrastructures, chefs

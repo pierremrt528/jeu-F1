@@ -173,6 +173,16 @@ int32 AGPMCar::Gear() const
 	return Gr;
 }
 
+float AGPMCar::Rpm() const
+{
+	static const float T[] = { 0.f, 0.16f, 0.27f, 0.38f, 0.49f, 0.60f, 0.71f, 0.83f, 1.02f };
+	const float F = FMath::Max(0.f, V) / (VTop * Perf);
+	const int32 Gr = FMath::Max(1, Gear());
+	const float Lo = T[Gr - 1], Hi = T[FMath::Min(Gr, 8)];
+	const float Frac = FMath::Clamp((F - Lo) / FMath::Max(0.01f, Hi - Lo), 0.f, 1.f);
+	return V < 0.5f ? 4200.f : 6500.f + Frac * 5500.f + (Throttle > 0.f && bTcOn ? 400.f : 0.f);
+}
+
 void AGPMCar::ToggleCamera()
 {
 	bCockpit = !bCockpit;

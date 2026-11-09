@@ -15,6 +15,8 @@
 #include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "GPMScenery.h"
+#include "GPMEngineSound.h"
+#include "GPMSeason.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -35,6 +37,9 @@ void AGPMGameMode::BeginPlay()
 
 	SetupWorld();
 	FString Id = UGameplayStatics::ParseOption(OptionsString, TEXT("circuit"));
+	bCareer = Id.IsEmpty();   // sans ?circuit : la saison (22 GP, points, sauvegarde)
+	if (bCareer)
+		if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Id = Season->CurrentCircuit();
 	if (Id.IsEmpty()) Id = TEXT("valmont");
 	LoadCircuit(Id);
 }
@@ -141,6 +146,14 @@ void AGPMGameMode::PlaceCar()
 		if (!Car) return;
 		APawn* Old = PC->GetPawn();
 		PC->Possess(Car);
+		// son du moteur du joueur (généré, sans fichier audio)
+		EngineSound = NewObject<UGPMEngineSound>(Car);
+		if (EngineSound)
+		{
+			EngineSound->SetupAttachment(Car->GetRootComponent());
+			EngineSound->RegisterComponent();
+			EngineSound->Start();
+		}
 		if (Old && Old != Car) Old->Destroy();
 	}
 	// Week-end : qualifications jouées (un tour lancé), puis la course ; ?course : directement la course
@@ -240,7 +253,7 @@ void AGPMGameMode::StartRace()
 	}
 	Order = Grid;
 	for (AGPMCar* C : Grid) C->BestLap = 0.f;
-	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f;
+	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f; bRecorded = false;
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
 	bSCUsed = false; SCAhead.Reset();
 	GoAt = 4.2f + 0.4f + FMath::FRand() * 0.8f;
@@ -269,6 +282,17 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (Cars.Num() == 0) return;
+	if (EngineSound && Car)
+	{
+		const float Skid = FMath::Clamp((FMath::Abs(Car->Beta) - 0.04f) * 6.f + (Car->bLock ? 0.6f : 0.f), 0.f, 1.f) * FMath::Min(1.f, Car->V / 15.f);
+		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
+	}
+	if (Phase == EPhase::Season)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+		return;
+	}
 	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
 	{
 		RadioT -= DeltaSeconds;
@@ -306,7 +330,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		DoneT += DeltaSeconds;
 		bool bAll = true;
 		for (AGPMCar* C : Cars) bAll &= C->bFinished;
-		if (DoneT > 4.f || bAll) Phase = EPhase::Done;
+		if (DoneT > 4.f || bAll) { Phase = EPhase::Done; RecordResult(); }
 	}
 	// classement : arrivés par temps, puis tours et distance parcourue
 	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
@@ -317,7 +341,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	});
 	if (Phase == EPhase::Done)
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
-			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Restart();
+			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
 }
 
 void AGPMGameMode::RequestSafety(bool bForce)
@@ -438,6 +462,35 @@ void AGPMGameMode::Strategy(float Dt)
 			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f));
 			if (C == Car) { bTyreWarn = false; Say(FString::Printf(TEXT("Muret : box, box ! Pneus %s."), *TyreName(C->NextTyre))); }
 		}
+	}
+}
+
+// Saison : points du Grand Prix (une fois par course), puis écran de saison et GP suivant
+void AGPMGameMode::RecordResult()
+{
+	if (!bCareer || bRecorded) return;
+	bRecorded = true;
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (!Season) return;
+	TArray<FGPMFinish> Fin;
+	for (const AGPMCar* C : Order) Fin.Add({ C->DriverName, C->TeamName, C->BestLap, C == Car });
+	LastPts = Season->RecordRace(Fin);
+}
+
+void AGPMGameMode::Continue()
+{
+	if (Phase == EPhase::Done)
+	{
+		if (bCareer) Phase = EPhase::Season; else Restart();
+		return;
+	}
+	if (Phase == EPhase::Season)
+	{
+		UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+		if (!Season) return;
+		if (Season->IsOver()) Season->NewSeason(true);
+		Phase = EPhase::Quali;   // évite un double appui pendant le chargement
+		LoadCircuit(Season->CurrentCircuit());
 	}
 }
 

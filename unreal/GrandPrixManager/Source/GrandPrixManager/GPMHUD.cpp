@@ -1,6 +1,9 @@
 #include "GPMHUD.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
+#include "GPMSeason.h"
+#include "GPMDataSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/Canvas.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -145,13 +148,14 @@ void AGPMHUD::DrawResults(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		DrawText(Chrono(C->BestLap), FLinearColor(0.75f, 0.4f, 1.f), X0 + 510 * Scale, Y, Mid, S);
 		if (k < 10) DrawText(FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]), Ink, X0 + 600 * Scale, Y, Mid, S);
 	}
-	DrawCentered(TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
+	if (GM->bCareer) DrawCentered(FString::Printf(TEXT("+%d points au championnat"), GM->LastPts), FLinearColor(1.f, 0.85f, 0.2f), W, H - 42 * Scale, Mid, Scale);
+	DrawCentered(GM->bCareer ? TEXT("Entrée ou touche l'écran : classements de la saison") : TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
 
 	// toucher l'écran (ou clic) : recommencer
 	APlayerController* PC = GetOwningPlayerController();
 	float TX, TY; bool bDown = false;
 	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
-	if (bDown && !bWasDown) GM->Restart();
+	if (bDown && !bWasDown) GM->Continue();
 	bWasDown = bDown;
 }
 
@@ -187,6 +191,66 @@ void AGPMHUD::DrawQuali(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	bWasDown = bDown;
 }
 
+// Écran de saison : prochain GP, championnat des pilotes et des écuries (onglets Classements du jeu web)
+void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
+{
+	DrawRect(FLinearColor(0.01f, 0.015f, 0.03f, 0.92f), 0, 0, W, H);
+	UGameInstance* GI = GetGameInstance();
+	UGPMSeasonSubsystem* Season = GI ? GI->GetSubsystem<UGPMSeasonSubsystem>() : nullptr;
+	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
+	if (!Season) return;
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Mid = GEngine->GetMediumFont();
+	FString Next = TEXT("Saison terminée !");
+	if (!Season->IsOver())
+	{
+		const FGPMTrackData* T = Data ? Data->GetTrack(Season->CurrentCircuit()) : nullptr;
+		Next = FString::Printf(TEXT("GP %d / %d : %s"), Season->Round() + 1, Season->NumRounds(), T ? *T->Name : *Season->CurrentCircuit());
+	}
+	DrawCentered(FString::Printf(TEXT("SAISON %d"), Season->Year()), FLinearColor::White, W, 8 * Scale, Big, Scale * 1.2f);
+	DrawCentered(Next, FLinearColor(1.f, 0.85f, 0.2f), W, 34 * Scale, Mid, Scale * 1.05f);
+
+	const TArray<FGPMStanding> Drv = Season->Drivers(), Tms = Season->Teams();
+	const float Top = 62 * Scale, Row = FMath::Min(14.f * Scale, (H - Top - 30 * Scale) / 20.f), S = Row / 15.f;
+	const float XL = FMath::Max(10.f, W / 2 - 400 * Scale), XR = W / 2 + 40 * Scale;
+	DrawText(TEXT("PILOTES"), FLinearColor(1, 1, 1, 0.6f), XL, Top - Row * 1.2f, Mid, S);
+	for (int32 k = 0; k < Drv.Num() && k < 20; ++k)
+	{
+		const FGPMStanding& D = Drv[k];
+		const float Y = Top + k * Row;
+		const FLinearColor Ink = D.bPlayer ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
+		DrawRect(D.Color, XL, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
+		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, XL + 10 * Scale, Y, Mid, S);
+		DrawText(D.Name, Ink, XL + 36 * Scale, Y, Mid, S);
+		DrawText(D.Team, FLinearColor(1, 1, 1, 0.55f), XL + 190 * Scale, Y, Mid, S);
+		DrawText(FString::Printf(TEXT("%d pts"), D.Pts), Ink, XL + 320 * Scale, Y, Mid, S);
+	}
+	DrawText(TEXT("ÉCURIES"), FLinearColor(1, 1, 1, 0.6f), XR, Top - Row * 1.2f, Mid, S);
+	for (int32 k = 0; k < Tms.Num(); ++k)
+	{
+		const FGPMStanding& Tm = Tms[k];
+		const float Y = Top + k * Row * 1.4f;
+		const FLinearColor Ink = Tm.bPlayer ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
+		DrawRect(Tm.Color, XR, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
+		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, XR + 10 * Scale, Y, Mid, S);
+		DrawText(Tm.Name, Ink, XR + 36 * Scale, Y, Mid, S);
+		DrawText(FString::Printf(TEXT("%d pts"), Tm.Pts), Ink, XR + 230 * Scale, Y, Mid, S);
+	}
+	// derniers résultats du joueur
+	const TArray<FGPMRaceResult>& Res = Season->Results();
+	FString Last;
+	for (int32 k = FMath::Max(0, Res.Num() - 5); k < Res.Num(); ++k)
+		Last += FString::Printf(TEXT("%s%s P%d"), Last.IsEmpty() ? TEXT("") : TEXT("  ·  "), *Res[k].Circuit, Res[k].Pos);
+	if (!Last.IsEmpty()) DrawText(TEXT("Tes derniers GP : ") + Last, FLinearColor(1, 1, 1, 0.7f), XR, Top + Tms.Num() * Row * 1.4f + 10 * Scale, Mid, S);
+	DrawCentered(Season->IsOver() ? TEXT("Entrée ou touche l'écran : saison suivante") : TEXT("Entrée ou touche l'écran : Grand Prix suivant (qualifications)"),
+		FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
+	APlayerController* PC = GetOwningPlayerController();
+	float TX, TY; bool bDown = false;
+	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
+	if (bDown && !bWasDown) GM->Continue();
+	bWasDown = bDown;
+}
+
 void AGPMHUD::DrawHUD()
 {
 	Super::DrawHUD();
@@ -214,6 +278,7 @@ void AGPMHUD::DrawHUD()
 		DrawText(Car->bAbsOn ? TEXT("ABS") : TEXT("TC"), FLinearColor(1.f, 0.8f, 0.1f), M + 10 * Scale, M + 74 * Scale, Mid, Scale);
 
 	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
+	if (GM && GM->Phase == AGPMGameMode::EPhase::Season) { DrawSeason(GM, W, H); return; }
 
 	// Tour et chronos (en haut au centre)
 	const float CW = 230 * Scale, CX = (W - CW) / 2;

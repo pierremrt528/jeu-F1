@@ -52,6 +52,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "GPM") float SpeedKmh() const { return V * 3.6f; }
 	UFUNCTION(BlueprintPure, Category = "GPM") int32 Gear() const;
+	/** Régime moteur (tr/min) d'après la vitesse et le rapport, pour le son et le compte-tours. */
+	float Rpm() const;
 	UFUNCTION(BlueprintCallable, Category = "GPM") void ToggleCamera();
 
 	/** Commandes tactiles (remplies par AGPMHUD) : prioritaires sur le clavier quand l'écran est touché. */

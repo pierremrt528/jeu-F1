@@ -8,7 +8,7 @@ public class GrandPrixManager : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
 			"ChaosVehicles", "PhysicsCore", "ProceduralMeshComponent",
-			"UMG", "Slate", "SlateCore", "CommonUI", "Json", "JsonUtilities"
+			"UMG", "Slate", "SlateCore", "CommonUI", "Json", "JsonUtilities", "AudioMixer"
 		});
 	}
 }
