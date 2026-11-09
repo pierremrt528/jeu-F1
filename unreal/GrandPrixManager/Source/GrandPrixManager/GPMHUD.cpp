@@ -4,6 +4,7 @@
 #include "GPMSeason.h"
 #include "GPMFactory.h"
 #include "GPMDataSubsystem.h"
+#include "GPMCareer.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Canvas.h"
 #include "Engine/World.h"
@@ -142,22 +143,23 @@ void AGPMHUD::DrawResults(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		if (C == Car) DrawRect(FLinearColor(1, 1, 1, 0.1f), X0 - 6, Y, 660 * Scale, Row);
 		DrawRect(C->TeamColor, X0, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
 		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, X0 + 10 * Scale, Y, Mid, S);
-		DrawText(C->DriverName, Ink, X0 + 40 * Scale, Y, Mid, S);
+		DrawText(Nm(C->DriverName), Ink, X0 + 40 * Scale, Y, Mid, S);
 		DrawText(C->TeamName, FLinearColor(1, 1, 1, 0.65f), X0 + 220 * Scale, Y, Mid, S);
 		const float Tm = GM->ResultTime(C);
 		DrawText(k == 0 ? Chrono(Tm) : Gap(Tm - Lead) + (C->bFinished ? TEXT("") : TEXT(" (est.)")), Ink, X0 + 390 * Scale, Y, Mid, S);
 		DrawText(Chrono(C->BestLap), FLinearColor(0.75f, 0.4f, 1.f), X0 + 510 * Scale, Y, Mid, S);
 		if (k < 10) DrawText(FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]), Ink, X0 + 600 * Scale, Y, Mid, S);
 	}
-	if (GM->bCareer) DrawCentered(FString::Printf(TEXT("+%d points au championnat"), GM->LastPts), FLinearColor(1.f, 0.85f, 0.2f), W, H - 42 * Scale, Mid, Scale);
-	DrawCentered(GM->bCareer ? TEXT("Entrée ou touche l'écran : classements de la saison") : TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
+	if (GM->bCareer)
+	{
+		FString Bilan = FString::Printf(TEXT("+%d points au championnat · +%.1f M€ de primes"), GM->LastPts, GM->LastPrize);
+		for (const FString& L : GM->LastLines) Bilan += TEXT("  ·  ") + L;
+		DrawCentered(Bilan, FLinearColor(1.f, 0.85f, 0.2f), W, H - 42 * Scale, Mid, Scale * 0.8f);
+	}
+	DrawCentered(GM->bCareer ? TEXT("Entrée ou touche l'écran : conférence de presse") : TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
+	if (!GM->bCareer && Btn(TEXT("MENU"), W - 110 * Scale, 8 * Scale, 96 * Scale, 30 * Scale, FLinearColor(0.3f, 0.32f, 0.38f))) { bWasDown = true; GM->GoHome(); return; }
 
-	// toucher l'écran (ou clic) : recommencer
-	APlayerController* PC = GetOwningPlayerController();
-	float TX, TY; bool bDown = false;
-	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
-	if (bDown && !bWasDown) GM->Continue();
-	bWasDown = bDown;
+	if (bTap) { bTap = false; GM->Continue(); }
 }
 
 // Classement des qualifications : temps, écart avec la pole ; Entrée = course, Retour = refaire le tour
@@ -179,17 +181,13 @@ void AGPMHUD::DrawQuali(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		if (C == Car) DrawRect(FLinearColor(1, 1, 1, 0.1f), X0 - 6, Y, 560 * Scale, Row);
 		DrawRect(C->TeamColor, X0, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
 		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, X0 + 10 * Scale, Y, Mid, S);
-		DrawText(C->DriverName, Ink, X0 + 40 * Scale, Y, Mid, S);
+		DrawText(Nm(C->DriverName), Ink, X0 + 40 * Scale, Y, Mid, S);
 		DrawText(C->TeamName, FLinearColor(1, 1, 1, 0.65f), X0 + 220 * Scale, Y, Mid, S);
 		DrawText(Tm >= 999.f ? FString(TEXT("pas de temps")) : Chrono(Tm), k == 0 ? FLinearColor(0.75f, 0.4f, 1.f) : Ink, X0 + 390 * Scale, Y, Mid, S);
 		if (k > 0 && Tm < 999.f) DrawText(Gap(Tm - Pole), FLinearColor(1, 1, 1, 0.65f), X0 + 480 * Scale, Y, Mid, S);
 	}
 	DrawCentered(TEXT("Entrée ou touche l'écran : course    Retour arrière : refaire le tour"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
-	APlayerController* PC = GetOwningPlayerController();
-	float TX, TY; bool bDown = false;
-	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
-	if (bDown && !bWasDown) GM->StartRace();
-	bWasDown = bDown;
+	if (bTap) { bTap = false; GM->StartRace(); }
 }
 
 // Écran de saison : prochain GP, championnat des pilotes et des écuries (onglets Classements du jeu web)
@@ -212,7 +210,7 @@ void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
 	DrawCentered(Next, FLinearColor(1.f, 0.85f, 0.2f), W, 34 * Scale, Mid, Scale * 1.05f);
 
 	const TArray<FGPMStanding> Drv = Season->Drivers(), Tms = Season->Teams();
-	const float Top = 62 * Scale, Row = FMath::Min(14.f * Scale, (H - Top - 30 * Scale) / 20.f), S = Row / 15.f;
+	const float Top = 62 * Scale, Row = FMath::Min(14.f * Scale, (H - Top - 92 * Scale) / 20.f), S = Row / 15.f;
 	const float XL = FMath::Max(10.f, W / 2 - 400 * Scale), XR = W / 2 + 40 * Scale;
 	DrawText(TEXT("PILOTES"), FLinearColor(1, 1, 1, 0.6f), XL, Top - Row * 1.2f, Mid, S);
 	for (int32 k = 0; k < Drv.Num() && k < 20; ++k)
@@ -222,7 +220,7 @@ void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
 		const FLinearColor Ink = D.bPlayer ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
 		DrawRect(D.Color, XL, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
 		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, XL + 10 * Scale, Y, Mid, S);
-		DrawText(D.Name, Ink, XL + 36 * Scale, Y, Mid, S);
+		DrawText(Nm(D.Name), Ink, XL + 36 * Scale, Y, Mid, S);
 		DrawText(D.Team, FLinearColor(1, 1, 1, 0.55f), XL + 190 * Scale, Y, Mid, S);
 		DrawText(FString::Printf(TEXT("%d pts"), D.Pts), Ink, XL + 320 * Scale, Y, Mid, S);
 	}
@@ -250,15 +248,24 @@ void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
 		for (int32 k = 0; k < G->News.Num() && k < 4; ++k)
 			DrawText(G->News[k], FLinearColor(0.6f, 1.f, 0.7f), XR, H - 40 * Scale - (G->News.Num() - k) * Row, Mid, S);
 	}
-	DrawBtn(TEXT("USINE (U)"), W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.75f, 0.12f, 0.12f));
-	if (Clicked(W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale)) GM->Phase = AGPMGameMode::EPhase::Factory;
+	// direction : confiance et objectifs ; bilan de la dernière course
+	UGPMCareerSubsystem* Career = GI ? GI->GetSubsystem<UGPMCareerSubsystem>() : nullptr;
+	if (Career && Career->Save())
+	{
+		float By = H - 44 * Scale;
+		FString Obj;
+		for (const TPair<FString, bool>& O : Career->Objectives()) Obj += FString::Printf(TEXT("   %s %s"), O.Value ? TEXT("[OK]") : TEXT("[  ]"), *O.Key);
+		DrawText(FString::Printf(TEXT("Direction : confiance %d %% (%s)%s"), Career->Save()->Conf, *UGPMCareerSubsystem::ConfText(Career->Save()->Conf), *Obj),
+			Career->Save()->Conf < 35 ? FLinearColor(1.f, 0.45f, 0.35f) : FLinearColor(0.6f, 0.9f, 1.f), XL, By, Mid, S);
+		for (int32 k = GM->LastLines.Num() - 1; k >= 0 && k >= GM->LastLines.Num() - 3; --k) { By -= Row; DrawText(GM->LastLines[k], FLinearColor(1, 1, 1, 0.6f), XL, By - Row * 0.2f, Mid, S * 0.95f); }
+	}
+	if (Season->IsOver() && !GM->bChampShown) { DrawChamp(GM, W, H); bWasDown = true; return; }
+	if (Btn(TEXT("USINE (U)"), W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.75f, 0.12f, 0.12f))) { GM->Phase = AGPMGameMode::EPhase::Factory; bWasDown = true; return; }
+	if (Career && Career->IsCreated() && Btn(TEXT("MERCATO"), W - 360 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.15f, 0.4f, 0.75f))) { GM->OpenMercato(); bWasDown = true; return; }
+	if (Btn(TEXT("ACCUEIL"), W - 500 * Scale, 8 * Scale, 128 * Scale, 30 * Scale, FLinearColor(0.3f, 0.32f, 0.38f))) { GM->GoHome(); bWasDown = true; return; }
 	DrawCentered(Season->IsOver() ? TEXT("Entrée ou touche l'écran : saison suivante") : TEXT("Entrée ou touche l'écran : Grand Prix suivant (qualifications)"),
 		FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
-	APlayerController* PC = GetOwningPlayerController();
-	float TX, TY; bool bDown = false;
-	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
-	if (bDown && !bWasDown) GM->Continue();
-	bWasDown = bDown;
+	if (bTap) { bTap = false; GM->Continue(); }
 }
 
 // Bouton tactile/souris simple : renvoie vrai au moment où on appuie dessus
@@ -385,6 +392,32 @@ void AGPMHUD::DrawHUD()
 	UFont* Mid = GEngine->GetMediumFont();
 	const float M = 16.f * Scale;
 
+	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
+	{
+		// appui (doigt ou clic) : position au moment où l'on touche l'écran
+		float TX = 0.f, TY = 0.f; bool bDown = false;
+		if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
+		bTap = bDown && !bTapWas; bTapWas = bDown; TapPos = FVector2D(TX, TY);
+	}
+	if (GM)
+	{
+		// cinématiques (survol, tour d'honneur, bienvenue) : bandes noires et titres
+		if (GM->Cine == AGPMGameMode::ECine::Intro || GM->Cine == AGPMGameMode::ECine::Podium || GM->Cine == AGPMGameMode::ECine::Welcome) { DrawCine(GM, W, H); return; }
+		switch (GM->Phase)
+		{
+		case AGPMGameMode::EPhase::Home: DrawHome(GM, W, H); return;
+		case AGPMGameMode::EPhase::Setup: DrawSetup(GM, W, H); return;
+		case AGPMGameMode::EPhase::Solo: DrawSolo(GM, W, H); return;
+		case AGPMGameMode::EPhase::Settings: DrawSettings(GM, W, H); return;
+		case AGPMGameMode::EPhase::Press: DrawDialog(GM, W, H); return;
+		case AGPMGameMode::EPhase::Mercato: DrawMercato(GM, W, H); return;
+		case AGPMGameMode::EPhase::Fired: DrawFired(GM, W, H); return;
+		case AGPMGameMode::EPhase::Factory: DrawFactory(GM, W, H); return;
+		case AGPMGameMode::EPhase::Season: DrawSeason(GM, W, H); return;
+		default: break;
+		}
+	}
+
 	// Vitesse et rapport (en haut à gauche)
 	DrawRect(HudPanel, M, M, 150 * Scale, 70 * Scale);
 	DrawText(FString::Printf(TEXT("%3.0f"), Car->SpeedKmh()), FLinearColor::White, M + 10 * Scale, M + 4 * Scale, Big, Scale * 1.6f);
@@ -394,15 +427,6 @@ void AGPMHUD::DrawHUD()
 	if (Car->bAbsOn || Car->bTcOn)
 		DrawText(Car->bAbsOn ? TEXT("ABS") : TEXT("TC"), FLinearColor(1.f, 0.8f, 0.1f), M + 10 * Scale, M + 74 * Scale, Mid, Scale);
 
-	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
-	{
-		// appui (doigt ou clic) : position au moment où l'on touche l'écran
-		float TX = 0.f, TY = 0.f; bool bDown = false;
-		if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
-		bTap = bDown && !bTapWas; bTapWas = bDown; TapPos = FVector2D(TX, TY);
-	}
-	if (GM && GM->Phase == AGPMGameMode::EPhase::Factory) { DrawFactory(GM, W, H); return; }
-	if (GM && GM->Phase == AGPMGameMode::EPhase::Season) { DrawSeason(GM, W, H); return; }
 
 	// Tour et chronos (en haut au centre)
 	const float CW = 230 * Scale, CX = (W - CW) / 2;

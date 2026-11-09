@@ -41,6 +41,24 @@ private:
 	void DrawResults(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	bool bWasDown = true;
 
+	// Menus et écrans de gestion (GPMHUDMenus.cpp)
+	void DrawHome(class AGPMGameMode* GM, float W, float H);
+	void DrawSetup(class AGPMGameMode* GM, float W, float H);
+	void DrawSolo(class AGPMGameMode* GM, float W, float H);
+	void DrawSettings(class AGPMGameMode* GM, float W, float H);
+	void DrawDialog(class AGPMGameMode* GM, float W, float H);
+	void DrawMercato(class AGPMGameMode* GM, float W, float H);
+	void DrawFired(class AGPMGameMode* GM, float W, float H);
+	void DrawCine(class AGPMGameMode* GM, float W, float H);
+	void DrawChamp(class AGPMGameMode* GM, float W, float H);
+	/** Bouton dessiné ; renvoie vrai s'il vient d'être touché. */
+	bool Btn(const FString& Label, float X, float Y, float BW, float BH, FLinearColor Col, bool bOn = true);
+	/** Texte sur plusieurs lignes ; renvoie la hauteur occupée. */
+	float DrawWrap(const FString& Text, float X, float Y, float MaxW, FLinearColor Color, float S);
+	/** Nom affiché d'un pilote (« Toi » → le nom choisi à la création). */
+	FString Nm(const FString& Driver) const;
+	bool bConfirmNew = false;
+
 	FButton Left, Right, Gas, Brake, Box;
 	bool bLeft = false, bRight = false, bGas = false, bBrake = false, bBoxBtn = false, bBoxWas = false;
 	float Scale = 1.f;

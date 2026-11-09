@@ -40,6 +40,31 @@ public:
 	UPROPERTY() TArray<FString> Delayed;    // pièces déjà retardées une fois
 	UPROPERTY() TMap<FString, float> RivalDev;    // progrès des écuries rivales (perf)
 	UPROPERTY() TArray<FString> News;       // messages de l'usine depuis le dernier GP
+
+	// Carrière (career.js) : identité de l'écurie, motoriste, équipier et son contrat
+	UPROPERTY() bool bCreated = false;
+	UPROPERTY() FString TeamName, PlayerName, Tier = TEXT("mid"), Engine, Sponsor;
+	UPROPERTY() int32 Col1 = 0, Col2 = 6;
+	UPROPERTY() float BasePerf = 0.96f, Fuel = 1.f;
+	UPROPERTY() FString MateName;
+	UPROPERTY() float MateSpd = 80.f, MateStrat = 75.f, MateTyre = 74.f, MatePot = 60.f, MateSal = 1.f;
+	UPROPERTY() int32 MateYears = 1, MateSince = 2027;
+	UPROPERTY() FString MateRole = TEXT("eq");
+	UPROPERTY() TMap<FString, FString> Seats;     // « écurie|0 » → pilote (écuries rivales, après les transferts)
+	UPROPERTY() TMap<FString, float> Skill;       // niveau des pilotes rivaux et libres
+	UPROPERTY() TArray<FString> Free;             // pilotes libres
+	UPROPERTY() TArray<FString> Broken;           // discussions rompues jusqu'au GP suivant
+	// Vie de l'écurie (events.js, press.js, stories.js) : direction, bonus de course, sponsors ponctuels
+	UPROPERTY() int32 Conf = 60;
+	UPROPERTY() TMap<FString, float> Boost;       // effets pour la prochaine course (vtop, acc, mu…)
+	UPROPERTY() TArray<FString> DealName;
+	UPROPERTY() TArray<float> DealGp;
+	UPROPERTY() TArray<int32> DealN;
+	UPROPERTY() TArray<FString> Flags, SeenEv, SeenSt;
+	UPROPERTY() TArray<int32> PressSeen;
+	UPROPERTY() FString StoryId, StoryStep;
+	UPROPERTY() int32 StoryDue = 0, StoryEp = 0, StoryVar = 0, GridPen = 0;
+	UPROPERTY() bool bReviewed = false, bFired = false;
 };
 
 /** Une ligne de classement. */
@@ -60,7 +85,10 @@ class GRANDPRIXMANAGER_API UGPMSeasonSubsystem : public UGameInstanceSubsystem
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
+	/** Nouvelle saison ; bNextYear : on garde l'écurie, l'usine et les contrats (intersaison). */
 	void NewSeason(bool bNextYear = false);
+	/** Recommencer la carrière (efface la sauvegarde). */
+	void Reset();
 	bool IsOver() const { return S && S->Round >= S->Calendar.Num(); }
 	int32 Round() const { return S ? S->Round : 0; }
 	int32 NumRounds() const { return S ? S->Calendar.Num() : 0; }

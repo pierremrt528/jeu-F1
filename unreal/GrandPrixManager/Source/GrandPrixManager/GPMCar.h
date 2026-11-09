@@ -55,6 +55,7 @@ public:
 	/** Régime moteur (tr/min) d'après la vitesse et le rapport, pour le son et le compte-tours. */
 	float Rpm() const;
 	UFUNCTION(BlueprintCallable, Category = "GPM") void ToggleCamera();
+	bool IsCockpit() const { return bCockpit; }
 
 	/** Commandes tactiles (remplies par AGPMHUD) : prioritaires sur le clavier quand l'écran est touché. */
 	float TouchSteer = 0.f, TouchGas = 0.f, TouchBrake = 0.f;

@@ -5,14 +5,14 @@
 
 namespace
 {
-	const TCHAR* Slot = TEXT("gpm-season");
+	const TCHAR* SaveSlot = TEXT("gpm-season");
 }
 
 void UGPMSeasonSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Collection.InitializeDependency<UGPMDataSubsystem>();
 	Super::Initialize(Collection);
-	S = Cast<UGPMSaveGame>(UGameplayStatics::LoadGameFromSlot(Slot, 0));
+	S = Cast<UGPMSaveGame>(UGameplayStatics::LoadGameFromSlot(SaveSlot, 0));
 	if (!S || S->Calendar.Num() == 0) NewSeason();
 	UE_LOG(LogGPM, Log, TEXT("Saison %d : manche %d / %d"), S->Year, S->Round + 1, S->Calendar.Num());
 }
@@ -20,7 +20,14 @@ void UGPMSeasonSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UGPMSeasonSubsystem::NewSeason(bool bNextYear)
 {
 	const int32 Y = S && bNextYear ? S->Year + 1 : 2027;
-	S = Cast<UGPMSaveGame>(UGameplayStatics::CreateSaveGameObject(UGPMSaveGame::StaticClass()));
+	if (S && bNextYear)
+	{
+		// intersaison : l'écurie continue, la saison repart de zéro
+		S = DuplicateObject<UGPMSaveGame>(S, this);
+		S->Round = 0; S->Results.Reset(); S->DriverPts.Reset(); S->TeamPts.Reset(); S->DriverTeam.Reset(); S->News.Reset();
+		S->bReviewed = false; S->SeenEv.Reset(); S->StoryId.Reset(); S->GridPen = 0;
+	}
+	else S = Cast<UGPMSaveGame>(UGameplayStatics::CreateSaveGameObject(UGPMSaveGame::StaticClass()));
 	S->Year = Y;
 	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
 	{
@@ -32,6 +39,13 @@ void UGPMSeasonSubsystem::NewSeason(bool bNextYear)
 		}
 	}
 	Save();
+}
+
+void UGPMSeasonSubsystem::Reset()
+{
+	UGameplayStatics::DeleteGameInSlot(SaveSlot, 0);
+	S = nullptr;
+	NewSeason();
 }
 
 FString UGPMSeasonSubsystem::CurrentCircuit() const
@@ -110,5 +124,5 @@ const TArray<FGPMRaceResult>& UGPMSeasonSubsystem::Results() const
 
 void UGPMSeasonSubsystem::Save()
 {
-	if (S) UGameplayStatics::SaveGameToSlot(S, Slot, 0);
+	if (S) UGameplayStatics::SaveGameToSlot(S, SaveSlot, 0);
 }

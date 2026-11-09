@@ -58,16 +58,16 @@ Règles communes à toutes les étapes :
 ## Étape 12 — Usine : recherche, infrastructures, chefs 🟡 (budget, moral, réputation, gains par course ; 5 pôles de recherche de garage.json avec prix, délais, retards, échecs, 2 ateliers ; effets sur la voiture ; progrès des rivaux ; écran Usine faits ; bâtiments et chefs à faire)
 **Prompt :** « Porte `js/garage.js`, `js/infra.js`, `js/staff.js` : 5 arbres de pièces (prix, délais en jours, risques), ateliers, règlement de mi-saison, 7 bâtiments × 3 niveaux, chefs de pôle et leurs contrats, rythme de développement des rivaux, `carUpgrades` → multiplicateurs appliqués à `AGPMCar`. »
 
-## Étape 13 — Mercato et négociations
+## Étape 13 — Mercato et négociations 🟡 (mercato des pilotes libres et des écuries rivales, négociation avec l'agent : personnalité, intérêt, patience, contre-offres, statut N°1/N°2, indemnité ×2,5 en saison, échange d'équipier ; mercato des IA à la mi-saison et à l'intersaison, fin de contrat → pilote de réserve faits ; clauses, primes, chefs à faire)
 **Prompt :** « Porte `js/market.js` et `js/nego.js` : marché des transferts (hiver, mi-saison, intersaison), mercato des IA, jeunes et vétérans, négociations avec agents (personnalités, patience, contre-offres, clauses, primes, statut N°1/N°2), contrats pluriannuels. »
 
-## Étape 14 — Vie de l'écurie : événements, histoires, presse, direction
+## Étape 14 — Vie de l'écurie : événements, histoires, presse, direction 🟡 (69 questions de presse, 85 flash info et brèves, 10 histoires à épisodes exportés par tools/export-life.mjs dans life.json avec leurs conditions ; effets moral/budget/réputation/confiance/performance/recherches/équipier/contrats/pénalité ; direction, objectifs, bilan de fin de saison, licenciement ; sponsor principal faits ; DataTables localisables à faire)
 **Prompt :** « Porte `js/events.js`, `js/stories.js`, `js/press.js` : flash info à choix et brèves, 10 histoires à 5 épisodes, ~70 questions de presse avec effets, objectifs de la direction, bilan de fin de saison et licenciement. Textes dans des DataTables (localisables). »
 
-## Étape 15 — Menus et écrans (UMG + CommonUI)
+## Étape 15 — Menus et écrans (UMG + CommonUI) 🟡 (écrans dessinés sur le canvas : accueil Carrière/Course solo/Réglages, création de l'écurie en 6 écrans avec aperçu des couleurs sur la voiture, course solo, réglages sauvegardés, presse, mercato, licenciement, sacre ; passage en UMG/CommonUI, logo et atelier 3D à faire)
 **Prompt :** « Recrée tous les écrans d'`index.html` en UMG/CommonUI, portrait et paysage : accueil (Carrière / Course solo), création de l'écurie en 6 écrans (couleurs, logo 2 couleurs parmi 20 emblèmes, pilote, motoriste, équipier, sponsors), QG (Usine, Installations, Chefs), saison et calendrier par mois, classements, réglages, presse, négociations, résultats. Style commun (couleurs `--acc`/`--acc2` → thème CommonUI). Atelier 3D derrière les menus (`js/showroom.js`) : niveau séparé avec plateau tournant et sol réfléchissant, pilote 3D (`js/pilot3d.js`). »
 
-## Étape 16 — Cinématiques
+## Étape 16 — Cinématiques 🟡 (caméra seule, sans Sequencer : survol avant les feux en 3 plans, tour d'honneur avec confettis, bienvenue au QG, survol lent derrière les menus, touche pour passer ; scènes du pilote et de l'agent à faire)
 **Prompt :** « Avec Sequencer + caméras Cine : survol du circuit avant les feux (drone, travelling sur la grille, grue), tour d'honneur et confettis après un podium, sacre de fin de saison, scènes au QG (bienvenue, rencontre avec un pilote et son agent, signature et photo). Touche l'écran pour passer. »
 
 ## Étape 17 — Builds, performances, publication

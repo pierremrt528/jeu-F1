@@ -18,6 +18,10 @@
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
 #include "GPMFactory.h"
+#include "GPMCareer.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Dom/JsonValue.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "GameFramework/PlayerController.h"
@@ -38,8 +42,12 @@ void AGPMGameMode::BeginPlay()
 	UE_LOG(LogGPM, Log, TEXT("Grand Prix Manager : démarrage"));
 
 	SetupWorld();
+	LoadSettings();
 	FString Id = UGameplayStatics::ParseOption(OptionsString, TEXT("circuit"));
 	bCareer = Id.IsEmpty();   // sans ?circuit : la saison (22 GP, points, sauvegarde)
+	// sans option de test : écran d'accueil (Carrière / Course solo / Réglages), le circuit de la manche en fond
+	bBootMenu = bCareer && !UGameplayStatics::HasOption(OptionsString, TEXT("course"));
+	Pending = bBootMenu ? 1 : 0;
 	if (bCareer)
 		if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Id = Season->CurrentCircuit();
 	if (Id.IsEmpty()) Id = TEXT("valmont");
@@ -158,9 +166,92 @@ void AGPMGameMode::PlaceCar()
 		}
 		if (Old && Old != Car) Old->Destroy();
 	}
-	// Week-end : qualifications jouées (un tour lancé), puis la course ; ?course : directement la course
+	RefreshRoster();
+	ApplySettings();
 	QOrder.Reset(); QTimes.Reset();
-	if (UGameplayStatics::HasOption(OptionsString, TEXT("course"))) StartRace(); else StartQuali();
+	const int32 Then = Pending;
+	Pending = 0;
+	if (Then == 1) { GoHome(); return; }
+	if (Then == 3) { StageGrid(); return; }   // écran de gestion : la grille en fond
+	if (Then == 2)
+	{
+		// nouvelle écurie : bienvenue au QG (la voiture aux nouvelles couleurs), puis l'écran de saison
+		StageGrid();
+		Phase = EPhase::Season;
+		if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
+			CineSub = Career->Save() ? Career->Save()->TeamName : FString();
+		StartCine(ECine::Welcome);
+		return;
+	}
+	// Week-end : qualifications jouées (un tour lancé), puis la course ; ?course ou course solo sans qualifs : directement la course
+	if (UGameplayStatics::HasOption(OptionsString, TEXT("course")) || (!bCareer && !bSoloQuali)) StartRace(); else StartQuali();
+}
+
+// noms, niveaux et couleurs des pilotes après la création de l'écurie ou un transfert
+void AGPMGameMode::RefreshRoster()
+{
+	UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
+	if (!Data) return;
+	int32 k = 0;
+	for (int32 t = 0; t < Data->Teams.Num(); ++t)
+		for (int32 d = 0; d < Data->Teams[t].Drivers.Num(); ++d, ++k)
+		{
+			if (!Cars.IsValidIndex(k)) return;
+			AGPMCar* C = Cars[k];
+			const FGPMTeam& Tm = Data->Teams[t];
+			C->DriverName = Tm.Drivers[d].Name;
+			C->TeamName = Tm.Name;
+			if (t == 0 && !C->TeamColor.Equals(Tm.Color)) C->SetLivery(Tm.Color, Tm.Accent);
+			C->TeamColor = Tm.Color;
+			C->Perf = Tm.Perf;
+			if (C != Car) C->Skill = Tm.Drivers[d].Skill;
+		}
+}
+
+// la grille au complet, voitures arrêtées : fond des menus
+void AGPMGameMode::StageGrid()
+{
+	const FGPMTrackData* T = CurTrack();
+	if (!T) return;
+	TArray<AGPMCar*> All;
+	for (AGPMCar* C : Cars) All.Add(C);
+	for (int32 k = 0; k < All.Num(); ++k)
+	{
+		Park(All[k], false);
+		All[k]->PlaceOnTrack(T, k);
+		All[k]->bHold = true;
+		All[k]->Field = All;
+	}
+	Order = All;
+}
+
+void AGPMGameMode::LoadSettings()
+{
+	if (!GConfig) return;
+	GConfig->GetBool(TEXT("GPM"), TEXT("ABS"), bSetABS, GGameUserSettingsIni);
+	GConfig->GetBool(TEXT("GPM"), TEXT("TC"), bSetTC, GGameUserSettingsIni);
+	GConfig->GetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
+	GConfig->GetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
+}
+
+void AGPMGameMode::SaveSettings()
+{
+	if (GConfig)
+	{
+		GConfig->SetBool(TEXT("GPM"), TEXT("ABS"), bSetABS, GGameUserSettingsIni);
+		GConfig->SetBool(TEXT("GPM"), TEXT("TC"), bSetTC, GGameUserSettingsIni);
+		GConfig->SetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
+		GConfig->SetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+	ApplySettings();
+}
+
+void AGPMGameMode::ApplySettings()
+{
+	if (!Car) return;
+	Car->Assist.bABS = bSetABS; Car->Assist.bTC = bSetTC; Car->Assist.bStab = bSetStab;
+	if (Car->IsCockpit() != bSetCockpit) Car->ToggleCamera();
 }
 
 const FGPMTrackData* AGPMGameMode::CurTrack() const
@@ -240,7 +331,19 @@ void AGPMGameMode::StartRace()
 	// Grille : ordre des qualifications ; sinon IA rangées par niveau et joueur en milieu de grille (?grille=N)
 	TArray<AGPMCar*> Grid;
 	int32 Slot = 0;
-	if (QOrder.Num() == Cars.Num()) { Grid = QOrder; Slot = Grid.IndexOfByKey(Car); }
+	if (QOrder.Num() == Cars.Num())
+	{
+		Grid = QOrder; Slot = Grid.IndexOfByKey(Car);
+		// pénalité de grille (événement « moteur changé »)
+		UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+		if (bCareer && Career && Career->Save() && Career->Save()->GridPen > 0)
+		{
+			const int32 To = FMath::Min(Grid.Num() - 1, Slot + Career->Save()->GridPen);
+			Grid.Remove(Car); Grid.Insert(Car, To); Slot = To;
+			Say(FString::Printf(TEXT("Pénalité : %d places sur la grille"), Career->Save()->GridPen));
+			Career->Save()->GridPen = 0;
+		}
+	}
 	else
 	{
 		for (AGPMCar* C : Cars) if (C != Car) Grid.Add(C);
@@ -267,6 +370,8 @@ void AGPMGameMode::StartRace()
 	LapEstimate *= 1.02f / FMath::Max(0.9f, Car->Perf);
 	const FString ToursOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("tours"));
 	TotalLaps = ToursOpt.IsEmpty() ? FMath::Clamp(FMath::RoundToInt(11.f * 60.f / (LapEstimate * 1.12f)), 3, 40) : FMath::Max(1, FCString::Atoi(*ToursOpt));
+	if (!bCareer && SoloLaps > 0 && ToursOpt.IsEmpty()) TotalLaps = SoloLaps;
+	GridSlot = Slot;
 	// pneus et carburant au départ : assez d'essence pour la course (+3 %), gomme selon la durée
 	const FString TyreOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("pneus"));
 	const float Km = T->WX.Num() * 2.f / 1000.f;
@@ -278,8 +383,20 @@ void AGPMGameMode::StartRace()
 		C->GripMul = AGPMCar::TyreGrip(C->Tyre);
 	}
 	Car->Tyre = TyreOpt.IsEmpty() ? 'M' : TCHAR(FChar::ToUpper(TyreOpt[0]));
-	bTyreWarn = false; RadioT = 0.f;
+	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
+	ApplySettings();
+	// survol du circuit avant les feux (une fois par Grand Prix, pas quand on recommence)
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	const FString Key = T->Id + (bCareer && Season ? FString::FromInt(Season->Round()) : FString(TEXT("solo")));
+	if (!IntroSeen.Contains(Key) && !UGameplayStatics::HasOption(OptionsString, TEXT("course")))
+	{
+		IntroSeen.Add(Key);
+		Phase = EPhase::Intro;
+		CineTitle = T->Name;
+		CineSub = bCareer && Season ? FString::Printf(TEXT("Grand Prix %d / %d · %d tours"), Season->Round() + 1, Season->NumRounds(), TotalLaps) : FString::Printf(TEXT("Course solo · %d tours"), TotalLaps);
+		StartCine(ECine::Intro);
+	}
 }
 
 void AGPMGameMode::Tick(float DeltaSeconds)
@@ -291,15 +408,24 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		const float Skid = FMath::Clamp((FMath::Abs(Car->Beta) - 0.04f) * 6.f + (Car->bLock ? 0.6f : 0.f), 0.f, 1.f) * FMath::Min(1.f, Car->V / 15.f);
 		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
 	}
-	if (Phase == EPhase::Season || Phase == EPhase::Factory)
+	UpdateCine(DeltaSeconds);
+	if (InMenu())
 	{
+		if (Cine == ECine::None) StartCine(ECine::Menu);
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			if (Phase == EPhase::Season && PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
-			else if (PC->WasInputKeyJustPressed(EKeys::U)) Phase = Phase == EPhase::Season ? EPhase::Factory : EPhase::Season;
-			else if (Phase == EPhase::Factory && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Season;
+			if (Phase == EPhase::Season && Cine != ECine::Welcome && PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+			else if ((Phase == EPhase::Season || Phase == EPhase::Factory) && PC->WasInputKeyJustPressed(EKeys::U)) Phase = Phase == EPhase::Season ? EPhase::Factory : EPhase::Season;
+			else if ((Phase == EPhase::Factory || Phase == EPhase::Mercato) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Season;
+			else if ((Phase == EPhase::Solo || Phase == EPhase::Settings || Phase == EPhase::Setup) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Home;
 		}
 		return;
+	}
+	if (Phase == EPhase::Intro || Phase == EPhase::Outro)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+			if (PC->WasInputKeyJustPressed(EKeys::Enter) || PC->WasInputKeyJustPressed(EKeys::SpaceBar)) EndCine();
+		if (Phase == EPhase::Intro) return;   // la course attend la fin du survol
 	}
 	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
 	{
@@ -338,7 +464,20 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		DoneT += DeltaSeconds;
 		bool bAll = true;
 		for (AGPMCar* C : Cars) bAll &= C->bFinished;
-		if (DoneT > 4.f || bAll) { Phase = EPhase::Done; RecordResult(); }
+		if (DoneT > 4.f || bAll)
+		{
+			Phase = EPhase::Done;
+			RecordResult();
+			// tour d'honneur autour de la voiture après un podium (confettis pour une victoire)
+			const int32 P = PositionOf(Car);
+			if (P >= 1 && P <= 3)
+			{
+				CineTitle = P == 1 ? TEXT("VICTOIRE !") : FString::Printf(TEXT("PODIUM : P%d"), P);
+				CineSub = CurTrack() ? CurTrack()->Name : FString();
+				Phase = EPhase::Outro;
+				StartCine(ECine::Podium);
+			}
+		}
 	}
 	// classement : arrivés par temps, puis tours et distance parcourue
 	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
@@ -506,6 +645,23 @@ void AGPMGameMode::RecordResult()
 			if (A.IsValidIndex(G->Round - 1)) Days = int32(A[G->Round - 1]->AsNumber());
 		}
 	Factory->Tick(Days);
+	// vie de l'écurie : direction, sponsors, puis conférence de presse et flash info
+	LastLines.Reset();
+	if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
+	{
+		Career->ClearBoost();
+		FGPMRaceCtx R;
+		R.Pos = Pos; R.Grid = GridSlot + 1; R.Stops = Car->Stops; R.Pen = Car->Penalty; R.bSC = bSCUsed;
+		R.Circuit = CurTrack() ? CurTrack()->Name : FString();
+		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
+		const int32 RivalIdx = Pos >= 2 ? Pos - 2 : 1;
+		if (Order.IsValidIndex(RivalIdx)) R.Rival = Order[RivalIdx]->DriverName;
+		float Best = 1e9f;
+		for (const AGPMCar* C : Order) if (C->BestLap > 0.f) Best = FMath::Min(Best, C->BestLap);
+		R.bFastest = Car->BestLap > 0.f && Car->BestLap <= Best;
+		for (int32 k = 0; k < Order.Num(); ++k) if (Order[k] != Car && Order[k]->TeamIdx == Car->TeamIdx) R.MatePos = k + 1;
+		LastLines = Career->AfterRace(R);
+	}
 	Season->Save();
 }
 
@@ -518,6 +674,17 @@ void AGPMGameMode::ApplyCareer()
 	if (!bCareer || !Data || !Season || !Factory || !Season->State()) return;
 	const FGPMUpgrades U = Factory->Upgrades();
 	Car->UpVTop = U.VTop; Car->UpAcc = U.Acc; Car->UpMu = U.Mu; Car->UpBrake = U.Brake; Car->UpKd = U.Kd; Car->UpSteer = U.Steer; Car->UpFuel = U.Fuel;
+	// bonus de la presse et des événements pour cette course, moral (±1 %), consommation du motoriste
+	if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
+	{
+		Car->UpVTop *= 1.f + Career->Boost(TEXT("vtop"));
+		Car->UpAcc *= 1.f + Career->Boost(TEXT("acc"));
+		Car->UpMu *= 1.f + Career->Boost(TEXT("mu"));
+		Car->UpBrake *= 1.f + Career->Boost(TEXT("brake"));
+		Car->UpKd *= 1.f + Career->Boost(TEXT("kd"));
+		Car->UpSteer *= 1.f + Career->Boost(TEXT("steer"));
+		if (const UGPMSaveGame* G = Career->Save()) { Car->UpFuel *= G->Fuel; Car->Perf = Data->Teams[0].Perf * (1.f + (G->Moral - 60) / 4000.f); }
+	}
 	for (AGPMCar* C : Cars)
 		if (C != Car && Data->Teams.IsValidIndex(C->TeamIdx))
 			C->Perf = Data->Teams[C->TeamIdx].Perf + Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
@@ -525,19 +692,97 @@ void AGPMGameMode::ApplyCareer()
 
 void AGPMGameMode::Continue()
 {
+	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (Phase == EPhase::Done)
 	{
-		if (bCareer) Phase = EPhase::Season; else Restart();
+		if (!bCareer) { Restart(); return; }
+		// après la course : conférence de presse et flash info, puis l'écran de saison
+		bNegoFromMercato = false;
+		if (Career && Career->Current()) { Phase = EPhase::Press; return; }
+		EndDialogs();
 		return;
 	}
-	if (Phase == EPhase::Season)
+	if (Phase == EPhase::Season && Season)
 	{
-		UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
-		if (!Season) return;
-		if (Season->IsOver()) Season->NewSeason(true);
+		if (Season->IsOver())
+		{
+			if (Career) Career->Intersaison();
+			Season->NewSeason(true);
+			bChampShown = false;
+		}
 		Phase = EPhase::Quali;   // évite un double appui pendant le chargement
+		EndCine();
 		LoadCircuit(Season->CurrentCircuit());
 	}
+}
+
+void AGPMGameMode::EndDialogs()
+{
+	if (bNegoFromMercato) { Phase = EPhase::Mercato; return; }
+	Phase = EPhase::Season;
+	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (Career && Season && Season->IsOver()) LastLines.Append(Career->SeasonReview());
+	if (Career && Career->IsFired()) Phase = EPhase::Fired;
+}
+
+// ---------- menus ----------
+void AGPMGameMode::GoHome()
+{
+	StageGrid();
+	Phase = EPhase::Home;
+	StartCine(ECine::Menu);
+}
+
+void AGPMGameMode::NewCareer()
+{
+	if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>()) Career->Pick = FGPMPick();
+	SetupStep = 0;
+	Phase = EPhase::Setup;
+}
+
+void AGPMGameMode::FinishSetup()
+{
+	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (!Career || !Season) return;
+	Career->CreateCareer();
+	bCareer = true; bChampShown = false;
+	IntroSeen.Reset();
+	Pending = 2;
+	Phase = EPhase::Season;
+	LoadCircuit(Season->CurrentCircuit());
+}
+
+void AGPMGameMode::ContinueCareer()
+{
+	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (!Career || !Season || !Career->IsCreated()) { NewCareer(); return; }
+	bCareer = true;
+	LastLines.Reset();
+	Phase = Career->IsFired() ? EPhase::Fired : EPhase::Season;
+	if (Track && Track->CircuitId != Season->CurrentCircuit()) { Pending = 3; LoadCircuit(Season->CurrentCircuit()); }
+}
+
+void AGPMGameMode::StartSolo()
+{
+	UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
+	if (!Data) return;
+	const TArray<FString> Ids = Data->GetCircuitIds();
+	if (!Ids.IsValidIndex(SoloIdx)) return;
+	bCareer = false;
+	EndCine();
+	Phase = EPhase::Quali;
+	LoadCircuit(Ids[SoloIdx]);
+}
+
+void AGPMGameMode::OpenMercato()
+{
+	MercatoPage = 0;
+	bNegoFromMercato = true;
+	Phase = EPhase::Mercato;
 }
 
 float AGPMGameMode::ResultTime(const AGPMCar* C) const
