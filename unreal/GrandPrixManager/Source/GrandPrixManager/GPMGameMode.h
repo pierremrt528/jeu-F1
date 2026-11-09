@@ -29,7 +29,7 @@ public:
 	int32 PositionOf(const AGPMCar* C) const { return Order.IndexOfByKey(C) + 1; }
 	int32 NumCars() const { return Order.Num(); }
 	/** Départ (race.js) : feux rouges allumés un par un, extinction au bout d'un délai aléatoire. */
-	enum class EPhase : uint8 { Quali, QualiDone, Lights, Race, Done, Season, Factory, Home, Setup, Solo, Settings, Press, Mercato, Fired, Intro, Outro };
+	enum class EPhase : uint8 { Quali, QualiDone, Lights, Race, Done, Season, Factory, Home, Setup, Solo, Settings, Press, Mercato, Tuning, Prerace, Fired, Intro, Outro };
 	/** Écrans de gestion (la course est figée derrière, caméra de survol). */
 	bool InMenu() const { return Phase >= EPhase::Season && Phase <= EPhase::Fired; }
 	EPhase Phase = EPhase::Lights;
@@ -40,8 +40,8 @@ public:
 	const TArray<AGPMCar*>& Standings() const { return Order; }
 	/** Temps (ou estimation) à l'arrivée : arrivés au temps réel, les autres d'après leur retard. */
 	float ResultTime(const AGPMCar* C) const;
-	/** Recommencer la course (Entrée, ou toucher l'écran des résultats). */
-	void Restart() { PlaceCar(); }
+	/** Recommencer la séance en cours (même grille, même stratégie). */
+	void Restart();
 	/** Après les résultats : écran de saison (carrière) ou nouvelle course ; depuis l'écran de saison : GP suivant. */
 	void Continue();
 	bool bCareer = true;
@@ -80,6 +80,29 @@ public:
 	// réglages (sauvegardés dans GameUserSettings.ini)
 	bool bSetABS = true, bSetTC = true, bSetStab = true, bSetCockpit = false;
 	void SaveSettings();
+	// --- Week-end comme le jeu web : réglages → qualifs (jouées ou simulées) → stratégie → course (ou simulée) ---
+	struct FSetup { const TCHAR* Name; const TCHAR* Desc; float Kd, VTop; };
+	static const FSetup Setups[5];
+	/** Une stratégie : gomme et nombre de tours de chaque relais, temps estimé. */
+	struct FPlan { TArray<TPair<TCHAR, int32>> Stints; float Time = 0.f; float MaxWear = 0.f; FString Name, Desc; };
+	int32 SetupK = -1;                       // réglage choisi pour ce week-end (parc fermé) ; -1 = pas encore
+	bool bGridReady = false;                 // qualifications faites pour ce Grand Prix
+	bool bLongRace = false;                  // format Long (~22 min) au lieu de Sprint (~11 min)
+	TArray<TPair<TCHAR, int32>> Stints;      // stratégie du joueur pour la course
+	TArray<FPlan> Plans;                     // 3 stratégies proposées
+	void OpenTuning();
+	void PlayQuali(int32 K);
+	void SimQuali(int32 K);
+	void OpenPrerace();
+	void Go(bool bSim);
+	void SimGrandPrix();
+	int32 LapsFor() const;
+	float SetupLap(int32 K) const;
+	int32 BestSetup() const;
+	float BaseLap() const;
+	float PlanTime(const TArray<TPair<TCHAR, int32>>& InStints, float LapTime, float* OutMaxWear = nullptr) const;
+	TArray<FPlan> MakePlans() const;
+	const FGPMTrackData* Circuit() const { return CurTrack(); }
 	/** Images par seconde (moyenne glissante) et résolution adaptative en %. */
 	float Fps = 60.f;
 	int32 ScreenPct = 100;
@@ -123,7 +146,7 @@ private:
 	TSet<AGPMCar*> SCAhead;
 	TCHAR PickTyre(int32 LapsLeft) const;
 	int32 GridSlot = 9;
-	int32 Pending = 0;   // après le chargement d'un circuit : 0 = week-end, 1 = accueil, 2 = QG (bienvenue)
+	int32 Pending = 0;   // après le chargement d'un circuit : 0 = qualifs (test), 1 = accueil, 2 = QG (bienvenue), 3 = grille en fond, 4 = réglages, 5 = stratégie
 	bool bBootMenu = false;
 	TSet<FString> IntroSeen;
 	void StageGrid();
@@ -135,4 +158,8 @@ private:
 	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f;
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
 	bool bTyreWarn = false;
+	void BaseUps();
+	void ApplySetup();
+	void SimRace();
+	bool bNoIntro = false;
 };

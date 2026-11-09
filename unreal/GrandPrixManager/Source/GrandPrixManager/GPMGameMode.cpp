@@ -170,9 +170,17 @@ void AGPMGameMode::PlaceCar()
 	RefreshRoster();
 	ApplySettings();
 	QOrder.Reset(); QTimes.Reset();
+	bGridReady = false; SetupK = -1; Stints.Reset();
 	const int32 Then = Pending;
 	Pending = 0;
 	if (Then == 1) { GoHome(); return; }
+	if (Then == 4 || Then == 5)
+	{
+		// week-end : réglages de la voiture (qualifs ensuite), ou directement la stratégie (course solo sans qualifs)
+		StageGrid(); BaseUps();
+		if (Then == 4) Phase = EPhase::Tuning; else OpenPrerace();
+		return;
+	}
 	if (Then == 3) { StageGrid(); return; }   // écran de gestion : la grille en fond
 	if (Then == 2)
 	{
@@ -215,7 +223,8 @@ void AGPMGameMode::StageGrid()
 	const FGPMTrackData* T = CurTrack();
 	if (!T) return;
 	TArray<AGPMCar*> All;
-	for (AGPMCar* C : Cars) All.Add(C);
+	if (QOrder.Num() == Cars.Num()) All = QOrder;   // après les qualifications : l'ordre de la grille
+	else for (AGPMCar* C : Cars) All.Add(C);
 	for (int32 k = 0; k < All.Num(); ++k)
 	{
 		Park(All[k], false);
@@ -259,6 +268,7 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetBool(TEXT("GPM"), TEXT("TC"), bSetTC, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
+	GConfig->GetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
 }
 
 void AGPMGameMode::SaveSettings()
@@ -269,6 +279,7 @@ void AGPMGameMode::SaveSettings()
 		GConfig->SetBool(TEXT("GPM"), TEXT("TC"), bSetTC, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
+		GConfig->SetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
 	ApplySettings();
@@ -317,7 +328,7 @@ void AGPMGameMode::StartQuali()
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	Phase = EPhase::Quali;
-	ApplyCareer();
+	BaseUps(); ApplySetup();
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
 	for (AGPMCar* C : Cars) if (C != Car) Park(C, true);
 	Park(Car, false);
@@ -339,6 +350,7 @@ void AGPMGameMode::StartQuali()
 void AGPMGameMode::EndQuali()
 {
 	Phase = EPhase::QualiDone;
+	bGridReady = true;
 	const float Mine = Car->LastLap;
 	if (float* Prev = QTimes.Find(Car)) { if (Mine > 0.f && Mine < *Prev) *Prev = Mine; }
 	else QTimes.Add(Car, Mine > 0.f ? Mine : 999.f);
@@ -352,7 +364,7 @@ void AGPMGameMode::StartRace()
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	for (AGPMCar* C : Cars) Park(C, false);
-	ApplyCareer();
+	BaseUps(); ApplySetup();
 	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));   // ?demo : pilote automatique
 
 	// Grille : ordre des qualifications ; sinon IA rangées par niveau et joueur en milieu de grille (?grille=N)
@@ -395,9 +407,7 @@ void AGPMGameMode::StartRace()
 	LapEstimate = 0.f;
 	for (int32 i = 0; i < T->AISpeed.Num(); ++i) LapEstimate += 2.f / FMath::Max(5.f, T->AISpeed[i]);
 	LapEstimate *= 1.02f / FMath::Max(0.9f, Car->Perf);
-	const FString ToursOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("tours"));
-	TotalLaps = ToursOpt.IsEmpty() ? FMath::Clamp(FMath::RoundToInt(11.f * 60.f / (LapEstimate * 1.12f)), 3, 40) : FMath::Max(1, FCString::Atoi(*ToursOpt));
-	if (!bCareer && SoloLaps > 0 && ToursOpt.IsEmpty()) TotalLaps = SoloLaps;
+	TotalLaps = LapsFor();
 	GridSlot = Slot;
 	// pneus et carburant au départ : assez d'essence pour la course (+3 %), gomme selon la durée
 	const FString TyreOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("pneus"));
@@ -409,14 +419,15 @@ void AGPMGameMode::StartRace()
 		C->Tyre = FMath::FRand() < 0.4f ? 'S' : 'M';
 		C->GripMul = AGPMCar::TyreGrip(C->Tyre);
 	}
-	Car->Tyre = TyreOpt.IsEmpty() ? 'M' : TCHAR(FChar::ToUpper(TyreOpt[0]));
+	Car->Tyre = !TyreOpt.IsEmpty() ? TCHAR(FChar::ToUpper(TyreOpt[0])) : Stints.Num() ? Stints[0].Key : TCHAR('M');
+	Car->GripMul = AGPMCar::TyreGrip(Car->Tyre);
 	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 	ApplySettings();
 	// survol du circuit avant les feux (une fois par Grand Prix, pas quand on recommence)
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	const FString Key = T->Id + (bCareer && Season ? FString::FromInt(Season->Round()) : FString(TEXT("solo")));
-	if (!IntroSeen.Contains(Key) && !UGameplayStatics::HasOption(OptionsString, TEXT("course")))
+	if (!bNoIntro && !IntroSeen.Contains(Key) && !UGameplayStatics::HasOption(OptionsString, TEXT("course")))
 	{
 		IntroSeen.Add(Key);
 		Phase = EPhase::Intro;
@@ -464,6 +475,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 			else if ((Phase == EPhase::Season || Phase == EPhase::Factory) && PC->WasInputKeyJustPressed(EKeys::U)) Phase = Phase == EPhase::Season ? EPhase::Factory : EPhase::Season;
 			else if ((Phase == EPhase::Factory || Phase == EPhase::Mercato) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Season;
 			else if ((Phase == EPhase::Solo || Phase == EPhase::Settings || Phase == EPhase::Setup) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Home;
+			else if ((Phase == EPhase::Tuning || Phase == EPhase::Prerace) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = bCareer ? EPhase::Season : EPhase::Solo;
 		}
 		return;
 	}
@@ -479,8 +491,8 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		if (Phase == EPhase::Quali && Car && Car->Lap >= 2) EndQuali();
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			if (PC->WasInputKeyJustPressed(EKeys::Enter)) StartRace();                                    // à la course
-			else if (PC->WasInputKeyJustPressed(EKeys::BackSpace)) StartQuali();                           // refaire le tour
+			if (PC->WasInputKeyJustPressed(EKeys::Enter)) { if (Phase == EPhase::QualiDone) OpenPrerace(); }   // stratégie de course
+			else if (Phase == EPhase::QualiDone && PC->WasInputKeyJustPressed(EKeys::BackSpace)) StartQuali();   // refaire le tour
 		}
 		return;
 	}
@@ -614,7 +626,7 @@ void AGPMGameMode::ToggleBox()
 	Car->bBox = !Car->bBox;
 	if (Car->bBox)
 	{
-		Car->NextTyre = PickTyre(TotalLaps - Car->Lap);
+		Car->NextTyre = Stints.IsValidIndex(Car->Stops + 1) ? Stints[Car->Stops + 1].Key : PickTyre(TotalLaps - Car->Lap);
 		Say(FString::Printf(TEXT("Box à la fin du tour : %s."), *TyreName(Car->NextTyre)));
 	}
 	else Say(TEXT("Arrêt annulé."));
@@ -645,6 +657,13 @@ void AGPMGameMode::Strategy(float Dt)
 		const bool bZone = K0 > T->PitE0 - 30 && K0 < T->PitE0 - 10;
 		if (!bZone || C->PitPhase || C->Lap < 1 || Left < 1 || C->bFinished) continue;
 		const bool bAuto = C != Car || !C->bPlayerControlled;
+		// joueur : arrêt prévu par sa stratégie (le muret l'appelle au bon tour)
+		if (!bAuto && !C->bBox && Stints.IsValidIndex(C->Stops + 1))
+		{
+			int32 Planned = 0;
+			for (int32 s = 0; s <= C->Stops; ++s) Planned += Stints[s].Value;
+			if (C->Lap >= Planned) { C->bBox = true; C->NextTyre = Stints[C->Stops + 1].Key; }
+		}
 		if (bAuto && !C->bBox && (1.f - C->Wear) - Left * AGPMCar::TyreWpl(C->Tyre) * 1.05f < 0.38f)
 		{
 			C->bBox = true;
@@ -663,6 +682,7 @@ void AGPMGameMode::RecordResult()
 {
 	if (!bCareer || bRecorded) return;
 	bRecorded = true;
+	bGridReady = false; SetupK = -1; Stints.Reset();   // prochain Grand Prix : nouveau week-end
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (!Season) return;
 	TArray<FGPMFinish> Fin;
@@ -753,13 +773,17 @@ void AGPMGameMode::Continue()
 	{
 		if (Season->IsOver())
 		{
+			// intersaison : nouvelle saison, puis l'écran de saison sur le premier circuit
 			if (Career) Career->Intersaison();
 			Season->NewSeason(true);
 			bChampShown = false;
+			bGridReady = false; SetupK = -1; Stints.Reset();
+			IntroSeen.Reset();
+			Pending = 3;
+			LoadCircuit(Season->CurrentCircuit());
+			return;
 		}
-		Phase = EPhase::Quali;   // évite un double appui pendant le chargement
-		EndCine();
-		LoadCircuit(Season->CurrentCircuit());
+		if (bGridReady) OpenPrerace(); else OpenTuning();
 	}
 }
 
@@ -770,7 +794,9 @@ void AGPMGameMode::EndDialogs()
 	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (Career && Season && Season->IsOver()) LastLines.Append(Career->SeasonReview());
-	if (Career && Career->IsFired()) Phase = EPhase::Fired;
+	if (Career && Career->IsFired()) { Phase = EPhase::Fired; return; }
+	// le circuit du prochain Grand Prix en fond de l'écran de saison
+	if (Season && Track && Track->CircuitId != Season->CurrentCircuit()) { Pending = 3; LoadCircuit(Season->CurrentCircuit()); }
 }
 
 // ---------- menus ----------
@@ -821,6 +847,7 @@ void AGPMGameMode::StartSolo()
 	bCareer = false;
 	EndCine();
 	Phase = EPhase::Quali;
+	Pending = bSoloQuali ? 4 : 5;
 	LoadCircuit(Ids[SoloIdx]);
 }
 

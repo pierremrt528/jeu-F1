@@ -60,6 +60,7 @@ private:
 	bool bAdded = false;
 	bool bConfirmNew = false;
 	int32 SelTree = 0, SelPart = 0, SeasonTab = 0;
+	int32 KeyPhase = -1;   // phase vue à l'image précédente : une touche qui change d'écran ne compte pas deux fois
 	FLinearColor Acc = FLinearColor(0.85f, 0.12f, 0.12f, 1.f);
 	FLinearColor Acc2 = FLinearColor(0.15f, 0.4f, 0.75f, 1.f);
 
@@ -100,4 +101,6 @@ private:
 	TSharedRef<SWidget> ChampScreen(AGPMGameMode* GM);
 	TSharedRef<SWidget> QualiScreen(AGPMGameMode* GM);
 	TSharedRef<SWidget> ResultsScreen(AGPMGameMode* GM);
+	TSharedRef<SWidget> TuningScreen(AGPMGameMode* GM);
+	TSharedRef<SWidget> PreraceScreen(AGPMGameMode* GM);
 };

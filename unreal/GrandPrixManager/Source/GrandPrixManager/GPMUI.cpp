@@ -119,6 +119,8 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(GM->SetupStep * 100 + GM->MercatoPage));
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0)));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
+	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
+	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
 	if (const UGPMCareerSubsystem* C = CareerSys())
 	{
 		H = HashCombine(H, GetTypeHash(C->Queue.Num()));
@@ -133,6 +135,26 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 	APlayerController* PC = H ? H->GetOwningPlayerController() : nullptr;
 	UGPMCareerSubsystem* C = CareerSys();
 	using EP = AGPMGameMode::EPhase;
+	// première image d'un écran : la touche qui vient de l'ouvrir ne doit pas aussi agir dessus
+	const bool bFresh = KeyPhase != int32(GM->Phase);
+	KeyPhase = int32(GM->Phase);
+	if (bFresh) return;
+	if (GM->Phase == EP::Tuning && PC)
+	{
+		const int32 Sel = GM->SetupK >= 0 ? GM->SetupK : GM->BestSetup();
+		if (PC->WasInputKeyJustPressed(EKeys::Up)) GM->SetupK = FMath::Max(0, Sel - 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::Down)) GM->SetupK = FMath::Min(4, Sel + 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::Enter)) GM->PlayQuali(Sel);
+		return;
+	}
+	if (GM->Phase == EP::Prerace && PC)
+	{
+		static const FKey PlanKeys[] = { EKeys::One, EKeys::Two, EKeys::Three };
+		for (int32 k = 0; k < GM->Plans.Num() && k < 3; ++k)
+			if (PC->WasInputKeyJustPressed(PlanKeys[k])) GM->Stints = GM->Plans[k].Stints;
+		if (PC->WasInputKeyJustPressed(EKeys::Enter)) GM->Go(false);
+		return;
+	}
 	if (GM->Phase == EP::Press && C)
 	{
 		FGPMDialog* Dl = C->Current();
@@ -193,6 +215,7 @@ bool FGPMUI::Update(AGPMGameMode* GM)
 	}
 	if (!bWant)
 	{
+		KeyPhase = -1;
 		if (Shown != 0) { Root->SetContent(SNullWidget::NullWidget); Root->SetVisibility(EVisibility::Collapsed); Shown = 0; }
 		return false;
 	}
@@ -232,6 +255,8 @@ TSharedRef<SWidget> FGPMUI::Build(AGPMGameMode* GM)
 	case EP::Season: return SeasonScreen(GM);
 	case EP::QualiDone: return QualiScreen(GM);
 	case EP::Done: return ResultsScreen(GM);
+	case EP::Tuning: return TuningScreen(GM);
+	case EP::Prerace: return PreraceScreen(GM);
 	default: return SNullWidget::NullWidget;
 	}
 }

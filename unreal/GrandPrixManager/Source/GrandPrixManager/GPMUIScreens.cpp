@@ -68,8 +68,32 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 		NextBox->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("PROCHAIN GRAND PRIX · %d / %d"), S->Round() + 1, S->NumRounds()), 14, CDim, true) ];
 		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 2.f))[ Txt(T ? T->Name : S->CurrentCircuit(), 30, CText, true, true) ];
 		if (T) NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Txt(FString::Printf(TEXT("%.2f km · largeur %.0f m"), T->WX.Num() * 2.f / 1000.f, T->Width), 15, CDim) ];
-		NextBox->AddSlot().AutoHeight()[ Button(TEXT("QUALIFICATIONS"), Acc, [WGM]() { if (WGM.IsValid()) WGM->Continue(); }, true, 0.f, 60.f, 22) ];
-		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("ou touche Entrée"), 13, CFaint) ];
+		// format de course : Sprint (~11 min) ou Long (~22 min)
+		const int32 NLaps = GM->Circuit() == T ? GM->LapsFor() : 0;
+		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+			[ Button(TEXT("Sprint · 11 min"), !GM->bLongRace ? Acc2 : CNeutral, [WGM]() { if (WGM.IsValid()) { WGM->bLongRace = false; WGM->SaveSettings(); } }, !GM->bGridReady || !GM->bLongRace, 0.f, 40.f, 14) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+			[ Button(TEXT("Long · 22 min"), GM->bLongRace ? Acc2 : CNeutral, [WGM]() { if (WGM.IsValid()) { WGM->bLongRace = true; WGM->SaveSettings(); } }, !GM->bGridReady || GM->bLongRace, 0.f, 40.f, 14) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(NLaps > 0 ? FString::Printf(TEXT("%d tours"), NLaps) : FString(), 15, CDim, true) ]
+		];
+		if (!GM->bGridReady)
+		{
+			NextBox->AddSlot().AutoHeight()[ Button(TEXT("RÉGLAGES ET QUALIFICATIONS"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenTuning(); }, true, 0.f, 60.f, 20) ];
+			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LE GRAND PRIX"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->SimGrandPrix(); }, true, 0.f, 46.f, 15) ];
+			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("Entrée : réglages · le Grand Prix simulé saute les qualifications et la course"), 13, CFaint, false, true) ];
+		}
+		else
+		{
+			AGPMHUD* HudP = Hud.Get();
+			AGPMCar* MeCar = HudP ? Cast<AGPMCar>(HudP->GetOwningPawn()) : nullptr;
+			const int32 MyGrid = MeCar ? GM->QOrder.IndexOfByKey(MeCar) : INDEX_NONE;
+			NextBox->AddSlot().AutoHeight()[ Button(TEXT("STRATÉGIE ET DÉPART"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenPrerace(); }, true, 0.f, 60.f, 20) ];
+			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LA COURSE"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Go(true); }, true, 0.f, 46.f, 15) ];
+			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(MyGrid >= 0 ? FString::Printf(TEXT("Qualifications faites : tu pars en P%d"), MyGrid + 1) : FString(TEXT("Qualifications faites")), 13, CFaint) ];
+		}
 	}
 	else
 	{
@@ -631,12 +655,12 @@ TSharedRef<SWidget> FGPMUI::QualiScreen(AGPMGameMode* GM)
 		+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
 		[ Button(TEXT("REFAIRE UN TOUR"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->StartQuali(); }, true, 200.f, 50.f, 16) ]
 		+ SHorizontalBox::Slot().AutoWidth()
-		[ Button(TEXT("À LA COURSE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->StartRace(); }, true, 220.f, 50.f, 18) ];
+		[ Button(TEXT("STRATÉGIE DE COURSE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenPrerace(); }, true, 240.f, 50.f, 18) ];
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
 		[ Title(TEXT("QUALIFICATIONS"), MyPos > 0 ? FString::Printf(TEXT("Tu pars en P%d"), MyPos) : FString(TEXT("Grille de départ")), Buttons) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))[ Txt(TEXT("Entrée : à la course · Retour arrière : refaire un tour (ton meilleur temps compte)"), 13, CFaint) ];
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))[ Txt(TEXT("Entrée : stratégie de course · Retour arrière : refaire un tour (ton meilleur temps compte)"), 13, CFaint) ];
 	return SNew(SBox).HAlign(HAlign_Center)[ SNew(SBox).WidthOverride(1240.f)[ Page(Body, FLinearColor(0.01f, 0.012f, 0.025f, 0.88f)) ] ];
 }
 

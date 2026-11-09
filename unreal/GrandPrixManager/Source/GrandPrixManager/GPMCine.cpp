@@ -74,12 +74,14 @@ void AGPMGameMode::UpdateCine(float Dt)
 	{
 	case ECine::Menu:
 	{
-		if (Phase == EPhase::Setup)
+		if (Phase == EPhase::Setup || Phase == EPhase::Tuning)
 		{
-			// création de l'écurie : la voiture tourne sous la caméra, comme à l'atelier
+			// création de l'écurie, réglages : la voiture tourne sous la caméra, comme à l'atelier,
+			// décalée à droite de l'écran (le panneau occupe la gauche)
 			const float A = CineT * 0.3f;
 			Eye = CarPos + FVector(FMath::Cos(A) * 620.f, FMath::Sin(A) * 620.f, 210.f);
-			Look = CarPos + FVector(0, 0, 40.f);
+			const FVector Dir = (CarPos - Eye).GetSafeNormal2D();
+			Look = CarPos + FVector(0, 0, 40.f) - FVector::CrossProduct(FVector::UpVector, Dir) * 330.f;
 			break;
 		}
 		// survol lent du circuit derrière les menus
