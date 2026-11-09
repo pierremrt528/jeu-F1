@@ -117,6 +117,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Y = Track->WY[Idx];
 	Heading = Track->H[Idx];
 	V = Beta = Ax = Ay = SpinT = 0.f;
+	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
 	UpdateTransform();
 }
 
@@ -144,13 +145,13 @@ void AGPMCar::ReadKeyboard(float Dt)
 	auto Down = [PC](FKey A, FKey B) { return PC->IsInputKeyDown(A) || PC->IsInputKeyDown(B); };
 	const bool L = Down(EKeys::Left, EKeys::Q) || PC->IsInputKeyDown(EKeys::A);
 	const bool R = Down(EKeys::Right, EKeys::D);
-	const float Want = (R ? 1.f : 0.f) - (L ? 1.f : 0.f);
+	const float Want = bTouchActive && TouchSteer != 0.f ? TouchSteer : (R ? 1.f : 0.f) - (L ? 1.f : 0.f);
 	// les touches tout-ou-rien sont adoucies (comme input.js)
 	const float Rate = Want == 0.f ? 7.f : (Sign(Want) != Sign(SteerSmooth) ? 8.f : 3.2f);
 	SteerSmooth += FMath::Clamp(Want - SteerSmooth, -Rate * Dt, Rate * Dt);
 	Steer = SteerSmooth;
-	Throttle = Down(EKeys::Up, EKeys::Z) || PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f;
-	Brake = Down(EKeys::Down, EKeys::S) || PC->IsInputKeyDown(EKeys::SpaceBar) ? 1.f : 0.f;
+	Throttle = FMath::Max(TouchGas, Down(EKeys::Up, EKeys::Z) || PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f);
+	Brake = FMath::Max(TouchBrake, Down(EKeys::Down, EKeys::S) || PC->IsInputKeyDown(EKeys::SpaceBar) ? 1.f : 0.f);
 	if (PC->WasInputKeyJustPressed(EKeys::C)) ToggleCamera();
 	if (PC->WasInputKeyJustPressed(EKeys::R)) PlaceOnTrack(Track, 0);   // remettre sur la piste
 }
@@ -161,12 +162,26 @@ void AGPMCar::Tick(float DeltaSeconds)
 	if (!Track) return;
 	if (bPlayerControlled) ReadKeyboard(DeltaSeconds);
 	Accum = FMath::Min(Accum + DeltaSeconds, 0.1f);
-	while (Accum >= PhysDt) { Step(PhysDt); Accum -= PhysDt; }
+	const int32 N = Track->WX.Num();
+	while (Accum >= PhysDt)
+	{
+		const int32 Prev = Idx;
+		Step(PhysDt);
+		Accum -= PhysDt;
+		RaceTime += PhysDt;
+		// Ligne d'arrivée = point 0 : passage de la fin du tour au début, dans le bon sens
+		if (Prev > N - 40 && Idx < 40 && V > 0)
+		{
+			if (Lap > 0)
+			{
+				LastLap = RaceTime - LapStart;
+				if (BestLap <= 0.f || LastLap < BestLap) BestLap = LastLap;
+			}
+			++Lap;
+			LapStart = RaceTime;
+		}
+	}
 	UpdateTransform();
-
-	if (bPlayerControlled && GEngine)
-		GEngine->AddOnScreenDebugMessage(1, 0.f, FColor::White,
-			FString::Printf(TEXT("%3.0f km/h  rapport %d%s%s   (C : caméra, R : replacer)"), SpeedKmh(), Gear(), bAbsOn ? TEXT("  ABS") : TEXT(""), bTcOn ? TEXT("  TC") : TEXT("")));
 }
 
 // Portage de stepCar() (js/car.js) sans garage, carburant, dégâts ni aspiration (étapes 7-8).

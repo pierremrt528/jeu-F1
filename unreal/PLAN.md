@@ -34,7 +34,7 @@ Règles communes à toutes les étapes :
 ## Étape 4 — Monoplace et physique 🟡 (physique portée de js/car.js plutôt que Chaos Vehicle ; modèle provisoire)
 **Prompt :** « Crée `AGPMCar` (hérite de `AWheeledVehiclePawn`) avec un `UChaosWheeledVehicleMovementComponent` réglé comme une monoplace fictive : ~800 kg, 4 roues, moteur ~750 ch avec courbe de couple, boîte 8 rapports, appui aéro proportionnel à v² (force vers le bas appliquée en C++ dans `Tick`, réduite par l'air sale et les ailerons abîmés comme dans `js/car.js`), freins puissants, différentiel arrière. Reprends les aides d'`js/car.js` (ABS, antipatinage, stabilité, aide à la trajectoire). Modèle 3D : exporte `js/carmodel.js` en glTF depuis la version web (script Playwright) puis importe-le, ou crée un modèle original low-poly (< 15 k triangles, 1 matériau à masque de livrée). Caméras arrière et cockpit commutables, secousses. Le joueur doit pouvoir faire un tour de Valmont. »
 
-## Étape 5 — Commandes et HUD
+## Étape 5 — Commandes et HUD 🟡 (HUD canvas + boutons tactiles + chronos faits ; inclinaison et UMG à faire)
 **Prompt :** « Enhanced Input : clavier/manette sur ordinateur ; sur mobile, widget UMG multi-touch (gauche/droite, accélérateur, frein, DRS/stand), inclinaison du téléphone en option (gyroscope via `UInputComponent` motion). HUD UMG (position, tour, chronos, vitesse, rapport, mini-carte dessinée depuis la spline) comme `js/hud.js`, adapté à 844×390 avec marges de sécurité (encoche). »
 
 ## Étape 6 — IA des pilotes

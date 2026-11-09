@@ -52,6 +52,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GPM") int32 Gear() const;
 	UFUNCTION(BlueprintCallable, Category = "GPM") void ToggleCamera();
 
+	/** Commandes tactiles (remplies par AGPMHUD) : prioritaires sur le clavier quand l'écran est touché. */
+	float TouchSteer = 0.f, TouchGas = 0.f, TouchBrake = 0.f;
+	bool bTouchActive = false;
+
+	/** Tours et chronos */
+	int32 Lap = 0;
+	float RaceTime = 0.f, LapStart = 0.f, LastLap = 0.f, BestLap = 0.f;
+	float LapTime() const { return Lap > 0 ? RaceTime - LapStart : 0.f; }
+	const FGPMTrackData* GetTrack() const { return Track; }
+
 	// État (mêmes noms que le jeu web)
 	float X = 0, Y = 0, Z = 0, Heading = 0, Pitch = 0, V = 0, Lat = 0, Beta = 0, Ax = 0, Ay = 0, SpinT = 0, SpinDir = 1;
 	float Dive = 0, Roll = 0, YOff = 0, Slip = 0, HitWall = 0;

@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GPMCar.h"
+#include "GPMHUD.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -20,6 +21,7 @@ AGPMGameMode::AGPMGameMode()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	DefaultPawnClass = ASpectatorPawn::StaticClass();   // remplacé par la monoplace dès que le circuit est prêt
+	HUDClass = AGPMHUD::StaticClass();
 }
 
 void AGPMGameMode::BeginPlay()
