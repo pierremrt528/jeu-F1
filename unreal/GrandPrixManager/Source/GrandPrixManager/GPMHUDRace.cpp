@@ -193,8 +193,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (PC && bLive && (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::P))) { SetPaused(!bPaused); return; }
 	if (bPaused && !bLive) SetPaused(false);
 
-	if (GM && GM->Phase == AGPMGameMode::EPhase::QualiDone) { DrawQuali(GM, Car, W, H); return; }
-	if (GM && GM->Phase == AGPMGameMode::EPhase::Done) { DrawResults(GM, Car, W, H); return; }
+	if (GM && (GM->Phase == AGPMGameMode::EPhase::QualiDone || GM->Phase == AGPMGameMode::EPhase::Done)) return;
 
 	// Tour et chronos (en haut au centre)
 	const float CW = 220.f * Scale, CX = (W - CW) / 2;

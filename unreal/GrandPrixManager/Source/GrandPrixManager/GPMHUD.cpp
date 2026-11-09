@@ -5,6 +5,7 @@
 #include "GPMFactory.h"
 #include "GPMDataSubsystem.h"
 #include "GPMCareer.h"
+#include "GPMUI.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Canvas.h"
 #include "Engine/World.h"
@@ -124,150 +125,6 @@ FString AGPMHUD::Gap(float S) const
 	return FString::Printf(TEXT("+%.3f"), S);
 }
 
-// Résultats (comme l'écran de résultats du jeu web) : place, pilote, écurie, écart, meilleur tour, points
-void AGPMHUD::DrawResults(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
-{
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0, 0, W, H);
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Mid = GEngine->GetMediumFont();
-	DrawCentered(TEXT("RÉSULTATS"), FLinearColor::White, W, 10 * Scale, Big, Scale * 1.3f);
-	const TArray<AGPMCar*>& Order = GM->Standings();
-	const float Row = FMath::Min(15.5f * Scale, (H - 70 * Scale) / FMath::Max(1, Order.Num()));
-	const float X0 = FMath::Max(10.f, W / 2 - 330 * Scale), Y0 = 46 * Scale, S = Row / 16.f;
-	const float Lead = Order.Num() ? GM->ResultTime(Order[0]) : 0.f;
-	for (int32 k = 0; k < Order.Num(); ++k)
-	{
-		const AGPMCar* C = Order[k];
-		const float Y = Y0 + k * Row;
-		const FLinearColor Ink = C == Car ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
-		if (C == Car) DrawRect(FLinearColor(1, 1, 1, 0.1f), X0 - 6, Y, 660 * Scale, Row);
-		DrawRect(C->TeamColor, X0, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
-		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, X0 + 10 * Scale, Y, Mid, S);
-		DrawText(Nm(C->DriverName), Ink, X0 + 40 * Scale, Y, Mid, S);
-		DrawText(C->TeamName, FLinearColor(1, 1, 1, 0.65f), X0 + 220 * Scale, Y, Mid, S);
-		const float Tm = GM->ResultTime(C);
-		DrawText(k == 0 ? Chrono(Tm) : Gap(Tm - Lead) + (C->bFinished ? TEXT("") : TEXT(" (est.)")), Ink, X0 + 390 * Scale, Y, Mid, S);
-		DrawText(Chrono(C->BestLap), FLinearColor(0.75f, 0.4f, 1.f), X0 + 510 * Scale, Y, Mid, S);
-		if (k < 10) DrawText(FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]), Ink, X0 + 600 * Scale, Y, Mid, S);
-	}
-	if (GM->bCareer)
-	{
-		FString Bilan = FString::Printf(TEXT("+%d points au championnat · +%.1f M€ de primes"), GM->LastPts, GM->LastPrize);
-		for (const FString& L : GM->LastLines) Bilan += TEXT("  ·  ") + L;
-		DrawCentered(Bilan, FLinearColor(1.f, 0.85f, 0.2f), W, H - 42 * Scale, Mid, Scale * 0.8f);
-	}
-	DrawCentered(GM->bCareer ? TEXT("Entrée ou touche l'écran : conférence de presse") : TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
-	if (!GM->bCareer && Btn(TEXT("MENU"), W - 110 * Scale, 8 * Scale, 96 * Scale, 30 * Scale, FLinearColor(0.3f, 0.32f, 0.38f))) { bWasDown = true; GM->GoHome(); return; }
-
-	if (bTap) { bTap = false; GM->Continue(); }
-}
-
-// Classement des qualifications : temps, écart avec la pole ; Entrée = course, Retour = refaire le tour
-void AGPMHUD::DrawQuali(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
-{
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0, 0, W, H);
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Mid = GEngine->GetMediumFont();
-	DrawCentered(TEXT("QUALIFICATIONS"), FLinearColor::White, W, 10 * Scale, Big, Scale * 1.3f);
-	const TArray<AGPMCar*>& Q = GM->QOrder;
-	const float Row = FMath::Min(15.5f * Scale, (H - 70 * Scale) / FMath::Max(1, Q.Num()));
-	const float X0 = FMath::Max(10.f, W / 2 - 280 * Scale), Y0 = 46 * Scale, S = Row / 16.f;
-	const float Pole = Q.Num() ? GM->QTimes.FindRef(Q[0]) : 0.f;
-	for (int32 k = 0; k < Q.Num(); ++k)
-	{
-		const AGPMCar* C = Q[k];
-		const float Y = Y0 + k * Row, Tm = GM->QTimes.FindRef(Q[k]);
-		const FLinearColor Ink = C == Car ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
-		if (C == Car) DrawRect(FLinearColor(1, 1, 1, 0.1f), X0 - 6, Y, 560 * Scale, Row);
-		DrawRect(C->TeamColor, X0, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
-		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, X0 + 10 * Scale, Y, Mid, S);
-		DrawText(Nm(C->DriverName), Ink, X0 + 40 * Scale, Y, Mid, S);
-		DrawText(C->TeamName, FLinearColor(1, 1, 1, 0.65f), X0 + 220 * Scale, Y, Mid, S);
-		DrawText(Tm >= 999.f ? FString(TEXT("pas de temps")) : Chrono(Tm), k == 0 ? FLinearColor(0.75f, 0.4f, 1.f) : Ink, X0 + 390 * Scale, Y, Mid, S);
-		if (k > 0 && Tm < 999.f) DrawText(Gap(Tm - Pole), FLinearColor(1, 1, 1, 0.65f), X0 + 480 * Scale, Y, Mid, S);
-	}
-	DrawCentered(TEXT("Entrée ou touche l'écran : course    Retour arrière : refaire le tour"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
-	if (bTap) { bTap = false; GM->StartRace(); }
-}
-
-// Écran de saison : prochain GP, championnat des pilotes et des écuries (onglets Classements du jeu web)
-void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
-{
-	DrawRect(FLinearColor(0.01f, 0.015f, 0.03f, 0.92f), 0, 0, W, H);
-	UGameInstance* GI = GetGameInstance();
-	UGPMSeasonSubsystem* Season = GI ? GI->GetSubsystem<UGPMSeasonSubsystem>() : nullptr;
-	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
-	if (!Season) return;
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Mid = GEngine->GetMediumFont();
-	FString Next = TEXT("Saison terminée !");
-	if (!Season->IsOver())
-	{
-		const FGPMTrackData* T = Data ? Data->GetTrack(Season->CurrentCircuit()) : nullptr;
-		Next = FString::Printf(TEXT("GP %d / %d : %s"), Season->Round() + 1, Season->NumRounds(), T ? *T->Name : *Season->CurrentCircuit());
-	}
-	DrawCentered(FString::Printf(TEXT("SAISON %d"), Season->Year()), FLinearColor::White, W, 8 * Scale, Big, Scale * 1.2f);
-	DrawCentered(Next, FLinearColor(1.f, 0.85f, 0.2f), W, 34 * Scale, Mid, Scale * 1.05f);
-
-	const TArray<FGPMStanding> Drv = Season->Drivers(), Tms = Season->Teams();
-	const float Top = 62 * Scale, Row = FMath::Min(14.f * Scale, (H - Top - 92 * Scale) / 20.f), S = Row / 15.f;
-	const float XL = FMath::Max(10.f, W / 2 - 400 * Scale), XR = W / 2 + 40 * Scale;
-	DrawText(TEXT("PILOTES"), FLinearColor(1, 1, 1, 0.6f), XL, Top - Row * 1.2f, Mid, S);
-	for (int32 k = 0; k < Drv.Num() && k < 20; ++k)
-	{
-		const FGPMStanding& D = Drv[k];
-		const float Y = Top + k * Row;
-		const FLinearColor Ink = D.bPlayer ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
-		DrawRect(D.Color, XL, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
-		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, XL + 10 * Scale, Y, Mid, S);
-		DrawText(Nm(D.Name), Ink, XL + 36 * Scale, Y, Mid, S);
-		DrawText(D.Team, FLinearColor(1, 1, 1, 0.55f), XL + 190 * Scale, Y, Mid, S);
-		DrawText(FString::Printf(TEXT("%d pts"), D.Pts), Ink, XL + 320 * Scale, Y, Mid, S);
-	}
-	DrawText(TEXT("ÉCURIES"), FLinearColor(1, 1, 1, 0.6f), XR, Top - Row * 1.2f, Mid, S);
-	for (int32 k = 0; k < Tms.Num(); ++k)
-	{
-		const FGPMStanding& Tm = Tms[k];
-		const float Y = Top + k * Row * 1.4f;
-		const FLinearColor Ink = Tm.bPlayer ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
-		DrawRect(Tm.Color, XR, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
-		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, XR + 10 * Scale, Y, Mid, S);
-		DrawText(Tm.Name, Ink, XR + 36 * Scale, Y, Mid, S);
-		DrawText(FString::Printf(TEXT("%d pts"), Tm.Pts), Ink, XR + 230 * Scale, Y, Mid, S);
-	}
-	// derniers résultats du joueur
-	const TArray<FGPMRaceResult>& Res = Season->Results();
-	FString Last;
-	for (int32 k = FMath::Max(0, Res.Num() - 5); k < Res.Num(); ++k)
-		Last += FString::Printf(TEXT("%s%s P%d"), Last.IsEmpty() ? TEXT("") : TEXT("  ·  "), *Res[k].Circuit, Res[k].Pos);
-	if (!Last.IsEmpty()) DrawText(TEXT("Tes derniers GP : ") + Last, FLinearColor(1, 1, 1, 0.7f), XR, Top + Tms.Num() * Row * 1.4f + 10 * Scale, Mid, S);
-	// écurie : budget, moral, réputation, actualités de l'usine ; bouton Usine
-	if (const UGPMSaveGame* G = Season->State())
-	{
-		DrawText(FString::Printf(TEXT("Budget %.1f M€ · Moral %d · Réputation %d"), G->Budget, G->Moral, G->Rep), FLinearColor(0.6f, 0.9f, 1.f), 12 * Scale, 10 * Scale, Mid, Scale * 0.85f);
-		for (int32 k = 0; k < G->News.Num() && k < 4; ++k)
-			DrawText(G->News[k], FLinearColor(0.6f, 1.f, 0.7f), XR, H - 40 * Scale - (G->News.Num() - k) * Row, Mid, S);
-	}
-	// direction : confiance et objectifs ; bilan de la dernière course
-	UGPMCareerSubsystem* Career = GI ? GI->GetSubsystem<UGPMCareerSubsystem>() : nullptr;
-	if (Career && Career->Save())
-	{
-		float By = H - 44 * Scale;
-		FString Obj;
-		for (const TPair<FString, bool>& O : Career->Objectives()) Obj += FString::Printf(TEXT("   %s %s"), O.Value ? TEXT("[OK]") : TEXT("[  ]"), *O.Key);
-		DrawText(FString::Printf(TEXT("Direction : confiance %d %% (%s)%s"), Career->Save()->Conf, *UGPMCareerSubsystem::ConfText(Career->Save()->Conf), *Obj),
-			Career->Save()->Conf < 35 ? FLinearColor(1.f, 0.45f, 0.35f) : FLinearColor(0.6f, 0.9f, 1.f), XL, By, Mid, S);
-		for (int32 k = GM->LastLines.Num() - 1; k >= 0 && k >= GM->LastLines.Num() - 3; --k) { By -= Row; DrawText(GM->LastLines[k], FLinearColor(1, 1, 1, 0.6f), XL, By - Row * 0.2f, Mid, S * 0.95f); }
-	}
-	if (Season->IsOver() && !GM->bChampShown) { DrawChamp(GM, W, H); bWasDown = true; return; }
-	if (Btn(TEXT("USINE (U)"), W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.75f, 0.12f, 0.12f))) { GM->Phase = AGPMGameMode::EPhase::Factory; bWasDown = true; return; }
-	if (Career && Career->IsCreated() && Btn(TEXT("MERCATO"), W - 360 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.15f, 0.4f, 0.75f))) { GM->OpenMercato(); bWasDown = true; return; }
-	if (Btn(TEXT("ACCUEIL"), W - 500 * Scale, 8 * Scale, 128 * Scale, 30 * Scale, FLinearColor(0.3f, 0.32f, 0.38f))) { GM->GoHome(); bWasDown = true; return; }
-	DrawCentered(Season->IsOver() ? TEXT("Entrée ou touche l'écran : saison suivante") : TEXT("Entrée ou touche l'écran : Grand Prix suivant (qualifications)"),
-		FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
-	if (bTap) { bTap = false; GM->Continue(); }
-}
-
 // Bouton tactile/souris simple : renvoie vrai au moment où on appuie dessus
 bool AGPMHUD::Clicked(float X, float Y, float BW, float BH)
 {
@@ -282,97 +139,10 @@ void AGPMHUD::DrawBtn(const FString& Label, float X, float Y, float BW, float BH
 	DrawText(Label, FLinearColor::White, X + (BW - TW) / 2, Y + (BH - TH) / 2, GEngine->GetMediumFont(), Scale);
 }
 
-// Usine (écran Recherche de garage.js) : 5 pôles en colonnes, pièces avec leur état, fiche de la pièce choisie
-void AGPMHUD::DrawFactory(AGPMGameMode* GM, float W, float H)
+void AGPMHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	DrawRect(FLinearColor(0.01f, 0.015f, 0.03f, 0.95f), 0, 0, W, H);
-	UGameInstance* GI = GetGameInstance();
-	UGPMFactorySubsystem* F = GI ? GI->GetSubsystem<UGPMFactorySubsystem>() : nullptr;
-	UGPMSeasonSubsystem* Season = GI ? GI->GetSubsystem<UGPMSeasonSubsystem>() : nullptr;
-	if (!F || !Season || F->Trees().Num() == 0) return;
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Mid = GEngine->GetMediumFont();
-	const TArray<FGPMTree>& Trees = F->Trees();
-	SelTree = FMath::Clamp(SelTree, 0, Trees.Num() - 1);
-	SelPart = FMath::Clamp(SelPart, 0, Trees[SelTree].Parts.Num() - 1);
-
-	DrawText(TEXT("USINE · RECHERCHE"), FLinearColor::White, 12 * Scale, 8 * Scale, Big, Scale * 1.1f);
-	DrawText(FString::Printf(TEXT("Budget : %.1f M€    Ateliers : %d / %d"), F->Budget(), F->Running(), F->Workshops()), FLinearColor(1.f, 0.85f, 0.2f), W * 0.45f, 12 * Scale, Mid, Scale);
-
-	// colonnes
-	const float Top = 40 * Scale, ColW = (W - 24 * Scale) / Trees.Num(), RowH = FMath::Min(22.f * Scale, (H * 0.62f - Top) / 10.f);
-	const UGPMSaveGame* G = Season->State();
-	for (int32 t = 0; t < Trees.Num(); ++t)
-	{
-		const FGPMTree& Tr = Trees[t];
-		const float X = 12 * Scale + t * ColW;
-		DrawRect(Tr.Color, X, Top, ColW - 6 * Scale, 3 * Scale);
-		DrawText(Tr.Name, Tr.Color, X, Top + 4 * Scale, Mid, Scale * 0.95f);
-		for (int32 k = 0; k < Tr.Parts.Num(); ++k)
-		{
-			const FGPMPart& P = Tr.Parts[k];
-			const float Y = Top + 22 * Scale + k * RowH;
-			const UGPMFactorySubsystem::EState St = F->StateOf(P);
-			FLinearColor Bg(1, 1, 1, 0.06f), Ink = FLinearColor(1, 1, 1, 0.5f);
-			FString Info;
-			switch (St)
-			{
-			case UGPMFactorySubsystem::EState::Owned: Bg = FLinearColor(0.1f, 0.5f, 0.2f, 0.5f); Ink = FLinearColor::White; Info = TEXT("installée"); break;
-			case UGPMFactorySubsystem::EState::Running: Bg = FLinearColor(0.6f, 0.45f, 0.05f, 0.5f); Ink = FLinearColor::White;
-				Info = FString::Printf(TEXT("%.0f j"), G ? G->DevLeft.FindRef(P.Tree) : 0.f); break;
-			case UGPMFactorySubsystem::EState::Available: Bg = FLinearColor(1, 1, 1, 0.14f); Ink = FLinearColor::White; Info = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); break;
-			case UGPMFactorySubsystem::EState::TooExpensive: Info = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); break;
-			case UGPMFactorySubsystem::EState::Busy: Info = TEXT("occupé"); break;
-			default: Info = TEXT("verrouillée"); break;
-			}
-			const bool bSel = t == SelTree && k == SelPart;
-			if (bSel) DrawRect(FLinearColor(1.f, 0.85f, 0.2f, 0.9f), X - 2 * Scale, Y - 2 * Scale, ColW - 2 * Scale, RowH);
-			DrawRect(Bg, X, Y, ColW - 6 * Scale, RowH - 4 * Scale);
-			FString Name = P.Name.Len() > 20 ? P.Name.Left(19) + TEXT("…") : P.Name;
-			DrawText(Name, Ink, X + 4 * Scale, Y + 1 * Scale, Mid, Scale * 0.72f);
-			DrawText(Info, Ink, X + ColW - 62 * Scale, Y + 1 * Scale, Mid, Scale * 0.72f);
-			if (Clicked(X, Y, ColW - 6 * Scale, RowH - 4 * Scale)) { SelTree = t; SelPart = k; }
-		}
-	}
-
-	// fiche de la pièce choisie
-	const FGPMPart& P = Trees[SelTree].Parts[SelPart];
-	const float FY = H * 0.66f;
-	DrawRect(FLinearColor(1, 1, 1, 0.07f), 12 * Scale, FY, W - 24 * Scale, H - FY - 12 * Scale);
-	DrawText(P.Name, FLinearColor::White, 22 * Scale, FY + 6 * Scale, Mid, Scale * 1.1f);
-	DrawText(P.Desc, FLinearColor(1, 1, 1, 0.7f), 22 * Scale, FY + 28 * Scale, Mid, Scale * 0.85f);
-	auto FxName = [](const FString& K) -> FString
-	{
-		return K == TEXT("vtop") ? TEXT("vitesse de pointe") : K == TEXT("acc") ? TEXT("accélération") : K == TEXT("mu") ? TEXT("adhérence")
-			: K == TEXT("brake") ? TEXT("freinage") : K == TEXT("kd") ? TEXT("appui") : K == TEXT("steer") ? TEXT("agilité")
-			: K == TEXT("fuel") ? TEXT("consommation") : K == TEXT("rel") ? TEXT("fiabilité") : K;
-	};
-	FString Fx;
-	for (const TPair<FString, float>& E : P.Fx)
-	{
-		Fx += FString::Printf(TEXT("%s%s %+.1f%s"), Fx.IsEmpty() ? TEXT("") : TEXT("   "), *FxName(E.Key), E.Key == TEXT("rel") ? E.Value : E.Value * 100.f, E.Key == TEXT("rel") ? TEXT("") : TEXT(" %"));
-	}
-	DrawText(Fx, FLinearColor(0.4f, 1.f, 0.55f), 22 * Scale, FY + 48 * Scale, Mid, Scale * 0.85f);
-	DrawText(FString::Printf(TEXT("Prix %.1f M€ · %d jours · risque d'échec %d %%"), UGPMFactorySubsystem::Price(P), UGPMFactorySubsystem::Delay(P), UGPMFactorySubsystem::FailPct(P)),
-		FLinearColor(1, 1, 1, 0.8f), 22 * Scale, FY + 68 * Scale, Mid, Scale * 0.85f);
-
-	const float BW = 190 * Scale, BH = 34 * Scale, BY = H - BH - 20 * Scale;
-	const bool bCan = F->StateOf(P) == UGPMFactorySubsystem::EState::Available;
-	DrawBtn(bCan ? TEXT("LANCER LA RECHERCHE") : TEXT("INDISPONIBLE"), W - BW - 24 * Scale, BY, BW, BH, bCan ? FLinearColor(0.75f, 0.12f, 0.12f) : FLinearColor(0.25f, 0.25f, 0.28f));
-	DrawBtn(TEXT("RETOUR"), W - 2 * BW - 34 * Scale, BY, BW * 0.7f, BH, FLinearColor(0.2f, 0.22f, 0.28f));
-	APlayerController* PC = GetOwningPlayerController();
-	const bool bBuy = Clicked(W - BW - 24 * Scale, BY, BW, BH) || (PC && PC->WasInputKeyJustPressed(EKeys::Enter));
-	if (bBuy && bCan) F->Start(P.Id);
-	if (Clicked(W - 2 * BW - 34 * Scale, BY, BW * 0.7f, BH)) GM->Phase = AGPMGameMode::EPhase::Season;
-	// clavier : flèches pour choisir
-	if (PC)
-	{
-		if (PC->WasInputKeyJustPressed(EKeys::Left)) { SelTree = (SelTree + Trees.Num() - 1) % Trees.Num(); SelPart = 0; }
-		if (PC->WasInputKeyJustPressed(EKeys::Right)) { SelTree = (SelTree + 1) % Trees.Num(); SelPart = 0; }
-		if (PC->WasInputKeyJustPressed(EKeys::Up)) SelPart = FMath::Max(0, SelPart - 1);
-		if (PC->WasInputKeyJustPressed(EKeys::Down)) SelPart = FMath::Min(Trees[SelTree].Parts.Num() - 1, SelPart + 1);
-	}
-	DrawText(TEXT("Flèches : choisir · Entrée : lancer · U : retour"), FLinearColor(1, 1, 1, 0.5f), 22 * Scale, H - 18 * Scale, Mid, Scale * 0.75f);
+	if (UI.IsValid()) { UI->Shutdown(); UI.Reset(); }
+	Super::EndPlay(EndPlayReason);
 }
 
 void AGPMHUD::DrawHUD()
@@ -388,10 +158,6 @@ void AGPMHUD::DrawHUD()
 	if (PC && PC->WasInputKeyJustPressed(EKeys::T)) bShowTouch = !bShowTouch;
 	ReadTouches(Car);
 
-	UFont* Big = GEngine->GetLargeFont();
-	UFont* Mid = GEngine->GetMediumFont();
-	const float M = 16.f * Scale;
-
 	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
 	{
 		// appui (doigt ou clic) : position au moment où l'on touche l'écran
@@ -401,24 +167,12 @@ void AGPMHUD::DrawHUD()
 		if (PC && !bDown && PC->IsInputKeyDown(EKeys::LeftMouseButton) && PC->GetMousePosition(TX, TY)) bDown = true;
 		bTap = bDown && !bTapWas; bTapWas = bDown; TapPos = FVector2D(TX, TY);
 	}
-	if (GM)
-	{
-		// cinématiques (survol, tour d'honneur, bienvenue) : bandes noires et titres
-		if (GM->Cine == AGPMGameMode::ECine::Intro || GM->Cine == AGPMGameMode::ECine::Podium || GM->Cine == AGPMGameMode::ECine::Welcome) { DrawCine(GM, W, H); return; }
-		switch (GM->Phase)
-		{
-		case AGPMGameMode::EPhase::Home: DrawHome(GM, W, H); return;
-		case AGPMGameMode::EPhase::Setup: DrawSetup(GM, W, H); return;
-		case AGPMGameMode::EPhase::Solo: DrawSolo(GM, W, H); return;
-		case AGPMGameMode::EPhase::Settings: DrawSettings(GM, W, H); return;
-		case AGPMGameMode::EPhase::Press: DrawDialog(GM, W, H); return;
-		case AGPMGameMode::EPhase::Mercato: DrawMercato(GM, W, H); return;
-		case AGPMGameMode::EPhase::Fired: DrawFired(GM, W, H); return;
-		case AGPMGameMode::EPhase::Factory: DrawFactory(GM, W, H); return;
-		case AGPMGameMode::EPhase::Season: DrawSeason(GM, W, H); return;
-		default: break;
-		}
-	}
+	// écrans de gestion (accueil, saison, usine, mercato, presse, qualifs, résultats) : interface Slate
+	if (!UI.IsValid()) UI = MakeShared<FGPMUI>(this);
+	if (GM && UI->Update(GM)) return;
+	// cinématiques (survol, tour d'honneur, bienvenue) : bandes noires et titres
+	if (GM && (GM->Cine == AGPMGameMode::ECine::Intro || GM->Cine == AGPMGameMode::ECine::Podium || GM->Cine == AGPMGameMode::ECine::Welcome)) { DrawCine(GM, W, H); return; }
+	if (GM && GM->InMenu()) return;
 
 	DrawRace(GM, Car, W, H);
 }
