@@ -27,8 +27,19 @@ public:
 	/** Place (1 = en tête) d'une voiture au classement en direct. */
 	int32 PositionOf(const AGPMCar* C) const { return Order.IndexOfByKey(C) + 1; }
 	int32 NumCars() const { return Order.Num(); }
-	/** Secondes avant le départ (> 0 : compte à rebours, feux à l'étape 7). */
-	float StartIn = 0.f;
+	/** Départ (race.js) : feux rouges allumés un par un, extinction au bout d'un délai aléatoire. */
+	enum class EPhase : uint8 { Lights, Race, Done };
+	EPhase Phase = EPhase::Lights;
+	float LightsT = 0.f, GoAt = 5.f, Clock = 0.f, DoneT = 0.f;
+	int32 LightsOn() const { return Phase == EPhase::Lights ? FMath::Clamp(FMath::FloorToInt(LightsT / 0.8f), 0, 5) : 0; }
+	int32 TotalLaps = 5;
+	float LapEstimate = 90.f;
+	const TArray<AGPMCar*>& Standings() const { return Order; }
+	/** Temps (ou estimation) à l'arrivée : arrivés au temps réel, les autres d'après leur retard. */
+	float ResultTime(const AGPMCar* C) const;
+	/** Recommencer la course (Entrée, ou toucher l'écran des résultats). */
+	void Restart() { PlaceCar(); }
+	static constexpr int32 Points[10] = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
 
 private:
 	UPROPERTY() TObjectPtr<AGPMTrack> Track;

@@ -27,6 +27,11 @@ private:
 	void DrawButton(const FButton& B, bool bDown);
 	void DrawMiniMap(class AGPMCar* Car, FVector2D Origin, float Size);
 	FString Chrono(float Seconds) const;
+	FString Gap(float Seconds) const;
+	void DrawCentered(const FString& Text, FLinearColor Color, float W, float Y, class UFont* Font, float S);
+	void DrawLights(int32 On, float W);
+	void DrawResults(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
+	bool bWasDown = true;
 
 	FButton Left, Right, Gas, Brake;
 	bool bLeft = false, bRight = false, bGas = false, bBrake = false;

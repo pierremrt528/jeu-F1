@@ -40,7 +40,7 @@ Règles communes à toutes les étapes :
 ## Étape 6 — IA des pilotes 🟡 (19 IA, poursuite pure, dépassements, aspiration, contacts, classement faits ; mode « cinématique » lointain à faire)
 **Prompt :** « Porte `js/ai.js` : `UGPMDriverAI` (composant) qui pilote un `AGPMCar` par poursuite pure sur la trajectoire de la spline, profil de vitesse × niveau du pilote × difficulté (`DIFFS`), dépassements, défense, aspiration, `yieldTo` (statut N°2). 19 IA + le joueur, ABS et antipatinage pour les IA. Optimisation : au-delà de 150 m de la caméra, IA en mode « cinématique » (déplacement sur la spline sans physique complète). »
 
-## Étape 7 — Week-end de course
+## Étape 7 — Week-end de course 🟡 (feux, nombre de tours, arrivée, résultats et points faits ; qualifs, secteurs, voiture de sécurité, simulation à faire)
 **Prompt :** « Porte `js/race.js`, `js/qsession.js` et `js/safety.js` : grille, feux de départ, tours et secteurs, classement en direct, collisions et pénalités, qualifications jouées (tour lancé, tour des temps des 20 pilotes, secteurs violet/vert/jaune), voiture de sécurité, résultats. Course simulée sans rendu (`simulate()`) pour « Simuler la course ». Paramètres de test en console : `GPM.Tours`, `GPM.Meteo`, `GPM.SC`. »
 
 ## Étape 8 — Pneus, carburant, stands, météo, dégâts

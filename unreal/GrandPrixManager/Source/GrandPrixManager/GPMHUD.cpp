@@ -93,6 +93,63 @@ void AGPMHUD::DrawMiniMap(AGPMCar* Car, FVector2D O, float Size)
 	DrawRect(HudAccent, C.X - 4 * Scale, C.Y - 4 * Scale, 8 * Scale, 8 * Scale);
 }
 
+void AGPMHUD::DrawCentered(const FString& Text, FLinearColor Color, float W, float Y, UFont* Font, float S)
+{
+	float TW, TH;
+	GetTextSize(Text, TW, TH, Font, S);
+	DrawText(Text, Color, (W - TW) / 2, Y, Font, S);
+}
+
+// Feux de départ : 5 colonnes qui s'allument en rouge une par une, puis s'éteignent toutes au départ
+void AGPMHUD::DrawLights(int32 On, float W)
+{
+	const float R = 26.f * Scale, Sp = 14.f * Scale, Total = 5 * R * 2 + 4 * Sp, X0 = (W - Total) / 2, Y0 = 92.f * Scale;
+	DrawRect(FLinearColor(0.02f, 0.02f, 0.02f, 0.85f), X0 - Sp, Y0 - Sp, Total + 2 * Sp, R * 2 + 2 * Sp);
+	for (int32 k = 0; k < 5; ++k)
+		DrawRect(k < On ? FLinearColor(1.f, 0.05f, 0.05f) : FLinearColor(0.15f, 0.04f, 0.04f), X0 + k * (R * 2 + Sp), Y0, R * 2, R * 2);
+}
+
+FString AGPMHUD::Gap(float S) const
+{
+	return FString::Printf(TEXT("+%.3f"), S);
+}
+
+// Résultats (comme l'écran de résultats du jeu web) : place, pilote, écurie, écart, meilleur tour, points
+void AGPMHUD::DrawResults(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
+{
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.72f), 0, 0, W, H);
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Mid = GEngine->GetMediumFont();
+	DrawCentered(TEXT("RÉSULTATS"), FLinearColor::White, W, 10 * Scale, Big, Scale * 1.3f);
+	const TArray<AGPMCar*>& Order = GM->Standings();
+	const float Row = FMath::Min(15.5f * Scale, (H - 70 * Scale) / FMath::Max(1, Order.Num()));
+	const float X0 = FMath::Max(10.f, W / 2 - 330 * Scale), Y0 = 46 * Scale, S = Row / 16.f;
+	const float Lead = Order.Num() ? GM->ResultTime(Order[0]) : 0.f;
+	for (int32 k = 0; k < Order.Num(); ++k)
+	{
+		const AGPMCar* C = Order[k];
+		const float Y = Y0 + k * Row;
+		const FLinearColor Ink = C == Car ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor::White;
+		if (C == Car) DrawRect(FLinearColor(1, 1, 1, 0.1f), X0 - 6, Y, 660 * Scale, Row);
+		DrawRect(C->TeamColor, X0, Y + Row * 0.15f, 4 * Scale, Row * 0.7f);
+		DrawText(FString::Printf(TEXT("%d"), k + 1), Ink, X0 + 10 * Scale, Y, Mid, S);
+		DrawText(C->DriverName, Ink, X0 + 40 * Scale, Y, Mid, S);
+		DrawText(C->TeamName, FLinearColor(1, 1, 1, 0.65f), X0 + 220 * Scale, Y, Mid, S);
+		const float Tm = GM->ResultTime(C);
+		DrawText(k == 0 ? Chrono(Tm) : Gap(Tm - Lead) + (C->bFinished ? TEXT("") : TEXT(" (est.)")), Ink, X0 + 390 * Scale, Y, Mid, S);
+		DrawText(Chrono(C->BestLap), FLinearColor(0.75f, 0.4f, 1.f), X0 + 510 * Scale, Y, Mid, S);
+		if (k < 10) DrawText(FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]), Ink, X0 + 600 * Scale, Y, Mid, S);
+	}
+	DrawCentered(TEXT("Entrée ou touche l'écran : recommencer"), FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
+
+	// toucher l'écran (ou clic) : recommencer
+	APlayerController* PC = GetOwningPlayerController();
+	float TX, TY; bool bDown = false;
+	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
+	if (bDown && !bWasDown) GM->Restart();
+	bWasDown = bDown;
+}
+
 void AGPMHUD::DrawHUD()
 {
 	Super::DrawHUD();
@@ -119,29 +176,26 @@ void AGPMHUD::DrawHUD()
 	if (Car->bAbsOn || Car->bTcOn)
 		DrawText(Car->bAbsOn ? TEXT("ABS") : TEXT("TC"), FLinearColor(1.f, 0.8f, 0.1f), M + 10 * Scale, M + 74 * Scale, Mid, Scale);
 
+	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
+
 	// Tour et chronos (en haut au centre)
 	const float CW = 230 * Scale, CX = (W - CW) / 2;
 	DrawRect(HudPanel, CX, M, CW, 58 * Scale);
-	DrawText(FString::Printf(TEXT("TOUR %d"), FMath::Max(1, Car->Lap)), FLinearColor::White, CX + 10 * Scale, M + 4 * Scale, Mid, Scale * 1.1f);
-	DrawText(Chrono(Car->LapTime()), FLinearColor::White, CX + 100 * Scale, M + 4 * Scale, Mid, Scale * 1.1f);
+	DrawText(FString::Printf(TEXT("TOUR %d/%d"), FMath::Clamp(Car->Lap, 1, GM ? GM->TotalLaps : 99), GM ? GM->TotalLaps : 0), FLinearColor::White, CX + 10 * Scale, M + 4 * Scale, Mid, Scale * 1.1f);
+	DrawText(Chrono(Car->LapTime()), FLinearColor::White, CX + 115 * Scale, M + 4 * Scale, Mid, Scale * 1.1f);
 	DrawText(TEXT("Meilleur"), FLinearColor(1, 1, 1, 0.7f), CX + 10 * Scale, M + 30 * Scale, Mid, Scale);
-	DrawText(Chrono(Car->BestLap), FLinearColor(0.75f, 0.4f, 1.f), CX + 100 * Scale, M + 30 * Scale, Mid, Scale);
+	DrawText(Chrono(Car->BestLap), FLinearColor(0.75f, 0.4f, 1.f), CX + 115 * Scale, M + 30 * Scale, Mid, Scale);
 
-	// Place et compte à rebours
-	if (const AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>())
+	// Place, feux de départ, résultats
+	if (GM && GM->NumCars() > 0)
 	{
-		if (GM->NumCars() > 0)
-		{
-			DrawRect(HudPanel, M, M + 96 * Scale, 110 * Scale, 44 * Scale);
-			DrawText(FString::Printf(TEXT("P%d/%d"), GM->PositionOf(Car), GM->NumCars()), FLinearColor::White, M + 10 * Scale, M + 98 * Scale, Big, Scale * 1.2f);
-		}
-		if (GM->StartIn > 0.f)
-		{
-			const FString Cd = GM->StartIn > 3.f ? FString(TEXT("Prêts…")) : FString::FromInt(FMath::CeilToInt(GM->StartIn));
-			float TW, TH;
-			GetTextSize(Cd, TW, TH, Big, Scale * 3.f);
-			DrawText(Cd, HudAccent, (W - TW) / 2, H * 0.32f, Big, Scale * 3.f);
-		}
+		DrawRect(HudPanel, M, M + 96 * Scale, 110 * Scale, 44 * Scale);
+		DrawText(FString::Printf(TEXT("P%d/%d"), GM->PositionOf(Car), GM->NumCars()), FLinearColor::White, M + 10 * Scale, M + 98 * Scale, Big, Scale * 1.2f);
+		if (GM->Phase == AGPMGameMode::EPhase::Lights) DrawLights(GM->LightsOn(), W);
+		else if (GM->Clock < 1.5f) DrawCentered(TEXT("GO !"), FLinearColor(0.2f, 1.f, 0.3f), W, H * 0.3f, Big, Scale * 3.f);
+		if (Car->bFinished && GM->Phase != AGPMGameMode::EPhase::Done)
+			DrawCentered(FString::Printf(TEXT("Arrivée : P%d"), GM->PositionOf(Car)), FLinearColor::White, W, H * 0.3f, Big, Scale * 2.f);
+		if (GM->Phase == AGPMGameMode::EPhase::Done) { DrawResults(GM, Car, W, H); return; }
 	}
 
 	// Mini-carte (en haut à droite)

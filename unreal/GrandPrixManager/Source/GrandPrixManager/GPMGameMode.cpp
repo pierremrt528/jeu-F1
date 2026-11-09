@@ -84,6 +84,8 @@ void AGPMGameMode::PlaceCar()
 				C->SetLivery(Team.Color, Team.Accent);
 				C->Perf = Team.Perf;
 				C->DriverName = Team.Drivers[d].Name;
+				C->TeamName = Team.Name;
+				C->TeamColor = Team.Color;
 				if (!Car && (Team.Drivers[d].bPlayer || &Team == &Data->Teams[0])) Car = C;
 				else C->MakeAI(Team.Drivers[d].Skill);   // difficulté (DIFFS.k) : 1 en « Normal »
 				Cars.Add(C);
@@ -92,8 +94,8 @@ void AGPMGameMode::PlaceCar()
 		APawn* Old = PC->GetPawn();
 		PC->Possess(Car);
 		if (Old && Old != Car) Old->Destroy();
-		if (UGameplayStatics::HasOption(OptionsString, TEXT("demo"))) Car->bPlayerControlled = false;   // pilote automatique
 	}
+	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));   // ?demo : pilote automatique
 
 	// Grille : IA rangées par niveau, le joueur en milieu de grille (?grille=N pour choisir)
 	TArray<AGPMCar*> Grid;
@@ -109,7 +111,15 @@ void AGPMGameMode::PlaceCar()
 		Grid[k]->bHold = true;
 	}
 	Order = Grid;
-	StartIn = 4.f;
+	for (AGPMCar* C : Grid) C->BestLap = 0.f;
+	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f;
+	GoAt = 4.2f + 0.4f + FMath::FRand() * 0.8f;
+	// Nombre de tours : format Sprint (~11 min, lapsFor de strategy.js), ou ?tours=N
+	LapEstimate = 0.f;
+	for (int32 i = 0; i < T->AISpeed.Num(); ++i) LapEstimate += 2.f / FMath::Max(5.f, T->AISpeed[i]);
+	LapEstimate *= 1.02f / FMath::Max(0.9f, Car->Perf);
+	const FString ToursOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("tours"));
+	TotalLaps = ToursOpt.IsEmpty() ? FMath::Clamp(FMath::RoundToInt(11.f * 60.f / (LapEstimate * 1.12f)), 3, 40) : FMath::Max(1, FCString::Atoi(*ToursOpt));
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 }
 
@@ -117,15 +127,43 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (Cars.Num() == 0) return;
-	if (StartIn > 0.f)
+	if (Phase == EPhase::Lights)
 	{
-		StartIn -= DeltaSeconds;
-		if (StartIn <= 0.f) for (AGPMCar* C : Cars) C->bHold = false;
+		LightsT += DeltaSeconds;
+		if (LightsT >= GoAt) { Phase = EPhase::Race; for (AGPMCar* C : Cars) C->bHold = false; }
 	}
+	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
 	Aspiration(DeltaSeconds);
 	Collide();
-	// classement : tours puis distance parcourue
-	Order.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.Progress() > B.Progress(); });
+	// arrivée : tour de plus que la distance de course
+	for (AGPMCar* C : Cars)
+		if (!C->bFinished && C->Lap > TotalLaps) { C->bFinished = true; C->FinishTime = Clock; }
+	if (Phase == EPhase::Race && Car && Car->bFinished)
+	{
+		Car->bPlayerControlled = false;   // le pilote automatique ramène la voiture
+		DoneT += DeltaSeconds;
+		bool bAll = true;
+		for (AGPMCar* C : Cars) bAll &= C->bFinished;
+		if (DoneT > 4.f || bAll) Phase = EPhase::Done;
+	}
+	// classement : arrivés par temps, puis tours et distance parcourue
+	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
+	{
+		if (A.bFinished != B.bFinished) return A.bFinished;
+		if (A.bFinished) return A.FinishTime < B.FinishTime;
+		return A.Progress() > B.Progress();
+	});
+	if (Phase == EPhase::Done)
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Restart();
+}
+
+float AGPMGameMode::ResultTime(const AGPMCar* C) const
+{
+	if (C->bFinished) return C->FinishTime;
+	const FGPMTrackData* T = C->GetTrack();
+	const float Total = (TotalLaps + 1) * (T ? T->WX.Num() : 1);
+	return Clock * Total / FMath::Max(1.f, C->Progress());
 }
 
 // Aspiration : voiture devant à moins de 45 m, alignée ; dans les 30 derniers mètres l'air sale coûte de l'appui

@@ -73,7 +73,10 @@ public:
 	void DriveAI(float Dt);
 	/** Passe la voiture en IA (pas de caméra ni de lecture du clavier). */
 	void MakeAI(float InSkill);
-	FString DriverName;
+	FString DriverName, TeamName;
+	FLinearColor TeamColor = FLinearColor::White;
+	bool bFinished = false;                // drapeau à damier passé
+	float FinishTime = 0.f;
 	float Skill = 1.f;                     // niveau du pilote × difficulté
 	float Lane = 0.f, LaneBias = 0.f, PassTimer = 0.f, PassSide = 1.f, YieldCd = 0.f, YieldRun = 0.f;
 	bool bYielding = false;
