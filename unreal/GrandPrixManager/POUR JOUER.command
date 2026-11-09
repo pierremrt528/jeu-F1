@@ -18,4 +18,4 @@ if [ ${PIPESTATUS[0]} -ne 0 ]; then
   read -p "Entrée pour fermer"; exit 1
 fi
 echo "✅ Lancement du jeu… (flèches ou ZQSD pour conduire, C : caméra, R : replacer, Échap puis Cmd+Q pour quitter)"
-"$UE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$P" -game -windowed -ResX=1266 -ResY=585 -log 2>&1 | tee Saved/jeu.log | grep --line-buffered "LogGPM"
+"$UE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$P" -game -windowed -ResX=1266 -ResY=585 -log -abslog="$PWD/Saved/ue.log" 2>&1 | tee Saved/jeu.log | grep --line-buffered "LogGPM"
