@@ -133,6 +133,17 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	ReadFloats(O, TEXT("WR"), T.WallRight);
 	ReadFloats(O, TEXT("C"), T.Curvature);
 	ReadFloats(O, TEXT("V"), T.AISpeed);
+	if (const TSharedPtr<FJsonObject>* Pit = nullptr; O->TryGetObjectField(TEXT("pit"), Pit))
+	{
+		double D;
+		if ((*Pit)->TryGetNumberField(TEXT("half"), D)) T.PitHalf = D;
+		if ((*Pit)->TryGetNumberField(TEXT("lat"), D)) T.PitLat = D;
+		if ((*Pit)->TryGetNumberField(TEXT("loss"), D)) T.PitLoss = D;
+		if ((*Pit)->TryGetNumberField(TEXT("e0"), D)) T.PitE0 = int32(D);
+		if ((*Pit)->TryGetNumberField(TEXT("e1"), D)) T.PitE1 = int32(D);
+		if ((*Pit)->TryGetNumberField(TEXT("x0"), D)) T.PitX0 = int32(D);
+		if ((*Pit)->TryGetNumberField(TEXT("x1"), D)) T.PitX1 = int32(D);
+	}
 	{
 		// trajectoire : courbure brute lissée sur ±22 points, −260 × courbure, bornée (comme track.js)
 		const int32 N = X.Num();

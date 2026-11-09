@@ -47,7 +47,7 @@ void AGPMCar::DriveAI(float Dt)
 	float Gap = 1e9f;
 	for (AGPMCar* O : Field)
 	{
-		if (!O || O == this) continue;
+		if (!O || O == this || O->PitPhase) continue;
 		const float D = ((O->Idx - Idx + N) % N) * SplineDS;
 		if (D > 0 && D < 40 && FMath::Abs(O->Lat - Lat) < 2.6f && D < Gap) { Gap = D; Ahead = O; }
 	}

@@ -39,6 +39,12 @@ public:
 	float ResultTime(const AGPMCar* C) const;
 	/** Recommencer la course (Entrée, ou toucher l'écran des résultats). */
 	void Restart() { PlaceCar(); }
+	/** Stand : demander / annuler l'arrêt du joueur (touche B ou bouton STAND). */
+	void ToggleBox();
+	/** Message radio du muret affiché quelques secondes. */
+	FString Radio; float RadioT = 0.f;
+	void Say(const FString& Msg) { Radio = Msg; RadioT = 5.f; }
+	static FString TyreName(TCHAR T) { return T == 'S' ? TEXT("tendres") : T == 'H' ? TEXT("durs") : T == 'W' ? TEXT("pluie") : TEXT("mediums"); }
 	static constexpr int32 Points[10] = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
 
 private:
@@ -50,4 +56,7 @@ private:
 	void PlaceCar();
 	void Aspiration(float Dt);
 	void Collide();
+	void Strategy(float Dt);
+	TCHAR PickTyre(int32 LapsLeft) const;
+	bool bTyreWarn = false;
 };

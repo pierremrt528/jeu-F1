@@ -84,6 +84,20 @@ public:
 	TArray<AGPMCar*> Field;                // toutes les voitures de la course (rempli par le mode de jeu)
 	float Slipstream = 0.f, Wake = 0.f;    // aspiration (vitesse de pointe) et air sale (appui), calculés par le mode de jeu
 	bool bHold = false;                    // avant le départ : freins serrés
+
+	/** Pneus et carburant (strategy.js) : gomme S/M/H, usure 0 (neuf) → 1 (à plat), masse du carburant. */
+	TCHAR Tyre = 'M';
+	float Wear = 0.f, Fuel = 0.f, GripMul = 1.f, Mass = 1.f;
+	int32 Stops = 0, TeamIdx = 0;
+	bool bBox = false;                     // rentrer au stand au prochain passage
+	TCHAR NextTyre = 'H';
+	/** Voie des stands : 0 = en piste, 1 = entrée, 2 = arrêt, 3 = sortie ; PitKf = position (indice signé). */
+	int32 PitPhase = 0;
+	float PitKf = 0.f, PitStopT = 0.f;
+	void StartPit(float StopTime);
+	static float TyreGrip(TCHAR T);
+	static float TyreWpl(TCHAR T);
+	static float LifeGrip(float R);
 	float Progress() const { return Lap * (Track ? Track->WX.Num() : 1) + Idx; }
 
 	// Constantes (SPEC du jeu web) : vtop ≈ 335 km/h
@@ -95,6 +109,7 @@ protected:
 private:
 	void ReadKeyboard(float Dt);
 	void Step(float Dt);
+	void PitStep(float Dt);
 	void UpdateTransform();
 	UStaticMeshComponent* AddPart(const TCHAR* Name, const TCHAR* Shape, FVector Loc, FVector Scale, bool bAccent);
 

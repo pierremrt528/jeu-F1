@@ -29,11 +29,12 @@ void AGPMHUD::Layout(float W, float H)
 	Right = { FVector2D(M * 2 + B, Y), FVector2D(B, B), TEXT(">") };
 	Gas = { FVector2D(W - M - B, Y - B * 0.35f), FVector2D(B, B * 1.35f), TEXT("GAZ") };
 	Brake = { FVector2D(W - M * 2 - B * 2, Y), FVector2D(B, B), TEXT("FREIN") };
+	Box = { FVector2D((W - B * 1.3f) / 2, H - M - B * 0.5f), FVector2D(B * 1.3f, B * 0.5f), TEXT("STAND") };
 }
 
 void AGPMHUD::ReadTouches(AGPMCar* Car)
 {
-	bLeft = bRight = bGas = bBrake = false;
+	bLeft = bRight = bGas = bBrake = bBoxBtn = false;
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !bShowTouch) { Car->TouchSteer = 0.f; Car->TouchGas = Car->TouchBrake = 0.f; Car->bTouchActive = false; return; }
 	auto Inside = [](const FButton& B, float X, float Y) { return X >= B.Pos.X && X <= B.Pos.X + B.Size.X && Y >= B.Pos.Y && Y <= B.Pos.Y + B.Size.Y; };
@@ -48,7 +49,11 @@ void AGPMHUD::ReadTouches(AGPMCar* Car)
 		bRight |= Inside(Right, X, Y);
 		bGas |= Inside(Gas, X, Y);
 		bBrake |= Inside(Brake, X, Y);
+		bBoxBtn |= Inside(Box, X, Y);
 	}
+	if (bBoxBtn && !bBoxWas)
+		if (AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>()) GM->ToggleBox();
+	bBoxWas = bBoxBtn;
 	Car->bTouchActive = bAny;
 	Car->TouchSteer = (bRight ? 1.f : 0.f) - (bLeft ? 1.f : 0.f);
 	Car->TouchGas = bGas ? 1.f : 0.f;
@@ -191,6 +196,13 @@ void AGPMHUD::DrawHUD()
 	{
 		DrawRect(HudPanel, M, M + 96 * Scale, 110 * Scale, 44 * Scale);
 		DrawText(FString::Printf(TEXT("P%d/%d"), GM->PositionOf(Car), GM->NumCars()), FLinearColor::White, M + 10 * Scale, M + 98 * Scale, Big, Scale * 1.2f);
+		// pneus : gomme et vie restante (vert > 60 %, jaune > 40 %, rouge dessous)
+		const float Life = FMath::Max(0.f, 1.f - Car->Wear);
+		const FLinearColor TyreCol = Life > 0.6f ? FLinearColor(0.3f, 1.f, 0.4f) : Life > 0.4f ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor(1.f, 0.25f, 0.2f);
+		DrawRect(HudPanel, M, M + 146 * Scale, 110 * Scale, 30 * Scale);
+		DrawText(FString::Printf(TEXT("%c  %d %%%s"), Car->Tyre, FMath::RoundToInt(Life * 100), Car->bBox ? TEXT("  BOX") : TEXT("")), TyreCol, M + 10 * Scale, M + 150 * Scale, Mid, Scale);
+		if (Car->PitPhase) DrawCentered(Car->PitPhase == 2 ? TEXT("ARRÊT AU STAND") : TEXT("LIMITEUR 80 km/h"), FLinearColor(1.f, 0.85f, 0.2f), W, H * 0.24f, Mid, Scale * 1.4f);
+		if (GM->RadioT > 0.f) DrawCentered(GM->Radio, FLinearColor(0.6f, 0.9f, 1.f), W, M + 66 * Scale, Mid, Scale * 1.05f);
 		if (GM->Phase == AGPMGameMode::EPhase::Lights) DrawLights(GM->LightsOn(), W);
 		else if (GM->Clock < 1.5f) DrawCentered(TEXT("GO !"), FLinearColor(0.2f, 1.f, 0.3f), W, H * 0.3f, Big, Scale * 3.f);
 		if (Car->bFinished && GM->Phase != AGPMGameMode::EPhase::Done)
@@ -209,9 +221,10 @@ void AGPMHUD::DrawHUD()
 		DrawButton(Right, bRight);
 		DrawButton(Brake, bBrake);
 		DrawButton(Gas, bGas);
+		DrawButton(Box, bBoxBtn || Car->bBox);
 	}
 	else
 	{
-		DrawText(TEXT("Flèches/ZQSD : conduire   C : caméra   R : replacer   T : boutons tactiles"), FLinearColor(1, 1, 1, 0.6f), M, H - 28 * Scale, Mid, Scale * 0.9f);
+		DrawText(TEXT("Flèches/ZQSD : conduire   C : caméra   B : stand   R : replacer   T : boutons tactiles"), FLinearColor(1, 1, 1, 0.6f), M, H - 28 * Scale, Mid, Scale * 0.9f);
 	}
 }

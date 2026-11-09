@@ -86,6 +86,7 @@ void AGPMGameMode::PlaceCar()
 				C->DriverName = Team.Drivers[d].Name;
 				C->TeamName = Team.Name;
 				C->TeamColor = Team.Color;
+				C->TeamIdx = Data->Teams.IndexOfByPredicate([&Team](const FGPMTeam& X) { return &X == &Team; });
 				if (!Car && (Team.Drivers[d].bPlayer || &Team == &Data->Teams[0])) Car = C;
 				else C->MakeAI(Team.Drivers[d].Skill);   // difficulté (DIFFS.k) : 1 en « Normal »
 				Cars.Add(C);
@@ -120,6 +121,18 @@ void AGPMGameMode::PlaceCar()
 	LapEstimate *= 1.02f / FMath::Max(0.9f, Car->Perf);
 	const FString ToursOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("tours"));
 	TotalLaps = ToursOpt.IsEmpty() ? FMath::Clamp(FMath::RoundToInt(11.f * 60.f / (LapEstimate * 1.12f)), 3, 40) : FMath::Max(1, FCString::Atoi(*ToursOpt));
+	// pneus et carburant au départ : assez d'essence pour la course (+3 %), gomme selon la durée
+	const FString TyreOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("pneus"));
+	const float Km = T->WX.Num() * 2.f / 1000.f;
+	for (AGPMCar* C : Grid)
+	{
+		C->Fuel = FMath::Min(110.f, (TotalLaps + 0.3f) * Km * 1.7f * 1.03f);
+		C->Mass = 1.f + C->Fuel / 750.f;
+		C->Tyre = FMath::FRand() < 0.4f ? 'S' : 'M';
+		C->GripMul = AGPMCar::TyreGrip(C->Tyre);
+	}
+	Car->Tyre = TyreOpt.IsEmpty() ? 'M' : TCHAR(FChar::ToUpper(TyreOpt[0]));
+	bTyreWarn = false; RadioT = 0.f;
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 }
 
@@ -135,6 +148,10 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
 	Aspiration(DeltaSeconds);
 	Collide();
+	if (Phase == EPhase::Race) Strategy(DeltaSeconds);
+	RadioT -= DeltaSeconds;
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		if (PC->WasInputKeyJustPressed(EKeys::B)) ToggleBox();
 	// arrivée : tour de plus que la distance de course
 	for (AGPMCar* C : Cars)
 		if (!C->bFinished && C->Lap > TotalLaps) { C->bFinished = true; C->FinishTime = Clock; }
@@ -158,6 +175,63 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Restart();
 }
 
+// gomme la plus tendre qui tient jusqu'à l'arrivée sans passer sous 40 % (MAXW = 0,6)
+TCHAR AGPMGameMode::PickTyre(int32 LapsLeft) const
+{
+	for (TCHAR T : { TCHAR('S'), TCHAR('M') }) if (LapsLeft * AGPMCar::TyreWpl(T) * 1.05f <= 0.6f) return T;
+	return 'H';
+}
+
+void AGPMGameMode::ToggleBox()
+{
+	if (!Car || Car->PitPhase || Phase == EPhase::Done) return;
+	Car->bBox = !Car->bBox;
+	if (Car->bBox)
+	{
+		Car->NextTyre = PickTyre(TotalLaps - Car->Lap);
+		Say(FString::Printf(TEXT("Box à la fin du tour : %s."), *TyreName(Car->NextTyre)));
+	}
+	else Say(TEXT("Arrêt annulé."));
+}
+
+// Usure des pneus, carburant, arrêts (updateStrategy de strategy.js, sans la météo)
+void AGPMGameMode::Strategy(float Dt)
+{
+	for (AGPMCar* C : Cars)
+	{
+		const FGPMTrackData* T = C->GetTrack();
+		if (!T) continue;
+		const float Len = T->WX.Num() * 2.f, Dist = FMath::Abs(C->V) * Dt;
+		if (!C->PitPhase)
+		{
+			// usure : distance, glissades (fortement), sorties de piste
+			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
+			const float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f);
+			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
+			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f);
+		}
+		C->Mass = 1.f + C->Fuel / 750.f;
+		C->GripMul = AGPMCar::TyreGrip(C->Tyre) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->Wear >= 1.f ? 0.7f : 1.f);
+		if (C == Car && !bTyreWarn && C->Wear > 0.6f) { bTyreWarn = true; Say(TEXT("Muret : tes pneus passent sous 40 %, ils n'ont presque plus de grip.")); }
+
+		// décision d'arrêt avant l'entrée des stands
+		const int32 K0 = T->PitK(C->Idx), Left = TotalLaps - C->Lap;
+		const bool bZone = K0 > T->PitE0 - 30 && K0 < T->PitE0 - 10;
+		if (!bZone || C->PitPhase || C->Lap < 1 || Left < 1 || C->bFinished) continue;
+		const bool bAuto = C != Car || !C->bPlayerControlled;
+		if (bAuto && !C->bBox && (1.f - C->Wear) - Left * AGPMCar::TyreWpl(C->Tyre) * 1.05f < 0.38f)
+		{
+			C->bBox = true;
+			C->NextTyre = PickTyre(Left);
+		}
+		if (C->bBox)
+		{
+			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f));
+			if (C == Car) { bTyreWarn = false; Say(FString::Printf(TEXT("Muret : box, box ! Pneus %s."), *TyreName(C->NextTyre))); }
+		}
+	}
+}
+
 float AGPMGameMode::ResultTime(const AGPMCar* C) const
 {
 	if (C->bFinished) return C->FinishTime;
@@ -175,7 +249,7 @@ void AGPMGameMode::Aspiration(float Dt)
 		const float Fx = FMath::Sin(C->Heading), Fz = FMath::Cos(C->Heading);
 		for (AGPMCar* O : Cars)
 		{
-			if (O == C) continue;
+			if (O == C || O->PitPhase) continue;
 			const float Dx = O->X - C->X, Dz = O->Z - C->Z, Along = Dx * Fx + Dz * Fz;
 			if (Along < 4 || Along > 45) continue;
 			const float Side = FMath::Abs(Dx * -Fz + Dz * Fx);
@@ -196,6 +270,7 @@ void AGPMGameMode::Collide()
 		{
 			AGPMCar& A = *Cars[a];
 			AGPMCar& B = *Cars[b];
+			if (A.PitPhase || B.PitPhase) continue;
 			if (FMath::Abs(A.X - B.X) > 6 || FMath::Abs(A.Z - B.Z) > 6 || FMath::Abs(A.Y - B.Y) > 3) continue;
 			const float FaX = FMath::Sin(A.Heading), FaZ = FMath::Cos(A.Heading), FbX = FMath::Sin(B.Heading), FbZ = FMath::Cos(B.Heading);
 			for (float Pa : Pts) for (float Pb : Pts)

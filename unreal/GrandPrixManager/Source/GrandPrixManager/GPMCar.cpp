@@ -122,6 +122,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	V = Beta = Ax = Ay = SpinT = 0.f;
 	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
 	bFinished = false; FinishTime = 0.f;
+	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	UpdateTransform();
 }
 
@@ -177,7 +178,7 @@ void AGPMCar::Tick(float DeltaSeconds)
 	while (Accum >= PhysDt)
 	{
 		const int32 Prev = Idx;
-		Step(PhysDt);
+		if (PitPhase) PitStep(PhysDt); else Step(PhysDt);
 		Accum -= PhysDt;
 		RaceTime += PhysDt;
 		// Ligne d'arrivée = point 0 : passage de la fin du tour au début, dans le bon sens
@@ -215,7 +216,7 @@ void AGPMCar::Step(float Dt)
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
 	const float Aero = Kd * (1.f - 0.3f * Wake) * V * V;
-	const float MuB = Mu * Grip;
+	const float MuB = Mu * Grip * GripMul / (1.f + (Mass - 1.f) * 0.25f);
 	const float RollF = FMath::Min(1.f, FMath::Abs(Ay) / 45.f);
 	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
 	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
@@ -225,7 +226,7 @@ void AGPMCar::Step(float Dt)
 	bLock = false; bAbsOn = bTcOn = false;
 	if (Throttle > 0 && V >= -0.5f)
 	{
-		float Ad = Throttle * Acc * Perf * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
+		float Ad = Throttle * Acc * Perf / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);
 		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * FMath::Sqrt(1 - Uy * Uy));
 		if (Ad > Room)
@@ -240,7 +241,7 @@ void AGPMCar::Step(float Dt)
 	{
 		if (V > 0.3f)
 		{
-			float Ab = Brake * (Brake0 + BrakeK * V * V);
+			float Ab = Brake * (Brake0 + BrakeK * V * V) / FMath::Sqrt(Mass);
 			const float Lim = 1.1f * CapF, Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapF);
 			const float Room = Lim * FMath::Sqrt(1 - Uy * Uy);
 			if (Ab > Room)

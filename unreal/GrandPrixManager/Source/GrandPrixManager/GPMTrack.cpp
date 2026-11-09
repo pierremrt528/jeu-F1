@@ -88,7 +88,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		return C > KerbCurvature;
 	};
 
-	FSection Road, Kerbs, Green, Walls, Floor, Start;
+	FSection Road, Kerbs, Green, Walls, Floor, Start, Pit;
 	float MinZ = TNumericLimits<float>::Max();
 	float Dist = 0.f;
 
@@ -119,7 +119,9 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const FVector WLb = P - R * DL, WRb = P + R * DR;
 		Walls.Add(WLb, R, FVector2D(0, U), Wall);
 		Walls.Add(WLb + Up * WallH, R, FVector2D(1, U), Wall);
-		Walls.Add(WRb + Up * WallH, -R, FVector2D(0, U), Wall);
+		const int32 PK = Track->PitK(j);
+		const bool bPitOpen = PK >= Track->PitE0 && PK <= Track->PitX1;   // mur droit ouvert le long de la voie des stands
+		Walls.Add(WRb + Up * (bPitOpen ? 0.f : WallH), -R, FVector2D(0, U), Wall);
 		Walls.Add(WRb, -R, FVector2D(1, U), Wall);
 		if (i > 0) { const int32 b = Walls.V.Num() - 8; Walls.Quad(b, b + 1, b + 4, b + 5); Walls.Quad(b + 2, b + 3, b + 6, b + 7); }
 	}
@@ -141,6 +143,18 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 			Kerbs.Add(Side < 0 ? B0 : B1, Up, FVector2D(1, 1), C);
 			Kerbs.Quad(a, a + 1, a + 2, a + 3);
 		}
+	}
+
+	// Voie des stands : bande d'asphalte de 8 m qui s'écarte de la piste (côté droit), plus des marques blanches aux boxes
+	for (int32 K = Track->PitE0; K <= Track->PitX1; ++K)
+	{
+		const int32 i = ((K % N) + N) % N;
+		const FVector P = Track->Points[i] + Up * 2.f, R = Right(i);
+		const float L = Track->PitLatAt(K) * 100.f;
+		const FLinearColor C = (K >= -125 && K <= -125 + 9 * 13 && ((K + 125) % 13) == 0) ? KerbWhite : Asphalt;
+		Pit.Add(P + R * (L - 400.f), Up, FVector2D(0, K / 5.f), C);
+		Pit.Add(P + R * (L + 400.f), Up, FVector2D(1, K / 5.f), C);
+		if (K > Track->PitE0) { const int32 b = Pit.V.Num() - 4; Pit.Quad(b, b + 1, b + 2, b + 3); }
 	}
 
 	// Ligne de départ (point 0) : bande blanche de 1 m
@@ -177,7 +191,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 			if (FVector::DotProduct(FVector::CrossProduct(B - A, C - A), S.N[S.I[k]]) > 0.f) Swap(S.I[k + 1], S.I[k + 2]);
 		}
 	};
-	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start }) FixWinding(*S);
+	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start, &Pit }) FixWinding(*S);
 
 	const TArray<FProcMeshTangent> NoTangents;
 	auto Make = [&](int32 Index, FSection& S, UMaterialInterface* M, bool bCollide)
@@ -191,6 +205,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	Make(3, Walls, WallMaterial, true);
 	Make(4, Floor, GrassMaterial, true);
 	Make(5, Start, KerbMaterial, false);
+	Make(6, Pit, AsphaltMaterial, false);
 
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s construit : %d points, %d triangles"), *Track->Name, N,
 		(Road.I.Num() + Kerbs.I.Num() + Green.I.Num() + Walls.I.Num() + 6) / 3);

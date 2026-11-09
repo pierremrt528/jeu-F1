@@ -43,7 +43,7 @@ Règles communes à toutes les étapes :
 ## Étape 7 — Week-end de course 🟡 (feux, nombre de tours, arrivée, résultats et points faits ; qualifs, secteurs, voiture de sécurité, simulation à faire)
 **Prompt :** « Porte `js/race.js`, `js/qsession.js` et `js/safety.js` : grille, feux de départ, tours et secteurs, classement en direct, collisions et pénalités, qualifications jouées (tour lancé, tour des temps des 20 pilotes, secteurs violet/vert/jaune), voiture de sécurité, résultats. Course simulée sans rendu (`simulate()`) pour « Simuler la course ». Paramètres de test en console : `GPM.Tours`, `GPM.Meteo`, `GPM.SC`. »
 
-## Étape 8 — Pneus, carburant, stands, météo, dégâts
+## Étape 8 — Pneus, carburant, stands, météo, dégâts 🟡 (gommes S/M/H et usure, masse du carburant, voie des stands avec limiteur et arrêt au box, arrêts des IA, bouton STAND + radio faits ; météo, dégâts, réglages, écran d'avant-course à faire)
 **Prompt :** « Porte `js/strategy.js`, `js/prerace.js`, `js/debris.js` et `js/tuning.js` : gommes S/M/H/W (`lifeGrip`, crevaison), carburant (masse, panne sèche), modes de pilotage, stratégies `makePlans`/`riskyPlan` des IA, voie des stands (limiteur, arrêt au box), radio à 3 boutons, météo (pluie, averses, piste mouillée), ailerons qui se tordent puis se détachent (Chaos destruction légère ou mesh séparé), casse moteur selon la fiabilité, 5 réglages de voiture et parc fermé. Écran d'avant-course avec graphique d'usure. »
 
 ## Étape 9 — Graphismes mobile « haut de gamme »

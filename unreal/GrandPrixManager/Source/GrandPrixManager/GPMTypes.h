@@ -57,7 +57,19 @@ struct FGPMTrackData
 
 	// Repère du jeu web (m), pour la physique portée de js/car.js : x, z au sol, y altitude ; tangente (TX, TZ), cap H = atan2(TX, TZ)
 	TArray<float> WX, WY, WZ, TX, TZ, H;
-	TArray<float> RL;   // trajectoire de course : décalage latéral (m) vers l'intérieur des virages (track.js)
+	TArray<float> RL;
+	// Voie des stands (pitLane de track.js) : indices signés par rapport à la ligne (entrée e0→e1, sortie x0→x1), côté droit
+	float PitHalf = 7.f, PitLat = 22.f, PitLoss = 22.f;
+	int32 PitE0 = -190, PitE1 = -140, PitX0 = 70, PitX1 = 110;
+	int32 PitK(int32 i) const { const int32 N = WX.Num(); return i > N / 2 ? i - N : i; }
+	float PitLatAt(float K) const
+	{
+		auto Sm = [](float t) { t = FMath::Clamp(t, 0.f, 1.f); return t * t * (3 - 2 * t); };
+		if (K < PitE1) return PitHalf - 1 + (PitLat - PitHalf + 1) * Sm((K - PitE0) / float(PitE1 - PitE0));
+		if (K > PitX0) return PitLat - (PitLat - PitHalf + 1) * Sm((K - PitX0) / float(PitX1 - PitX0));
+		return PitLat;
+	}
+	static float PitBox(int32 TeamIdx) { return -125.f + TeamIdx * 13.f; }   // trajectoire de course : décalage latéral (m) vers l'intérieur des virages (track.js)
 
 	/** Point le plus proche autour de Idx (comme locate() de track.js). */
 	int32 Locate(float X, float Z, int32 Idx) const
