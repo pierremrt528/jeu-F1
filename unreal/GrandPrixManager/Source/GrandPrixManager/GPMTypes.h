@@ -57,6 +57,7 @@ struct FGPMTrackData
 
 	// Repère du jeu web (m), pour la physique portée de js/car.js : x, z au sol, y altitude ; tangente (TX, TZ), cap H = atan2(TX, TZ)
 	TArray<float> WX, WY, WZ, TX, TZ, H;
+	TArray<float> RL;   // trajectoire de course : décalage latéral (m) vers l'intérieur des virages (track.js)
 
 	/** Point le plus proche autour de Idx (comme locate() de track.js). */
 	int32 Locate(float X, float Z, int32 Idx) const

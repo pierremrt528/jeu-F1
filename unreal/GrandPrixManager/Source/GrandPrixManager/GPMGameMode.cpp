@@ -19,7 +19,7 @@
 
 AGPMGameMode::AGPMGameMode()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	DefaultPawnClass = ASpectatorPawn::StaticClass();   // remplacé par la monoplace dès que le circuit est prêt
 	HUDClass = AGPMHUD::StaticClass();
 }
@@ -71,21 +71,119 @@ void AGPMGameMode::PlaceCar()
 	if (!PC || !Track) return;
 	UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
 	const FGPMTrackData* T = Data ? Data->GetTrack(Track->CircuitId) : nullptr;
-	if (!T) return;
-	if (!Car)
+	if (!T || !Data) return;
+
+	// Une voiture par pilote de chaque écurie ; le joueur est le premier pilote de TEAMS[0]
+	if (Cars.Num() == 0)
 	{
-		Car = GetWorld()->SpawnActor<AGPMCar>();
+		for (const FGPMTeam& Team : Data->Teams)
+			for (int32 d = 0; d < Team.Drivers.Num(); ++d)
+			{
+				AGPMCar* C = GetWorld()->SpawnActor<AGPMCar>();
+				if (!C) continue;
+				C->SetLivery(Team.Color, Team.Accent);
+				C->Perf = Team.Perf;
+				C->DriverName = Team.Drivers[d].Name;
+				if (!Car && (Team.Drivers[d].bPlayer || &Team == &Data->Teams[0])) Car = C;
+				else C->MakeAI(Team.Drivers[d].Skill);   // difficulté (DIFFS.k) : 1 en « Normal »
+				Cars.Add(C);
+			}
 		if (!Car) return;
 		APawn* Old = PC->GetPawn();
 		PC->Possess(Car);
 		if (Old && Old != Car) Old->Destroy();
+		if (UGameplayStatics::HasOption(OptionsString, TEXT("demo"))) Car->bPlayerControlled = false;   // pilote automatique
 	}
-	Car->PlaceOnTrack(T, 0);
-	if (Data && Data->Teams.Num() > 0)
+
+	// Grille : IA rangées par niveau, le joueur en milieu de grille (?grille=N pour choisir)
+	TArray<AGPMCar*> Grid;
+	for (AGPMCar* C : Cars) if (C != Car) Grid.Add(C);
+	Grid.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.Skill * A.Perf > B.Skill * B.Perf; });
+	const FString GridOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("grille"));
+	const int32 Slot = FMath::Clamp((GridOpt.IsEmpty() ? 10 : FCString::Atoi(*GridOpt)) - 1, 0, Grid.Num());
+	Grid.Insert(Car, Slot);
+	for (int32 k = 0; k < Grid.Num(); ++k)
 	{
-		Car->SetLivery(Data->Teams[0].Color, Data->Teams[0].Accent);
-		Car->Perf = Data->Teams[0].Perf;
+		Grid[k]->PlaceOnTrack(T, k);
+		Grid[k]->Field = Grid;
+		Grid[k]->bHold = true;
 	}
+	Order = Grid;
+	StartIn = 4.f;
+	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
+}
+
+void AGPMGameMode::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (Cars.Num() == 0) return;
+	if (StartIn > 0.f)
+	{
+		StartIn -= DeltaSeconds;
+		if (StartIn <= 0.f) for (AGPMCar* C : Cars) C->bHold = false;
+	}
+	Aspiration(DeltaSeconds);
+	Collide();
+	// classement : tours puis distance parcourue
+	Order.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.Progress() > B.Progress(); });
+}
+
+// Aspiration : voiture devant à moins de 45 m, alignée ; dans les 30 derniers mètres l'air sale coûte de l'appui
+void AGPMGameMode::Aspiration(float Dt)
+{
+	for (AGPMCar* C : Cars)
+	{
+		float S = 0.f, Wk = 0.f;
+		const float Fx = FMath::Sin(C->Heading), Fz = FMath::Cos(C->Heading);
+		for (AGPMCar* O : Cars)
+		{
+			if (O == C) continue;
+			const float Dx = O->X - C->X, Dz = O->Z - C->Z, Along = Dx * Fx + Dz * Fz;
+			if (Along < 4 || Along > 45) continue;
+			const float Side = FMath::Abs(Dx * -Fz + Dz * Fx);
+			if (Side < 2.2f) S = FMath::Max(S, 1 - Along / 45);
+			if (Side < 3.2f && Along < 30) Wk = FMath::Max(Wk, (1 - Along / 30) * (1 - Side / 4));
+		}
+		C->Slipstream += (S - C->Slipstream) * FMath::Min(1.f, Dt * 3);
+		C->Wake += (Wk - C->Wake) * FMath::Min(1.f, Dt * 4);
+	}
+}
+
+// Contacts entre voitures : deux cercles par voiture (avant / arrière), comme collide() de race.js (dégâts : étape 8)
+void AGPMGameMode::Collide()
+{
+	const float Rad = 1.05f, Pts[2] = { 1.4f, -1.4f };
+	for (int32 a = 0; a < Cars.Num(); ++a)
+		for (int32 b = a + 1; b < Cars.Num(); ++b)
+		{
+			AGPMCar& A = *Cars[a];
+			AGPMCar& B = *Cars[b];
+			if (FMath::Abs(A.X - B.X) > 6 || FMath::Abs(A.Z - B.Z) > 6 || FMath::Abs(A.Y - B.Y) > 3) continue;
+			const float FaX = FMath::Sin(A.Heading), FaZ = FMath::Cos(A.Heading), FbX = FMath::Sin(B.Heading), FbZ = FMath::Cos(B.Heading);
+			for (float Pa : Pts) for (float Pb : Pts)
+			{
+				float Dx = (B.X + FbX * Pb) - (A.X + FaX * Pa), Dz = (B.Z + FbZ * Pb) - (A.Z + FaZ * Pa);
+				const float D = FMath::Sqrt(Dx * Dx + Dz * Dz);
+				if (D >= 2 * Rad || D == 0) continue;
+				Dx /= D; Dz /= D;
+				const float Push = (2 * Rad - D) / 2;
+				A.X -= Dx * Push; A.Z -= Dz * Push; B.X += Dx * Push; B.Z += Dz * Push;
+				const float An = A.V * (FaX * Dx + FaZ * Dz), Bn = B.V * (FbX * Dx + FbZ * Dz);
+				const float Close = An - Bn;
+				if (Close > 0)
+				{
+					const float K = Close * 0.55f;
+					A.V -= K * (FaX * Dx + FaZ * Dz);
+					B.V += K * (FbX * Dx + FbZ * Dz);
+					if (Close > 5)
+					{
+						const float Kick = FMath::Min(0.5f, (Close - 5) * 0.03f) * (FMath::FRand() < 0.5f ? -1.f : 1.f);
+						A.Beta += Kick * (Pa < 0 && !A.Assist.bStab ? 1.f : 0.3f);
+						B.Beta += Kick * (Pb < 0 && !B.Assist.bStab ? 1.f : 0.3f);
+					}
+				}
+			}
+		}
 }
 
 // Commande console : GPM.Circuit sierra

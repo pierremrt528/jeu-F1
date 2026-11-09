@@ -11,7 +11,7 @@
 
 namespace
 {
-	constexpr float G = 9.81f;
+	constexpr float Grav = 9.81f;
 	constexpr float PhysDt = 1.f / 120.f;   // pas fixe de la physique
 
 	// Courbe de pneu : linéaire, sommet arrondi, puis l'adhérence baisse quand le pneu glisse franchement (tyreCurve)
@@ -109,9 +109,12 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Track = InTrack;
 	if (!Track || Track->WX.Num() < 4) return;
 	const int32 N = Track->WX.Num();
-	// Grille : 8 m entre deux rangs, décalage gauche/droite de 2,5 m, derrière la ligne
-	Idx = ((-(4 + Slot * 4)) % N + N) % N;
-	const float Side = Slot % 2 ? 2.5f : -2.5f;
+	// Grille (race.js) : 8 m entre deux rangs, décalage gauche/droite de 3 m, derrière la ligne
+	Idx = ((-(5 + Slot * 4)) % N + N) % N;
+	const float Side = Slot % 2 ? 3.f : -3.f;
+	Lat = Lane = Side;
+	LaneBias = (FMath::FRand() - 0.5f) * 1.5f;
+	PassTimer = YieldCd = YieldRun = Slipstream = Wake = 0.f;
 	X = Track->WX[Idx] - Track->TZ[Idx] * Side;
 	Z = Track->WZ[Idx] + Track->TX[Idx] * Side;
 	Y = Track->WY[Idx];
@@ -153,14 +156,20 @@ void AGPMCar::ReadKeyboard(float Dt)
 	Throttle = FMath::Max(TouchGas, Down(EKeys::Up, EKeys::Z) || PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f);
 	Brake = FMath::Max(TouchBrake, Down(EKeys::Down, EKeys::S) || PC->IsInputKeyDown(EKeys::SpaceBar) ? 1.f : 0.f);
 	if (PC->WasInputKeyJustPressed(EKeys::C)) ToggleCamera();
-	if (PC->WasInputKeyJustPressed(EKeys::R)) PlaceOnTrack(Track, 0);   // remettre sur la piste
+	if (PC->WasInputKeyJustPressed(EKeys::R) && Track)   // remettre sur la piste, à l'arrêt, au milieu
+	{
+		X = Track->WX[Idx]; Z = Track->WZ[Idx]; Y = Track->WY[Idx]; Heading = Track->H[Idx];
+		Lat = 0.f; V = Beta = SpinT = 0.f;
+	}
 }
 
 void AGPMCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!Track) return;
-	if (bPlayerControlled) ReadKeyboard(DeltaSeconds);
+	if (bPlayerControlled && Cast<APlayerController>(GetController())) ReadKeyboard(DeltaSeconds);
+	else DriveAI(DeltaSeconds);
+	if (bHold) { Throttle = 0.f; Brake = 1.f; }
 	Accum = FMath::Min(Accum + DeltaSeconds, 0.1f);
 	const int32 N = Track->WX.Num();
 	while (Accum >= PhysDt)
@@ -197,17 +206,17 @@ void AGPMCar::Step(float Dt)
 	bKerb = FMath::Abs(Curv) > 1.f / 220.f && ALat > Half - 0.1f && ALat < Half + 1.4f;
 	const float Bump = FMath::Sin(I0 * 0.73f + 1.3f) * FMath::Sin(I0 * 0.191f) * FMath::Sin(I0 * 0.047f + 0.5f);
 	const float Vc = (T.WY[W(I0 - 6)] - 2 * T.WY[I0] + T.WY[W(I0 + 6)]) / 144.f;
-	const float Nz = FMath::Clamp(1.f + V * V * Vc / G, 0.45f, 1.6f);
+	const float Nz = FMath::Clamp(1.f + V * V * Vc / Grav, 0.45f, 1.6f);
 	const float Grip = (bOffTrack ? 0.55f : 1.f) * (bKerb ? 0.9f : 1.f) * (1.f + 0.03f * Bump * FMath::Min(1.f, V / 60.f));
-	const float VTopNow = VTop * Perf * (bOffTrack ? 0.5f : 1.f);
+	const float VTopNow = VTop * Perf * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
 
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
-	const float Aero = Kd * V * V;
+	const float Aero = Kd * (1.f - 0.3f * Wake) * V * V;
 	const float MuB = Mu * Grip;
 	const float RollF = FMath::Min(1.f, FMath::Abs(Ay) / 45.f);
-	const float CapF = FMath::Max(0.5f, MuB * (G * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
-	const float CapR = FMath::Max(0.5f, MuB * (G * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
+	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
+	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
 
 	// longitudinal
 	float A = -Sign(V) * (0.8f + 0.0009f * V * V), Spin = 0.f;
@@ -243,7 +252,7 @@ void AGPMCar::Step(float Dt)
 	}
 	const float Slope = (T.WY[W(I0 + 1)] - T.WY[I0]) / 2.f;
 	const float Fwd = FMath::Cos(Heading - T.H[I0]);
-	A -= G * Slope * Fwd;
+	A -= Grav * Slope * Fwd;
 	const float V0 = V;
 	V += A * Dt;
 	V = FMath::Max(V, -6.f);

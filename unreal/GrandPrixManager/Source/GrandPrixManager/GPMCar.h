@@ -36,6 +36,7 @@ public:
 
 	/** Place la voiture sur la grille (Slot 0 = pole) du circuit donné. */
 	void PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot = 0);
+	float Pursuit(float InLane) const;
 
 	/** Couleurs de l'écurie (provisoire : modèle en formes simples). */
 	UFUNCTION(BlueprintCallable, Category = "GPM") void SetLivery(FLinearColor Main, FLinearColor Accent);
@@ -67,6 +68,20 @@ public:
 	float Dive = 0, Roll = 0, YOff = 0, Slip = 0, HitWall = 0;
 	int32 Idx = 0;
 	bool bOffTrack = false, bKerb = false, bLock = false, bAbsOn = false, bTcOn = false;
+
+	/** Pilote IA (js/ai.js) : poursuite pure sur la trajectoire, profil de vitesse × niveau, dépassements, consigne d'équipe. */
+	void DriveAI(float Dt);
+	/** Passe la voiture en IA (pas de caméra ni de lecture du clavier). */
+	void MakeAI(float InSkill);
+	FString DriverName;
+	float Skill = 1.f;                     // niveau du pilote × difficulté
+	float Lane = 0.f, LaneBias = 0.f, PassTimer = 0.f, PassSide = 1.f, YieldCd = 0.f, YieldRun = 0.f;
+	bool bYielding = false;
+	AGPMCar* YieldTo = nullptr;            // statut N°2 : laisse passer cette voiture (le joueur)
+	TArray<AGPMCar*> Field;                // toutes les voitures de la course (rempli par le mode de jeu)
+	float Slipstream = 0.f, Wake = 0.f;    // aspiration (vitesse de pointe) et air sale (appui), calculés par le mode de jeu
+	bool bHold = false;                    // avant le départ : freins serrés
+	float Progress() const { return Lap * (Track ? Track->WX.Num() : 1) + Idx; }
 
 	// Constantes (SPEC du jeu web) : vtop ≈ 335 km/h
 	static constexpr float VTop = 93.f, Acc = 12.5f, Brake0 = 17.f, BrakeK = 0.0032f, Mu = 1.65f, Kd = 0.0034f, WB = 3.6f, SteerMax = 0.34f;

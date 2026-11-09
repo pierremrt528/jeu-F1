@@ -37,7 +37,7 @@ Règles communes à toutes les étapes :
 ## Étape 5 — Commandes et HUD 🟡 (HUD canvas + boutons tactiles + chronos faits ; inclinaison et UMG à faire)
 **Prompt :** « Enhanced Input : clavier/manette sur ordinateur ; sur mobile, widget UMG multi-touch (gauche/droite, accélérateur, frein, DRS/stand), inclinaison du téléphone en option (gyroscope via `UInputComponent` motion). HUD UMG (position, tour, chronos, vitesse, rapport, mini-carte dessinée depuis la spline) comme `js/hud.js`, adapté à 844×390 avec marges de sécurité (encoche). »
 
-## Étape 6 — IA des pilotes
+## Étape 6 — IA des pilotes 🟡 (19 IA, poursuite pure, dépassements, aspiration, contacts, classement faits ; mode « cinématique » lointain à faire)
 **Prompt :** « Porte `js/ai.js` : `UGPMDriverAI` (composant) qui pilote un `AGPMCar` par poursuite pure sur la trajectoire de la spline, profil de vitesse × niveau du pilote × difficulté (`DIFFS`), dépassements, défense, aspiration, `yieldTo` (statut N°2). 19 IA + le joueur, ABS et antipatinage pour les IA. Optimisation : au-delà de 150 m de la caméra, IA en mode « cinématique » (déplacement sur la spline sans physique complète). »
 
 ## Étape 7 — Week-end de course

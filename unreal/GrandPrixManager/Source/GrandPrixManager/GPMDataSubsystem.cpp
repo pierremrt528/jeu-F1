@@ -133,6 +133,23 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	ReadFloats(O, TEXT("WR"), T.WallRight);
 	ReadFloats(O, TEXT("C"), T.Curvature);
 	ReadFloats(O, TEXT("V"), T.AISpeed);
+	{
+		// trajectoire : courbure brute lissée sur ±22 points, −260 × courbure, bornée (comme track.js)
+		const int32 N = X.Num();
+		TArray<float> Raw; Raw.SetNum(N); T.RL.SetNum(N);
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float D = T.H[(i + 2) % N] - T.H[(i - 2 + N) % N];
+			Raw[i] = FMath::Atan2(FMath::Sin(D), FMath::Cos(D)) / 8.f;
+		}
+		const float Lim = T.Width / 2.f - 2.2f;
+		for (int32 i = 0; i < N; ++i)
+		{
+			float Sum = 0.f;
+			for (int32 k = -22; k <= 22; ++k) Sum += Raw[((i + k) % N + N) % N];
+			T.RL[i] = FMath::Clamp(-Sum / 45.f * 260.f, -Lim, Lim);
+		}
+	}
 
 	Files.Remove(FString::Printf(TEXT("tracks/%s.json"), *Id));   // le JSON brut n'est plus utile
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s : %d points, %.0f m"), *T.Name, T.Num(), T.Length);
