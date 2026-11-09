@@ -397,6 +397,8 @@ void AGPMHUD::DrawHUD()
 		// appui (doigt ou clic) : position au moment où l'on touche l'écran
 		float TX = 0.f, TY = 0.f; bool bDown = false;
 		if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
+		// clic de souris (si le clic n'est pas déjà converti en toucher)
+		if (PC && !bDown && PC->IsInputKeyDown(EKeys::LeftMouseButton) && PC->GetMousePosition(TX, TY)) bDown = true;
 		bTap = bDown && !bTapWas; bTapWas = bDown; TapPos = FVector2D(TX, TY);
 	}
 	if (GM)

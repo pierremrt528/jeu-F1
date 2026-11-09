@@ -409,6 +409,24 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
 	}
 	UpdateCine(DeltaSeconds);
+	// pointeur de la souris visible dans les menus et les écrans de résultats (sur ordinateur), caché en course
+	if (APlayerController* PCur = GetWorld()->GetFirstPlayerController())
+	{
+		const bool bCursor = InMenu() || Phase == EPhase::QualiDone || Phase == EPhase::Done || Phase == EPhase::Intro || Phase == EPhase::Outro;
+		if (bool(PCur->bShowMouseCursor) != bCursor)
+		{
+			PCur->bShowMouseCursor = bCursor;
+			PCur->bEnableClickEvents = bCursor;
+			if (bCursor)
+			{
+				FInputModeGameAndUI Mode;
+				Mode.SetHideCursorDuringCapture(false);
+				Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+				PCur->SetInputMode(Mode);
+			}
+			else PCur->SetInputMode(FInputModeGameOnly());
+		}
+	}
 	if (InMenu())
 	{
 		if (Cine == ECine::None) StartCine(ECine::Menu);
