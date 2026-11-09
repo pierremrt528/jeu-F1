@@ -8,6 +8,7 @@
 class UStaticMeshComponent;
 class USpringArmComponent;
 class UCameraComponent;
+class UProceduralMeshComponent;
 
 /** Aides au pilotage (car.assist du jeu web). */
 USTRUCT(BlueprintType)
@@ -119,6 +120,8 @@ private:
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Body;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UProceduralMeshComponent> Model;   // monoplace du jeu web (car.json)
+	UPROPERTY() TObjectPtr<UMaterialInterface> VertexColorMat;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> Arm;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> ChaseCam;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> CockpitCam;

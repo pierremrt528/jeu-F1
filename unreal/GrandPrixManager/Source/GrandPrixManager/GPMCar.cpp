@@ -8,6 +8,10 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/Engine.h"
 #include "UObject/ConstructorHelpers.h"
+#include "ProceduralMeshComponent.h"
+#include "GPMDataSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 namespace
 {
@@ -52,6 +56,13 @@ AGPMCar::AGPMCar()
 		Wheels.Add(W);
 	}
 
+	Model = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Modele"));
+	Model->SetupAttachment(Body);
+	Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Model->CastShadow = false;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VC(TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
+	if (VC.Succeeded()) VertexColorMat = VC.Object;
+
 	Arm = CreateDefaultSubobject<USpringArmComponent>(TEXT("Perche"));
 	Arm->SetupAttachment(Root);
 	Arm->TargetArmLength = 750.f;
@@ -66,7 +77,7 @@ AGPMCar::AGPMCar()
 
 	CockpitCam = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraCockpit"));
 	CockpitCam->SetupAttachment(Body);
-	CockpitCam->SetRelativeLocation(FVector(10, 0, 92));
+	CockpitCam->SetRelativeLocation(FVector(32, 0, 98));   // yeux du pilote (casque du modèle à X = 30 cm, Z = 84 cm)
 	CockpitCam->FieldOfView = 80.f;
 	CockpitCam->SetAutoActivate(false);
 }
@@ -98,6 +109,32 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 		for (UStaticMeshComponent* P : Parts)
 			if (UMaterialInstanceDynamic* M = P->CreateDynamicMaterialInstance(0)) M->SetVectorParameterValue(TEXT("Color"), Col);
 	};
+	// Vraie monoplace (modèle du jeu web) : couleurs par sommet ; les formes simples restent en secours si car.json manque.
+	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
+	if (const FGPMCarModel* CM = Data ? Data->GetCarModel() : nullptr)
+	{
+		TArray<int32> Tri; Tri.SetNum(CM->P.Num());
+		TArray<FLinearColor> Col; Col.SetNum(CM->P.Num());
+		for (int32 i = 0; i < CM->P.Num(); ++i)
+		{
+			const int32 K = CM->K[i];
+			Col[i] = K == 0 ? Main : K <= 2 ? Accent : CM->Fixed.IsValidIndex(K) ? CM->Fixed[K] : FLinearColor::Black;
+		}
+		// sens des triangles selon la normale (Unreal : normale de face = −(B−A)×(C−A))
+		for (int32 i = 0; i + 2 < CM->P.Num(); i += 3)
+		{
+			const FVector& A = CM->P[i]; const FVector& B = CM->P[i + 1]; const FVector& C = CM->P[i + 2];
+			const bool bFlip = FVector::DotProduct(FVector::CrossProduct(B - A, C - A), CM->N[i] + CM->N[i + 1] + CM->N[i + 2]) > 0.f;
+			Tri[i] = i; Tri[i + 1] = bFlip ? i + 2 : i + 1; Tri[i + 2] = bFlip ? i + 1 : i + 2;
+		}
+		Model->CreateMeshSection_LinearColor(0, CM->P, Tri, CM->N, TArray<FVector2D>(), Col, TArray<FProcMeshTangent>(), false);
+		if (VertexColorMat) Model->SetMaterial(0, VertexColorMat);
+		for (UStaticMeshComponent* P : MainParts) P->SetVisibility(false);
+		for (UStaticMeshComponent* P : AccentParts) P->SetVisibility(false);
+		for (UStaticMeshComponent* W : Wheels) W->SetVisibility(false);
+		return;
+	}
 	Paint(MainParts, Main);
 	Paint(AccentParts, Accent);
 	for (UStaticMeshComponent* W : Wheels)

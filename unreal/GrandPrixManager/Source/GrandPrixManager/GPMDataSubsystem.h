@@ -32,6 +32,9 @@ public:
 	/** Section brute : File = nom du fichier sans .json (ex. "garage"), Key = tableau exporté (ex. "TREES"). */
 	TSharedPtr<FJsonValue> GetRaw(const FString& File, const FString& Key);
 
+	/** Modèle 3D de la monoplace (chargé une fois). */
+	const FGPMCarModel* GetCarModel();
+
 	static FString DataDir();
 
 private:
@@ -39,4 +42,5 @@ private:
 	TMap<FString, TSharedPtr<FJsonObject>> Files;
 	TMap<FString, TSharedPtr<FGPMTrackData>> TrackCache;   // pointeurs stables : la voiture et le circuit les gardent
 	TArray<FString> CircuitIds;
+	TSharedPtr<FGPMCarModel> CarModel;
 };

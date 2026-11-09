@@ -88,3 +88,12 @@ struct FGPMTrackData
 	static FVector ToWorld(double X, double Alt, double Z) { return FVector(X * 100.0, Z * 100.0, Alt * 100.0); }
 	int32 Num() const { return Points.Num(); }
 };
+
+/** Modèle 3D de monoplace exporté du jeu web (car.json, unreal/tools/export-car.mjs), déjà en repère Unreal (cm). */
+struct FGPMCarModel
+{
+	TArray<FVector> P, N;              // sommets non indexés (3 par triangle), normales
+	TArray<int32> K;                   // couleur : 0 = principale, 1 = accent, 2 = casque, sinon Fixed[K]
+	TArray<FLinearColor> Fixed;        // couleurs fixes (carbone, pneus…), linéaires
+};
+

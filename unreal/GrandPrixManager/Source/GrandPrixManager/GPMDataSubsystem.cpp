@@ -168,6 +168,37 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	return Ptr.Get();
 }
 
+const FGPMCarModel* UGPMDataSubsystem::GetCarModel()
+{
+	if (CarModel.IsValid()) return CarModel->P.Num() ? CarModel.Get() : nullptr;
+	CarModel = MakeShared<FGPMCarModel>();
+	TSharedPtr<FJsonObject> O = LoadFile(TEXT("car.json"));
+	if (!O.IsValid()) return nullptr;
+	TArray<float> P, N, K;
+	ReadFloats(O, TEXT("P"), P);
+	ReadFloats(O, TEXT("N"), N);
+	ReadFloats(O, TEXT("K"), K);
+	const int32 Cnt = FMath::Min3(P.Num(), N.Num(), K.Num() * 3) / 3 / 3 * 3;   // multiple de 3 sommets
+	FGPMCarModel& M = *CarModel;
+	// three.js (x, y haut, z avant, en m) → Unreal (X avant, Y à droite = −x, Z haut, en cm)
+	for (int32 i = 0; i < Cnt; ++i)
+	{
+		M.P.Add(FVector(P[i * 3 + 2], -P[i * 3], P[i * 3 + 1]) * 100.f);
+		M.N.Add(FVector(N[i * 3 + 2], -N[i * 3], N[i * 3 + 1]));
+		M.K.Add(int32(K[i]));
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Pal;
+	if (O->TryGetArrayField(TEXT("palette"), Pal))
+		for (const TSharedPtr<FJsonValue>& V : *Pal)
+		{
+			const FColor C = FColor::FromHex(V->AsString());   // valeurs déjà linéaires (three.js)
+			M.Fixed.Add(FLinearColor(C.R / 255.f, C.G / 255.f, C.B / 255.f));
+		}
+	Files.Remove(TEXT("car.json"));
+	UE_LOG(LogGPM, Log, TEXT("Monoplace : %d triangles"), M.P.Num() / 3);
+	return M.P.Num() ? &M : nullptr;
+}
+
 TSharedPtr<FJsonValue> UGPMDataSubsystem::GetRaw(const FString& File, const FString& Key)
 {
 	TSharedPtr<FJsonObject> O = LoadFile(File + TEXT(".json"));
