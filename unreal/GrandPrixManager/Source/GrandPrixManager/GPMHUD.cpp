@@ -92,8 +92,8 @@ void AGPMHUD::DrawMiniMap(AGPMCar* Car, FVector2D O, float Size)
 		const FVector2D A = P(T->WX[i], T->WZ[i]), B = P(T->WX[j], T->WZ[j]);
 		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(1, 1, 1, 0.8f), 2.f * Scale);
 	}
-	for (const AGPMCar* O : Car->Field)
-		if (O && O != Car) { const FVector2D Q = P(O->X, O->Z); DrawRect(FLinearColor(1, 1, 1, 0.9f), Q.X - 2 * Scale, Q.Y - 2 * Scale, 4 * Scale, 4 * Scale); }
+	for (const AGPMCar* Other : Car->Field)
+		if (Other && Other != Car) { const FVector2D Q = P(Other->X, Other->Z); DrawRect(FLinearColor(1, 1, 1, 0.9f), Q.X - 2 * Scale, Q.Y - 2 * Scale, 4 * Scale, 4 * Scale); }
 	const FVector2D C = P(Car->X, Car->Z);
 	DrawRect(HudAccent, C.X - 4 * Scale, C.Y - 4 * Scale, 8 * Scale, 8 * Scale);
 }

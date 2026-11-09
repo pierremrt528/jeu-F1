@@ -109,10 +109,11 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		// Herbe de chaque côté, du bord de la piste jusqu'au mur (légèrement plus basse)
 		const float DL = WallDist(Track->WallLeft, j), DR = WallDist(Track->WallRight, j);
 		const FVector Low = -Up * 3.f;
-		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), Grass);
-		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), Grass);
-		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), Grass);
-		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), Grass);
+		const FLinearColor GrassC = (i / 5) % 2 ? Grass : Grass * 1.18f;   // bandes de tonte tous les 10 m
+		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), GrassC);
+		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), GrassC);
+		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), GrassC);
+		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), GrassC);
 		if (i > 0) { const int32 b = Green.V.Num() - 8; Green.Quad(b, b + 1, b + 4, b + 5); Green.Quad(b + 2, b + 3, b + 6, b + 7); }
 
 		// Murs : faces tournées vers la piste, gauche et droite
@@ -173,7 +174,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const FBox B(Track->Points);
 		const FVector C = B.GetCenter();
 		const float S = FMath::Max(B.GetExtent().X, B.GetExtent().Y) + 60000.f;   // 600 m de marge
-		const float Z = MinZ - 60.f;
+		const float Z = MinZ - 800.f;   // sous le relief du décor (GPMScenery)
 		const int32 a = Floor.Add(FVector(C.X - S, C.Y - S, Z), Up, FVector2D(0, 0), Ground);
 		Floor.Add(FVector(C.X + S, C.Y - S, Z), Up, FVector2D(1, 0), Ground);
 		Floor.Add(FVector(C.X - S, C.Y + S, Z), Up, FVector2D(0, 1), Ground);

@@ -11,6 +11,10 @@
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Engine/ExponentialHeightFog.h"
+#include "Engine/SkyLight.h"
+#include "Components/SkyLightComponent.h"
+#include "Engine/PostProcessVolume.h"
+#include "GPMScenery.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -40,6 +44,8 @@ void AGPMGameMode::LoadCircuit(const FString& Id)
 	if (!Track) Track = GetWorld()->SpawnActor<AGPMTrack>();
 	if (Track && Track->BuildCircuit(Id))
 	{
+		if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+			if (const FGPMTrackData* T = Data->GetTrack(Id)) ApplyTheme(T);
 		// Le joueur n'existe pas toujours encore au BeginPlay : on place la caméra à l'image suivante.
 		GetWorldTimerManager().SetTimerForNextTick(this, &AGPMGameMode::PlaceCar);
 	}
@@ -47,13 +53,18 @@ void AGPMGameMode::LoadCircuit(const FString& Id)
 
 void AGPMGameMode::SetupWorld()
 {
-	// Soleil, ciel et brouillard (la carte de départ est vide). Matériaux et ambiance définitifs : étape 9.
+	// Soleil (ombres dynamiques proches seulement), ciel physique, lumière d'ambiance capturée du ciel, brouillard, post-traitement léger
 	UWorld* W = GetWorld();
-	if (ADirectionalLight* Sun = W->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-40.f, 35.f, 0.f)))
+	Sun = W->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-40.f, 35.f, 0.f));
+	if (Sun)
 	{
-		Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
-		Sun->GetLightComponent()->SetIntensity(8.f);
-		if (UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Sun->GetLightComponent())) D->SetAtmosphereSunLight(true);
+		UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Sun->GetLightComponent());
+		D->SetMobility(EComponentMobility::Movable);
+		D->SetIntensity(8.f);
+		D->SetAtmosphereSunLight(true);
+		D->SetCastShadows(true);
+		D->SetDynamicShadowDistanceMovableLight(9000.f);   // 90 m : ombres des voitures proches
+		D->SetDynamicShadowCascades(2);
 	}
 	if (AActor* Sky = W->SpawnActor<AActor>())
 	{
@@ -61,8 +72,44 @@ void AGPMGameMode::SetupWorld()
 		Sky->SetRootComponent(C);
 		C->RegisterComponent();
 	}
-	if (AExponentialHeightFog* Fog = W->SpawnActor<AExponentialHeightFog>())
-		Fog->GetComponent()->SetFogDensity(0.004f);
+	SkyLight = W->SpawnActor<ASkyLight>();
+	if (SkyLight)
+	{
+		USkyLightComponent* L = SkyLight->GetLightComponent();
+		L->SetMobility(EComponentMobility::Movable);
+		L->bRealTimeCapture = true;
+		L->SetIntensity(1.f);
+		L->RecaptureSky();
+	}
+	Fog = W->SpawnActor<AExponentialHeightFog>();
+	if (Fog) Fog->GetComponent()->SetFogDensity(0.004f);
+	if (APostProcessVolume* PP = W->SpawnActor<APostProcessVolume>())
+	{
+		PP->bUnbound = true;
+		FPostProcessSettings& S = PP->Settings;
+		S.bOverride_BloomIntensity = true; S.BloomIntensity = 0.35f;
+		S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.25f;
+		S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f);
+		S.bOverride_AutoExposureBias = true; S.AutoExposureBias = 0.3f;
+	}
+}
+
+// Ambiance du circuit (thème de data.js) : direction du soleil, brouillard, puis le décor
+void AGPMGameMode::ApplyTheme(const FGPMTrackData* T)
+{
+	const FGPMTheme& Th = T->Theme;
+	if (Sun) Sun->SetActorRotation((-Th.Sun).Rotation());
+	if (Fog)
+	{
+		UExponentialHeightFogComponent* F = Fog->GetComponent();
+		F->SetFogDensity(0.004f * 1500.f / FMath::Max(600.f, Th.FogEnd));
+		F->SetStartDistance(Th.FogStart * 30.f);
+		F->SetFogInscatteringColor(Th.Horizon * 0.6f);
+		Fog->SetActorLocation(FVector(0, 0, T->Points.Num() ? T->Points[0].Z : 0.f));
+	}
+	if (SkyLight) SkyLight->GetLightComponent()->RecaptureSky();
+	if (!Scenery) Scenery = GetWorld()->SpawnActor<AGPMScenery>();
+	if (Scenery) Scenery->Build(T);
 }
 
 void AGPMGameMode::PlaceCar()

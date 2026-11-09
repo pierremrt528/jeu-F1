@@ -39,8 +39,10 @@ public:
 
 private:
 	TSharedPtr<FJsonObject> LoadFile(const FString& RelPath);
+	static void ReadTheme(const TSharedPtr<FJsonObject>& O, struct FGPMTheme& Th);
 	TMap<FString, TSharedPtr<FJsonObject>> Files;
 	TMap<FString, TSharedPtr<FGPMTrackData>> TrackCache;   // pointeurs stables : la voiture et le circuit les gardent
 	TArray<FString> CircuitIds;
+	TMap<FString, TSharedPtr<FJsonObject>> CircuitDefs;   // définitions de data.js (nom, type, thème)
 	TSharedPtr<FGPMCarModel> CarModel;
 };

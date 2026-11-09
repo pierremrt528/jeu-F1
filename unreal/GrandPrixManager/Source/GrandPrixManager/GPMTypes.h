@@ -41,6 +41,21 @@ struct FGPMTyre
  * Circuit pré-calculé par le jeu web (tracks/<id>.json) : ligne médiane tous les 2 m.
  * Repère du jeu web : x, z au sol, y = altitude, en mètres. Conversion Unreal (cm, Z vers le haut) dans ToWorld().
  */
+/** Thème de décor d'un circuit (THEMES de data.js). */
+struct FGPMTheme
+{
+	FLinearColor Horizon = FLinearColor(0.6f, 0.7f, 0.8f), Zenith = FLinearColor(0.05f, 0.18f, 0.6f);
+	FVector Sun = FVector(0.5f, 0.55f, 0.45f);     // direction du soleil (repère Unreal : X, Y au sol, Z haut)
+	float FogStart = 250.f, FogEnd = 1500.f;        // m
+	FString Surface = TEXT("grass"), TreeKind = TEXT("mix");
+	int32 Trees = 800;
+	float TreeHue = -1.f;                           // teinte des feuillages (automne, vignes…), −1 = vert
+	bool bSea = false;
+	int32 City = 0; float CityHMin = 15.f, CityHMax = 60.f;
+	FLinearColor MountFar = FLinearColor(0.35f, 0.45f, 0.55f), MountNear = FLinearColor(0.2f, 0.3f, 0.22f);
+	float FarH0 = 160.f, FarH1 = 520.f, NearH0 = 60.f, NearH1 = 260.f;
+};
+
 USTRUCT(BlueprintType)
 struct FGPMTrackData
 {
@@ -58,6 +73,8 @@ struct FGPMTrackData
 	// Repère du jeu web (m), pour la physique portée de js/car.js : x, z au sol, y altitude ; tangente (TX, TZ), cap H = atan2(TX, TZ)
 	TArray<float> WX, WY, WZ, TX, TZ, H;
 	TArray<float> RL;
+	FGPMTheme Theme;
+	FString Type;   // « Campagne vallonnée »…
 	// Voie des stands (pitLane de track.js) : indices signés par rapport à la ligne (entrée e0→e1, sortie x0→x1), côté droit
 	float PitHalf = 7.f, PitLat = 22.f, PitLoss = 22.f;
 	int32 PitE0 = -190, PitE1 = -140, PitX0 = 70, PitX1 = 110;

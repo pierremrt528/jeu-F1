@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "GPMTypes.h"
 #include "GPMGameMode.generated.h"
 
 class AGPMTrack;
@@ -62,6 +63,11 @@ private:
 	UPROPERTY() TArray<TObjectPtr<AGPMCar>> Cars;      // les 20 voitures
 	TArray<AGPMCar*> Order;
 	void SetupWorld();
+	void ApplyTheme(const FGPMTrackData* T);
+	UPROPERTY() TObjectPtr<class ADirectionalLight> Sun;
+	UPROPERTY() TObjectPtr<class ASkyLight> SkyLight;
+	UPROPERTY() TObjectPtr<class AExponentialHeightFog> Fog;
+	UPROPERTY() TObjectPtr<class AGPMScenery> Scenery;
 	void PlaceCar();
 	void Aspiration(float Dt);
 	void Collide();

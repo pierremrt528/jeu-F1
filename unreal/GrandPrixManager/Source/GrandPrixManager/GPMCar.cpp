@@ -59,7 +59,7 @@ AGPMCar::AGPMCar()
 	Model = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Modele"));
 	Model->SetupAttachment(Body);
 	Model->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Model->CastShadow = false;
+	Model->CastShadow = true;   // ombre de la voiture (soleil, 90 m autour de la caméra)
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VC(TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
 	if (VC.Succeeded()) VertexColorMat = VC.Object;
 

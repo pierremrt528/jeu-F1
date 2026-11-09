@@ -23,6 +23,52 @@ namespace
 	}
 }
 
+namespace
+{
+	FLinearColor HexLin(const TSharedPtr<FJsonObject>& O, const TCHAR* K, FLinearColor Def)
+	{
+		double V; return O->TryGetNumberField(K, V) ? HexToColor((int64)V) : Def;
+	}
+}
+
+void UGPMDataSubsystem::ReadTheme(const TSharedPtr<FJsonObject>& O, FGPMTheme& Th)
+{
+	Th.Horizon = HexLin(O, TEXT("horizon"), Th.Horizon);
+	Th.Zenith = HexLin(O, TEXT("zenith"), Th.Zenith);
+	const TArray<TSharedPtr<FJsonValue>>* A = nullptr;
+	if (O->TryGetArrayField(TEXT("sun"), A) && A->Num() == 3)   // web (x, y haut, z) → Unreal (x, z, y)
+		Th.Sun = FVector((*A)[0]->AsNumber(), (*A)[2]->AsNumber(), (*A)[1]->AsNumber()).GetSafeNormal();
+	if (O->TryGetArrayField(TEXT("fog"), A) && A->Num() == 2) { Th.FogStart = (*A)[0]->AsNumber(); Th.FogEnd = (*A)[1]->AsNumber(); }
+	O->TryGetStringField(TEXT("surface"), Th.Surface);
+	O->TryGetStringField(TEXT("treeKind"), Th.TreeKind);
+	double D;
+	if (O->TryGetNumberField(TEXT("trees"), D)) Th.Trees = int32(D);
+	if (O->TryGetArrayField(TEXT("treeHue"), A) && A->Num() == 2) Th.TreeHue = float(((*A)[0]->AsNumber() + (*A)[1]->AsNumber()) / 2);
+	O->TryGetBoolField(TEXT("sea"), Th.bSea);
+	const TSharedPtr<FJsonObject>* C = nullptr;
+	if (O->TryGetObjectField(TEXT("city"), C))
+	{
+		if ((*C)->TryGetNumberField(TEXT("count"), D)) Th.City = int32(D);
+		if ((*C)->TryGetNumberField(TEXT("hmin"), D)) Th.CityHMin = D;
+		if ((*C)->TryGetNumberField(TEXT("hmax"), D)) Th.CityHMax = D;
+	}
+	const TSharedPtr<FJsonObject>* Mo = nullptr;
+	if (O->TryGetObjectField(TEXT("mountains"), Mo))
+	{
+		auto Read = [&](const TCHAR* K, float& H0, float& H1, FLinearColor& Col)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* M = nullptr;
+			if ((*Mo)->TryGetArrayField(K, M) && M->Num() >= 3)
+			{
+				H0 = (*M)[0]->AsNumber(); H1 = (*M)[1]->AsNumber();
+				Col = HexToColor((int64)(*M)[2]->AsNumber());
+			}
+		};
+		Read(TEXT("far"), Th.FarH0, Th.FarH1, Th.MountFar);
+		Read(TEXT("near"), Th.NearH0, Th.NearH1, Th.MountNear);
+	}
+}
+
 FString UGPMDataSubsystem::DataDir()
 {
 	return FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data"));
@@ -70,7 +116,10 @@ void UGPMDataSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			Teams.Add(Team);
 		}
 		for (const TSharedPtr<FJsonValue>& CV : Data->GetArrayField(TEXT("CIRCUITS")))
+		{
 			CircuitIds.Add(CV->AsObject()->GetStringField(TEXT("id")));
+			CircuitDefs.Add(CircuitIds.Last(), CV->AsObject());
+		}
 	}
 
 	if (TSharedPtr<FJsonObject> Strat = LoadFile(TEXT("strategy.json")))
@@ -109,6 +158,12 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	FGPMTrackData& T = *Ptr;
 	T.Id = Id;
 	T.Name = O->GetStringField(TEXT("name"));
+	if (const TSharedPtr<FJsonObject>* Def = CircuitDefs.Find(Id))
+	{
+		(*Def)->TryGetStringField(TEXT("type"), T.Type);
+		const TSharedPtr<FJsonObject>* Th = nullptr;
+		if ((*Def)->TryGetObjectField(TEXT("theme"), Th)) ReadTheme(*Th, T.Theme);
+	}
 	T.Length = O->GetNumberField(TEXT("length"));
 	O->TryGetNumberField(TEXT("width"), T.Width);
 	TArray<float> X, Y, Z;
