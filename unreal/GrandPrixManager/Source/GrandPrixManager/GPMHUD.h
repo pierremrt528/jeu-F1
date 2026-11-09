@@ -30,6 +30,12 @@ private:
 	FString Gap(float Seconds) const;
 	void DrawCentered(const FString& Text, FLinearColor Color, float W, float Y, class UFont* Font, float S);
 	void DrawLights(int32 On, float W);
+	void DrawFactory(class AGPMGameMode* GM, float W, float H);
+	bool Clicked(float X, float Y, float BW, float BH);
+	void DrawBtn(const FString& Label, float X, float Y, float BW, float BH, FLinearColor Col);
+	bool bTap = false, bTapWas = true;
+	FVector2D TapPos = FVector2D::ZeroVector;
+	int32 SelTree = 0, SelPart = 0;
 	void DrawSeason(class AGPMGameMode* GM, float W, float H);
 	void DrawQuali(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	void DrawResults(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);

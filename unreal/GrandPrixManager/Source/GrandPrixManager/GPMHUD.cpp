@@ -2,6 +2,7 @@
 #include "GPMCar.h"
 #include "GPMGameMode.h"
 #include "GPMSeason.h"
+#include "GPMFactory.h"
 #include "GPMDataSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Canvas.h"
@@ -242,6 +243,15 @@ void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
 	for (int32 k = FMath::Max(0, Res.Num() - 5); k < Res.Num(); ++k)
 		Last += FString::Printf(TEXT("%s%s P%d"), Last.IsEmpty() ? TEXT("") : TEXT("  ·  "), *Res[k].Circuit, Res[k].Pos);
 	if (!Last.IsEmpty()) DrawText(TEXT("Tes derniers GP : ") + Last, FLinearColor(1, 1, 1, 0.7f), XR, Top + Tms.Num() * Row * 1.4f + 10 * Scale, Mid, S);
+	// écurie : budget, moral, réputation, actualités de l'usine ; bouton Usine
+	if (const UGPMSaveGame* G = Season->State())
+	{
+		DrawText(FString::Printf(TEXT("Budget %.1f M€ · Moral %d · Réputation %d"), G->Budget, G->Moral, G->Rep), FLinearColor(0.6f, 0.9f, 1.f), 12 * Scale, 10 * Scale, Mid, Scale * 0.85f);
+		for (int32 k = 0; k < G->News.Num() && k < 4; ++k)
+			DrawText(G->News[k], FLinearColor(0.6f, 1.f, 0.7f), XR, H - 40 * Scale - (G->News.Num() - k) * Row, Mid, S);
+	}
+	DrawBtn(TEXT("USINE (U)"), W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale, FLinearColor(0.75f, 0.12f, 0.12f));
+	if (Clicked(W - 180 * Scale, 8 * Scale, 168 * Scale, 30 * Scale)) GM->Phase = AGPMGameMode::EPhase::Factory;
 	DrawCentered(Season->IsOver() ? TEXT("Entrée ou touche l'écran : saison suivante") : TEXT("Entrée ou touche l'écran : Grand Prix suivant (qualifications)"),
 		FLinearColor(1, 1, 1, 0.7f), W, H - 22 * Scale, Mid, Scale * 0.9f);
 	APlayerController* PC = GetOwningPlayerController();
@@ -249,6 +259,113 @@ void AGPMHUD::DrawSeason(AGPMGameMode* GM, float W, float H)
 	if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
 	if (bDown && !bWasDown) GM->Continue();
 	bWasDown = bDown;
+}
+
+// Bouton tactile/souris simple : renvoie vrai au moment où on appuie dessus
+bool AGPMHUD::Clicked(float X, float Y, float BW, float BH)
+{
+	return bTap && TapPos.X >= X && TapPos.X <= X + BW && TapPos.Y >= Y && TapPos.Y <= Y + BH;
+}
+
+void AGPMHUD::DrawBtn(const FString& Label, float X, float Y, float BW, float BH, FLinearColor Col)
+{
+	DrawRect(Col, X, Y, BW, BH);
+	float TW, TH;
+	GetTextSize(Label, TW, TH, GEngine->GetMediumFont(), Scale);
+	DrawText(Label, FLinearColor::White, X + (BW - TW) / 2, Y + (BH - TH) / 2, GEngine->GetMediumFont(), Scale);
+}
+
+// Usine (écran Recherche de garage.js) : 5 pôles en colonnes, pièces avec leur état, fiche de la pièce choisie
+void AGPMHUD::DrawFactory(AGPMGameMode* GM, float W, float H)
+{
+	DrawRect(FLinearColor(0.01f, 0.015f, 0.03f, 0.95f), 0, 0, W, H);
+	UGameInstance* GI = GetGameInstance();
+	UGPMFactorySubsystem* F = GI ? GI->GetSubsystem<UGPMFactorySubsystem>() : nullptr;
+	UGPMSeasonSubsystem* Season = GI ? GI->GetSubsystem<UGPMSeasonSubsystem>() : nullptr;
+	if (!F || !Season || F->Trees().Num() == 0) return;
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Mid = GEngine->GetMediumFont();
+	const TArray<FGPMTree>& Trees = F->Trees();
+	SelTree = FMath::Clamp(SelTree, 0, Trees.Num() - 1);
+	SelPart = FMath::Clamp(SelPart, 0, Trees[SelTree].Parts.Num() - 1);
+
+	DrawText(TEXT("USINE · RECHERCHE"), FLinearColor::White, 12 * Scale, 8 * Scale, Big, Scale * 1.1f);
+	DrawText(FString::Printf(TEXT("Budget : %.1f M€    Ateliers : %d / %d"), F->Budget(), F->Running(), F->Workshops()), FLinearColor(1.f, 0.85f, 0.2f), W * 0.45f, 12 * Scale, Mid, Scale);
+
+	// colonnes
+	const float Top = 40 * Scale, ColW = (W - 24 * Scale) / Trees.Num(), RowH = FMath::Min(22.f * Scale, (H * 0.62f - Top) / 10.f);
+	const UGPMSaveGame* G = Season->State();
+	for (int32 t = 0; t < Trees.Num(); ++t)
+	{
+		const FGPMTree& Tr = Trees[t];
+		const float X = 12 * Scale + t * ColW;
+		DrawRect(Tr.Color, X, Top, ColW - 6 * Scale, 3 * Scale);
+		DrawText(Tr.Name, Tr.Color, X, Top + 4 * Scale, Mid, Scale * 0.95f);
+		for (int32 k = 0; k < Tr.Parts.Num(); ++k)
+		{
+			const FGPMPart& P = Tr.Parts[k];
+			const float Y = Top + 22 * Scale + k * RowH;
+			const UGPMFactorySubsystem::EState St = F->StateOf(P);
+			FLinearColor Bg(1, 1, 1, 0.06f), Ink = FLinearColor(1, 1, 1, 0.5f);
+			FString Info;
+			switch (St)
+			{
+			case UGPMFactorySubsystem::EState::Owned: Bg = FLinearColor(0.1f, 0.5f, 0.2f, 0.5f); Ink = FLinearColor::White; Info = TEXT("installée"); break;
+			case UGPMFactorySubsystem::EState::Running: Bg = FLinearColor(0.6f, 0.45f, 0.05f, 0.5f); Ink = FLinearColor::White;
+				Info = FString::Printf(TEXT("%.0f j"), G ? G->DevLeft.FindRef(P.Tree) : 0.f); break;
+			case UGPMFactorySubsystem::EState::Available: Bg = FLinearColor(1, 1, 1, 0.14f); Ink = FLinearColor::White; Info = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); break;
+			case UGPMFactorySubsystem::EState::TooExpensive: Info = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); break;
+			case UGPMFactorySubsystem::EState::Busy: Info = TEXT("occupé"); break;
+			default: Info = TEXT("verrouillée"); break;
+			}
+			const bool bSel = t == SelTree && k == SelPart;
+			if (bSel) DrawRect(FLinearColor(1.f, 0.85f, 0.2f, 0.9f), X - 2 * Scale, Y - 2 * Scale, ColW - 2 * Scale, RowH);
+			DrawRect(Bg, X, Y, ColW - 6 * Scale, RowH - 4 * Scale);
+			FString Name = P.Name.Len() > 20 ? P.Name.Left(19) + TEXT("…") : P.Name;
+			DrawText(Name, Ink, X + 4 * Scale, Y + 1 * Scale, Mid, Scale * 0.72f);
+			DrawText(Info, Ink, X + ColW - 62 * Scale, Y + 1 * Scale, Mid, Scale * 0.72f);
+			if (Clicked(X, Y, ColW - 6 * Scale, RowH - 4 * Scale)) { SelTree = t; SelPart = k; }
+		}
+	}
+
+	// fiche de la pièce choisie
+	const FGPMPart& P = Trees[SelTree].Parts[SelPart];
+	const float FY = H * 0.66f;
+	DrawRect(FLinearColor(1, 1, 1, 0.07f), 12 * Scale, FY, W - 24 * Scale, H - FY - 12 * Scale);
+	DrawText(P.Name, FLinearColor::White, 22 * Scale, FY + 6 * Scale, Mid, Scale * 1.1f);
+	DrawText(P.Desc, FLinearColor(1, 1, 1, 0.7f), 22 * Scale, FY + 28 * Scale, Mid, Scale * 0.85f);
+	auto FxName = [](const FString& K) -> FString
+	{
+		return K == TEXT("vtop") ? TEXT("vitesse de pointe") : K == TEXT("acc") ? TEXT("accélération") : K == TEXT("mu") ? TEXT("adhérence")
+			: K == TEXT("brake") ? TEXT("freinage") : K == TEXT("kd") ? TEXT("appui") : K == TEXT("steer") ? TEXT("agilité")
+			: K == TEXT("fuel") ? TEXT("consommation") : K == TEXT("rel") ? TEXT("fiabilité") : K;
+	};
+	FString Fx;
+	for (const TPair<FString, float>& E : P.Fx)
+	{
+		Fx += FString::Printf(TEXT("%s%s %+.1f%s"), Fx.IsEmpty() ? TEXT("") : TEXT("   "), *FxName(E.Key), E.Key == TEXT("rel") ? E.Value : E.Value * 100.f, E.Key == TEXT("rel") ? TEXT("") : TEXT(" %"));
+	}
+	DrawText(Fx, FLinearColor(0.4f, 1.f, 0.55f), 22 * Scale, FY + 48 * Scale, Mid, Scale * 0.85f);
+	DrawText(FString::Printf(TEXT("Prix %.1f M€ · %d jours · risque d'échec %d %%"), UGPMFactorySubsystem::Price(P), UGPMFactorySubsystem::Delay(P), UGPMFactorySubsystem::FailPct(P)),
+		FLinearColor(1, 1, 1, 0.8f), 22 * Scale, FY + 68 * Scale, Mid, Scale * 0.85f);
+
+	const float BW = 190 * Scale, BH = 34 * Scale, BY = H - BH - 20 * Scale;
+	const bool bCan = F->StateOf(P) == UGPMFactorySubsystem::EState::Available;
+	DrawBtn(bCan ? TEXT("LANCER LA RECHERCHE") : TEXT("INDISPONIBLE"), W - BW - 24 * Scale, BY, BW, BH, bCan ? FLinearColor(0.75f, 0.12f, 0.12f) : FLinearColor(0.25f, 0.25f, 0.28f));
+	DrawBtn(TEXT("RETOUR"), W - 2 * BW - 34 * Scale, BY, BW * 0.7f, BH, FLinearColor(0.2f, 0.22f, 0.28f));
+	APlayerController* PC = GetOwningPlayerController();
+	const bool bBuy = Clicked(W - BW - 24 * Scale, BY, BW, BH) || (PC && PC->WasInputKeyJustPressed(EKeys::Enter));
+	if (bBuy && bCan) F->Start(P.Id);
+	if (Clicked(W - 2 * BW - 34 * Scale, BY, BW * 0.7f, BH)) GM->Phase = AGPMGameMode::EPhase::Season;
+	// clavier : flèches pour choisir
+	if (PC)
+	{
+		if (PC->WasInputKeyJustPressed(EKeys::Left)) { SelTree = (SelTree + Trees.Num() - 1) % Trees.Num(); SelPart = 0; }
+		if (PC->WasInputKeyJustPressed(EKeys::Right)) { SelTree = (SelTree + 1) % Trees.Num(); SelPart = 0; }
+		if (PC->WasInputKeyJustPressed(EKeys::Up)) SelPart = FMath::Max(0, SelPart - 1);
+		if (PC->WasInputKeyJustPressed(EKeys::Down)) SelPart = FMath::Min(Trees[SelTree].Parts.Num() - 1, SelPart + 1);
+	}
+	DrawText(TEXT("Flèches : choisir · Entrée : lancer · U : retour"), FLinearColor(1, 1, 1, 0.5f), 22 * Scale, H - 18 * Scale, Mid, Scale * 0.75f);
 }
 
 void AGPMHUD::DrawHUD()
@@ -278,6 +395,13 @@ void AGPMHUD::DrawHUD()
 		DrawText(Car->bAbsOn ? TEXT("ABS") : TEXT("TC"), FLinearColor(1.f, 0.8f, 0.1f), M + 10 * Scale, M + 74 * Scale, Mid, Scale);
 
 	AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
+	{
+		// appui (doigt ou clic) : position au moment où l'on touche l'écran
+		float TX = 0.f, TY = 0.f; bool bDown = false;
+		if (PC) PC->GetInputTouchState(ETouchIndex::Touch1, TX, TY, bDown);
+		bTap = bDown && !bTapWas; bTapWas = bDown; TapPos = FVector2D(TX, TY);
+	}
+	if (GM && GM->Phase == AGPMGameMode::EPhase::Factory) { DrawFactory(GM, W, H); return; }
 	if (GM && GM->Phase == AGPMGameMode::EPhase::Season) { DrawSeason(GM, W, H); return; }
 
 	// Tour et chronos (en haut au centre)

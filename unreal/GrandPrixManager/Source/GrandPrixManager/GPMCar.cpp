@@ -260,12 +260,12 @@ void AGPMCar::Step(float Dt)
 	const float Vc = (T.WY[W(I0 - 6)] - 2 * T.WY[I0] + T.WY[W(I0 + 6)]) / 144.f;
 	const float Nz = FMath::Clamp(1.f + V * V * Vc / Grav, 0.45f, 1.6f);
 	const float Grip = (bOffTrack ? 0.55f : 1.f) * (bKerb ? 0.9f : 1.f) * (1.f + 0.03f * Bump * FMath::Min(1.f, V / 60.f));
-	const float VTopNow = VTop * Perf * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
+	const float VTopNow = VTop * Perf * UpVTop * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
 
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
-	const float Aero = Kd * (1.f - 0.3f * Wake) * V * V;
-	const float MuB = Mu * Grip * GripMul / (1.f + (Mass - 1.f) * 0.25f);
+	const float Aero = Kd * UpKd * (1.f - 0.3f * Wake) * V * V;
+	const float MuB = Mu * UpMu * Grip * GripMul / (1.f + (Mass - 1.f) * 0.25f);
 	const float RollF = FMath::Min(1.f, FMath::Abs(Ay) / 45.f);
 	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
 	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
@@ -275,7 +275,7 @@ void AGPMCar::Step(float Dt)
 	bLock = false; bAbsOn = bTcOn = false;
 	if (Throttle > 0 && V >= -0.5f)
 	{
-		float Ad = Throttle * Acc * Perf / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
+		float Ad = Throttle * Acc * Perf * UpAcc / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);
 		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * FMath::Sqrt(1 - Uy * Uy));
 		if (Ad > Room)
@@ -290,7 +290,7 @@ void AGPMCar::Step(float Dt)
 	{
 		if (V > 0.3f)
 		{
-			float Ab = Brake * (Brake0 + BrakeK * V * V) / FMath::Sqrt(Mass);
+			float Ab = Brake * (Brake0 + BrakeK * V * V) * UpBrake / FMath::Sqrt(Mass);
 			const float Lim = 1.1f * CapF, Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapF);
 			const float Room = Lim * FMath::Sqrt(1 - Uy * Uy);
 			if (Ab > Room)
@@ -320,7 +320,7 @@ void AGPMCar::Step(float Dt)
 	}
 	else
 	{
-		const float Delta = SteerMax * Steer / (1 + FMath::Abs(V) / 20.f) * (bLock ? 0.25f : 1.f);
+		const float Delta = SteerMax * UpSteer * Steer / (1 + FMath::Abs(V) / 20.f) * (bLock ? 0.25f : 1.f);
 		float Yaw = V * FMath::Tan(Delta) / WB;
 		const float Want = FMath::Abs(V * Yaw), RF = Want / (CapF * 1.06f);
 		float Got = Want;

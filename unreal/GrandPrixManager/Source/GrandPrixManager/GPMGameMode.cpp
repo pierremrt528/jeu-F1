@@ -17,6 +17,8 @@
 #include "GPMScenery.h"
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
+#include "GPMFactory.h"
+#include "Dom/JsonValue.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -197,6 +199,7 @@ void AGPMGameMode::StartQuali()
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	Phase = EPhase::Quali;
+	ApplyCareer();
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
 	for (AGPMCar* C : Cars) if (C != Car) Park(C, true);
 	Park(Car, false);
@@ -231,6 +234,7 @@ void AGPMGameMode::StartRace()
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	for (AGPMCar* C : Cars) Park(C, false);
+	ApplyCareer();
 	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));   // ?demo : pilote automatique
 
 	// Grille : ordre des qualifications ; sinon IA rangées par niveau et joueur en milieu de grille (?grille=N)
@@ -287,10 +291,14 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		const float Skid = FMath::Clamp((FMath::Abs(Car->Beta) - 0.04f) * 6.f + (Car->bLock ? 0.6f : 0.f), 0.f, 1.f) * FMath::Min(1.f, Car->V / 15.f);
 		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
 	}
-	if (Phase == EPhase::Season)
+	if (Phase == EPhase::Season || Phase == EPhase::Factory)
 	{
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
-			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+		{
+			if (Phase == EPhase::Season && PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+			else if (PC->WasInputKeyJustPressed(EKeys::U)) Phase = Phase == EPhase::Season ? EPhase::Factory : EPhase::Season;
+			else if (Phase == EPhase::Factory && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Season;
+		}
 		return;
 	}
 	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
@@ -441,7 +449,7 @@ void AGPMGameMode::Strategy(float Dt)
 			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
 			const float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f);
 			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
-			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f);
+			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel);
 		}
 		C->Mass = 1.f + C->Fuel / 750.f;
 		C->GripMul = AGPMCar::TyreGrip(C->Tyre) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->Wear >= 1.f ? 0.7f : 1.f);
@@ -474,7 +482,45 @@ void AGPMGameMode::RecordResult()
 	if (!Season) return;
 	TArray<FGPMFinish> Fin;
 	for (const AGPMCar* C : Order) Fin.Add({ C->DriverName, C->TeamName, C->BestLap, C == Car });
+	const int32 Pos = Order.IndexOfByKey(Car) + 1;
 	LastPts = Season->RecordRace(Fin);
+	UGPMSaveGame* G = Season->State();
+	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	if (!G || !Factory) return;
+	// gains (racePrize de team.js) + part des sponsors ; moral et réputation suivent les résultats
+	static const float Prize[10] = { 5.f, 4.f, 3.4f, 2.8f, 2.4f, 2.1f, 1.8f, 1.6f, 1.4f, 1.2f };
+	LastPrize = (Pos >= 1 && Pos <= 10 ? Prize[Pos - 1] : 0.8f) * (0.8f + G->Rep / 250.f) + 2.f;
+	Factory->AddMoney(LastPrize);
+	G->Moral = FMath::Clamp(G->Moral + (Pos <= 3 ? 6 : Pos <= 10 ? 2 : -3), 0, 100);
+	G->Rep = FMath::Clamp(G->Rep + (Pos <= 3 ? 2 : Pos <= 10 ? 1 : 0), 0, 100);
+	// les écuries rivales progressent un peu à chaque course
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		for (int32 t = 1; t < Data->Teams.Num(); ++t) G->RivalDev.FindOrAdd(Data->Teams[t].Name) += (0.0012f + FMath::FRand() * 0.0018f) * 0.67f;
+	// l'usine avance jusqu'au GP suivant (GAPS de season.js, en jours)
+	G->News.Reset();
+	int32 Days = 30;
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (const TSharedPtr<FJsonValue> Gaps = Data->GetRaw(TEXT("season"), TEXT("GAPS")))
+		{
+			const TArray<TSharedPtr<FJsonValue>>& A = Gaps->AsArray();
+			if (A.IsValidIndex(G->Round - 1)) Days = int32(A[G->Round - 1]->AsNumber());
+		}
+	Factory->Tick(Days);
+	Season->Save();
+}
+
+// Carrière : pièces de l'usine sur la voiture du joueur, progrès des rivaux sur la leur
+void AGPMGameMode::ApplyCareer()
+{
+	UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	if (!bCareer || !Data || !Season || !Factory || !Season->State()) return;
+	const FGPMUpgrades U = Factory->Upgrades();
+	Car->UpVTop = U.VTop; Car->UpAcc = U.Acc; Car->UpMu = U.Mu; Car->UpBrake = U.Brake; Car->UpKd = U.Kd; Car->UpSteer = U.Steer; Car->UpFuel = U.Fuel;
+	for (AGPMCar* C : Cars)
+		if (C != Car && Data->Teams.IsValidIndex(C->TeamIdx))
+			C->Perf = Data->Teams[C->TeamIdx].Perf + Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
 }
 
 void AGPMGameMode::Continue()

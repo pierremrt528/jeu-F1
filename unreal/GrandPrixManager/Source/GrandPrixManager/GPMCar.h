@@ -87,6 +87,8 @@ public:
 	TArray<AGPMCar*> Field;                // toutes les voitures de la course (rempli par le mode de jeu)
 	float Slipstream = 0.f, Wake = 0.f;    // aspiration (vitesse de pointe) et air sale (appui), calculés par le mode de jeu
 	bool bHold = false;                    // avant le départ : freins serrés
+	/** Pièces de l'usine (carUpgrades) : multiplicateurs de la voiture du joueur. */
+	float UpVTop = 1.f, UpAcc = 1.f, UpMu = 1.f, UpBrake = 1.f, UpKd = 1.f, UpSteer = 1.f, UpFuel = 1.f;
 	bool bParked = false;                  // garée hors de la séance (qualifications)
 	bool bSCMode = false;                  // voiture de sécurité en piste : file indienne
 	float Penalty = 0.f;                   // secondes ajoutées au temps de course

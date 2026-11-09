@@ -29,7 +29,7 @@ public:
 	int32 PositionOf(const AGPMCar* C) const { return Order.IndexOfByKey(C) + 1; }
 	int32 NumCars() const { return Order.Num(); }
 	/** Départ (race.js) : feux rouges allumés un par un, extinction au bout d'un délai aléatoire. */
-	enum class EPhase : uint8 { Quali, QualiDone, Lights, Race, Done, Season };
+	enum class EPhase : uint8 { Quali, QualiDone, Lights, Race, Done, Season, Factory };
 	EPhase Phase = EPhase::Lights;
 	float LightsT = 0.f, GoAt = 5.f, Clock = 0.f, DoneT = 0.f;
 	int32 LightsOn() const { return Phase == EPhase::Lights ? FMath::Clamp(FMath::FloorToInt(LightsT / 0.8f), 0, 5) : 0; }
@@ -44,6 +44,7 @@ public:
 	void Continue();
 	bool bCareer = true;
 	int32 LastPts = 0;
+	float LastPrize = 0.f;
 	/** Qualifications : temps de chaque pilote (le joueur : son meilleur tour) et ordre de la grille. */
 	TMap<AGPMCar*, float> QTimes;
 	TArray<AGPMCar*> QOrder;
@@ -79,6 +80,7 @@ private:
 	void Strategy(float Dt);
 	void EndQuali();
 	void RecordResult();
+	void ApplyCareer();
 	bool bRecorded = false;
 	void Park(AGPMCar* C, bool bPark);
 	const FGPMTrackData* CurTrack() const;

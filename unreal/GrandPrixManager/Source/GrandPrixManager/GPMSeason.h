@@ -31,6 +31,15 @@ public:
 	UPROPERTY() TMap<FString, int32> TeamPts;
 	UPROPERTY() TMap<FString, FString> DriverTeam;
 	UPROPERTY() TArray<FGPMRaceResult> Results;
+	// Écurie et usine (team.js, garage.js)
+	UPROPERTY() float Budget = 70.f;        // M€
+	UPROPERTY() int32 Rep = 50, Moral = 60;
+	UPROPERTY() TArray<FString> Owned;      // pièces installées
+	UPROPERTY() TMap<FString, FString> DevPart;   // pôle → pièce en cours
+	UPROPERTY() TMap<FString, float> DevLeft, DevTot;   // pôle → jours restants / total
+	UPROPERTY() TArray<FString> Delayed;    // pièces déjà retardées une fois
+	UPROPERTY() TMap<FString, float> RivalDev;    // progrès des écuries rivales (perf)
+	UPROPERTY() TArray<FString> News;       // messages de l'usine depuis le dernier GP
 };
 
 /** Une ligne de classement. */
@@ -63,6 +72,7 @@ public:
 	TArray<FGPMStanding> Teams() const;
 	const TArray<FGPMRaceResult>& Results() const;
 	void Save();
+	UGPMSaveGame* State() const { return S; }
 
 	static constexpr int32 Points[10] = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
 

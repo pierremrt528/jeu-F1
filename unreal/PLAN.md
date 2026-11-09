@@ -55,7 +55,7 @@ Règles communes à toutes les étapes :
 ## Étape 11 — Cœur de la gestion (sauvegarde, écurie, saison) 🟡 (saison de 22 GP, points + meilleur tour, classements pilotes et écuries, sauvegarde gpm-season, écran de saison faits ; budget, réputation, création de l'écurie à faire)
 **Prompt :** « Porte en C++ (UObjects tenus par un `UGPMCareerSubsystem`) `js/team.js`, `js/career.js`, `js/season.js`, `js/sponsors.js` : écurie (moral, budget, réputation, confiance), calendrier daté de 22 GP (12/16/22), pré-saison en 3 étapes, points, classements pilotes/écuries, courbes de performance, sponsors et missions. Sauvegarde unique `UGPMSaveGame` (USaveGame, slot `gpm`) qui remplace les clés localStorage `gpm-*`. Tests d'automatisation (`IMPLEMENT_SIMPLE_AUTOMATION_TEST`) qui simulent une saison complète et comparent les points/budget aux résultats de la version web pour une même graine aléatoire. »
 
-## Étape 12 — Usine : recherche, infrastructures, chefs
+## Étape 12 — Usine : recherche, infrastructures, chefs 🟡 (budget, moral, réputation, gains par course ; 5 pôles de recherche de garage.json avec prix, délais, retards, échecs, 2 ateliers ; effets sur la voiture ; progrès des rivaux ; écran Usine faits ; bâtiments et chefs à faire)
 **Prompt :** « Porte `js/garage.js`, `js/infra.js`, `js/staff.js` : 5 arbres de pièces (prix, délais en jours, risques), ateliers, règlement de mi-saison, 7 bâtiments × 3 niveaux, chefs de pôle et leurs contrats, rythme de développement des rivaux, `carUpgrades` → multiplicateurs appliqués à `AGPMCar`. »
 
 ## Étape 13 — Mercato et négociations
