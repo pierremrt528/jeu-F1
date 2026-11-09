@@ -85,6 +85,9 @@ public:
 	TArray<AGPMCar*> Field;                // toutes les voitures de la course (rempli par le mode de jeu)
 	float Slipstream = 0.f, Wake = 0.f;    // aspiration (vitesse de pointe) et air sale (appui), calculés par le mode de jeu
 	bool bHold = false;                    // avant le départ : freins serrés
+	bool bParked = false;                  // garée hors de la séance (qualifications)
+	bool bSCMode = false;                  // voiture de sécurité en piste : file indienne
+	float Penalty = 0.f;                   // secondes ajoutées au temps de course
 
 	/** Pneus et carburant (strategy.js) : gomme S/M/H, usure 0 (neuf) → 1 (à plat), masse du carburant. */
 	TCHAR Tyre = 'M';

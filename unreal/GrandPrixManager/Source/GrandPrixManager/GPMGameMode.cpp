@@ -96,15 +96,95 @@ void AGPMGameMode::PlaceCar()
 		PC->Possess(Car);
 		if (Old && Old != Car) Old->Destroy();
 	}
+	// Week-end : qualifications jouées (un tour lancé), puis la course ; ?course : directement la course
+	QOrder.Reset(); QTimes.Reset();
+	if (UGameplayStatics::HasOption(OptionsString, TEXT("course"))) StartRace(); else StartQuali();
+}
+
+const FGPMTrackData* AGPMGameMode::CurTrack() const
+{
+	UGPMDataSubsystem* Data = GetGameInstance() ? GetGameInstance()->GetSubsystem<UGPMDataSubsystem>() : nullptr;
+	return Data && Track ? Data->GetTrack(Track->CircuitId) : nullptr;
+}
+
+// Estimation du tour (lapEstimate de season.js) : profil de vitesse × niveau, accélération limitée par la vitesse de pointe
+float AGPMGameMode::LapTimeFor(const FGPMTrackData* T, float Skill, float Perf)
+{
+	const int32 N = T->AISpeed.Num();
+	if (N == 0) return 90.f;
+	const float VTop = AGPMCar::VTop * Perf;
+	float V = T->AISpeed[0] * Skill, Tm = 0.f;
+	for (int32 Pass = 0; Pass < 2; ++Pass)
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float A = AGPMCar::Acc * Perf * FMath::Max(0.f, 1.f - FMath::Pow(V / VTop, 2.2f));
+			V = FMath::Min(T->AISpeed[(i + 1) % N] * Skill, FMath::Sqrt(V * V + 2.f * A * 2.f));
+			if (Pass == 1) Tm += 2.f / FMath::Max(V, 5.f);
+		}
+	return Tm;
+}
+
+void AGPMGameMode::Park(AGPMCar* C, bool bPark)
+{
+	C->bParked = bPark;
+	C->SetActorHiddenInGame(bPark);
+	C->SetActorTickEnabled(!bPark);
+}
+
+// Qualifications (qsession.js) : la voiture du joueur seule, tour lancé depuis 300 m avant la ligne ; temps des IA estimés
+void AGPMGameMode::StartQuali()
+{
+	const FGPMTrackData* T = CurTrack();
+	if (!T || !Car) return;
+	Phase = EPhase::Quali;
+	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
+	for (AGPMCar* C : Cars) if (C != Car) Park(C, true);
+	Park(Car, false);
+	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));
+	const int32 N = T->WX.Num(), I = (N - 150) % N;
+	Car->PlaceOnTrack(T, 0);
+	Car->Idx = I; Car->X = T->WX[I]; Car->Z = T->WZ[I]; Car->Y = T->WY[I]; Car->Heading = T->H[I];
+	Car->Lat = Car->Lane = 0.f; Car->V = 45.f; Car->bHold = false;
+	Car->Field = { Car.Get() };
+	Car->Tyre = 'S'; Car->Wear = 0.f; Car->Fuel = 10.f; Car->Mass = 1.f + Car->Fuel / 750.f; Car->GripMul = AGPMCar::TyreGrip('S');
+	Order = { Car.Get() };
+	if (QTimes.Num() == 0)
+		for (AGPMCar* C : Cars)
+			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f);
+	RadioT = 0.f;
+	Say(TEXT("Qualifications : un tour lancé. Donne tout !"));
+}
+
+void AGPMGameMode::EndQuali()
+{
+	Phase = EPhase::QualiDone;
+	const float Mine = Car->LastLap;
+	if (float* Prev = QTimes.Find(Car)) { if (Mine > 0.f && Mine < *Prev) *Prev = Mine; }
+	else QTimes.Add(Car, Mine > 0.f ? Mine : 999.f);
+	QTimes.GenerateKeyArray(QOrder);
+	QOrder.Sort([this](const AGPMCar& A, const AGPMCar& B) { return QTimes.FindRef(const_cast<AGPMCar*>(&A)) < QTimes.FindRef(const_cast<AGPMCar*>(&B)); });
+	Order = QOrder;
+}
+
+void AGPMGameMode::StartRace()
+{
+	const FGPMTrackData* T = CurTrack();
+	if (!T || !Car) return;
+	for (AGPMCar* C : Cars) Park(C, false);
 	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));   // ?demo : pilote automatique
 
-	// Grille : IA rangées par niveau, le joueur en milieu de grille (?grille=N pour choisir)
+	// Grille : ordre des qualifications ; sinon IA rangées par niveau et joueur en milieu de grille (?grille=N)
 	TArray<AGPMCar*> Grid;
-	for (AGPMCar* C : Cars) if (C != Car) Grid.Add(C);
-	Grid.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.Skill * A.Perf > B.Skill * B.Perf; });
-	const FString GridOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("grille"));
-	const int32 Slot = FMath::Clamp((GridOpt.IsEmpty() ? 10 : FCString::Atoi(*GridOpt)) - 1, 0, Grid.Num());
-	Grid.Insert(Car, Slot);
+	int32 Slot = 0;
+	if (QOrder.Num() == Cars.Num()) { Grid = QOrder; Slot = Grid.IndexOfByKey(Car); }
+	else
+	{
+		for (AGPMCar* C : Cars) if (C != Car) Grid.Add(C);
+		Grid.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.Skill * A.Perf > B.Skill * B.Perf; });
+		const FString GridOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("grille"));
+		Slot = FMath::Clamp((GridOpt.IsEmpty() ? 10 : FCString::Atoi(*GridOpt)) - 1, 0, Grid.Num());
+		Grid.Insert(Car, Slot);
+	}
 	for (int32 k = 0; k < Grid.Num(); ++k)
 	{
 		Grid[k]->PlaceOnTrack(T, k);
@@ -114,6 +194,8 @@ void AGPMGameMode::PlaceCar()
 	Order = Grid;
 	for (AGPMCar* C : Grid) C->BestLap = 0.f;
 	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f;
+	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
+	bSCUsed = false; SCAhead.Reset();
 	GoAt = 4.2f + 0.4f + FMath::FRand() * 0.8f;
 	// Nombre de tours : format Sprint (~11 min, lapsFor de strategy.js), ou ?tours=N
 	LapEstimate = 0.f;
@@ -140,6 +222,17 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (Cars.Num() == 0) return;
+	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
+	{
+		RadioT -= DeltaSeconds;
+		if (Phase == EPhase::Quali && Car && Car->Lap >= 2) EndQuali();
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (PC->WasInputKeyJustPressed(EKeys::Enter)) StartRace();                                    // à la course
+			else if (PC->WasInputKeyJustPressed(EKeys::BackSpace)) StartQuali();                           // refaire le tour
+		}
+		return;
+	}
 	if (Phase == EPhase::Lights)
 	{
 		LightsT += DeltaSeconds;
@@ -148,7 +241,12 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
 	Aspiration(DeltaSeconds);
 	Collide();
-	if (Phase == EPhase::Race) Strategy(DeltaSeconds);
+	if (Phase == EPhase::Race)
+	{
+		Strategy(DeltaSeconds);
+		if (!bSCUsed && UGameplayStatics::HasOption(OptionsString, TEXT("sc")) && Clock > 20.f) RequestSafety(true);
+		UpdateSafety(DeltaSeconds);
+	}
 	RadioT -= DeltaSeconds;
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		if (PC->WasInputKeyJustPressed(EKeys::B)) ToggleBox();
@@ -167,12 +265,76 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
 	{
 		if (A.bFinished != B.bFinished) return A.bFinished;
-		if (A.bFinished) return A.FinishTime < B.FinishTime;
+		if (A.bFinished) return A.FinishTime + A.Penalty < B.FinishTime + B.Penalty;
 		return A.Progress() > B.Progress();
 	});
 	if (Phase == EPhase::Done)
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 			if (PC->WasInputKeyJustPressed(EKeys::Enter)) Restart();
+}
+
+void AGPMGameMode::RequestSafety(bool bForce)
+{
+	if (SC || bSCUsed || Phase != EPhase::Race || Order.Num() == 0) return;
+	const AGPMCar* Lead = Order[0];
+	const FGPMTrackData* T = Lead->GetTrack();
+	if (!T) return;
+	if (!bForce && (Lead->Progress() / float(T->WX.Num()) - 1.f) / TotalLaps > 0.8f) return;   // pas dans le dernier cinquième
+	if (!bForce && FMath::FRand() > 0.35f) return;
+	bSCUsed = true;
+	SC = GetWorld()->SpawnActor<AGPMCar>();
+	if (!SC) return;
+	SC->SetLivery(FLinearColor(0.8f, 0.82f, 0.85f), FLinearColor(0.1f, 0.75f, 0.25f));
+	SC->Perf = 0.5f;
+	SC->DriverName = TEXT("Sécurité");
+	SC->MakeAI(0.56f);
+	SC->PlaceOnTrack(T, 0);
+	// 220 m devant le premier, au milieu de la piste, déjà lancée
+	const int32 N = T->WX.Num(), I = (Lead->Idx + 110) % N;
+	SC->Idx = I; SC->X = T->WX[I]; SC->Z = T->WZ[I]; SC->Y = T->WY[I]; SC->Heading = T->H[I];
+	SC->Lat = SC->Lane = 0.f; SC->V = 40.f; SC->Lap = 1000;   // jamais comptée à l'arrivée
+	SCT = 0.f; SCEnding = 0.f;
+	SCAhead.Reset();
+	for (AGPMCar* C : Order) { if (C == Car) break; SCAhead.Add(C); }
+	for (AGPMCar* C : Cars) C->Field.Add(SC);   // le peloton se cale derrière elle
+	Say(TEXT("Muret : voiture de sécurité ! Ralentis, interdiction de dépasser."));
+}
+
+void AGPMGameMode::UpdateSafety(float Dt)
+{
+	for (AGPMCar* C : Cars) C->bSCMode = SafetyOut();
+	if (!SC) return;
+	SCT += Dt;
+	// fin : peloton regroupé (moins de 22 m par voiture), ou au bout de 75 s
+	const float Spread = Order.Num() > 1 ? (Order[0]->Progress() - Order.Last()->Progress()) * 2.f : 0.f;
+	if (SCEnding <= 0.f && ((SCT > 25.f && Spread < Order.Num() * 22.f) || SCT > 75.f))
+	{
+		SCEnding = 4.f;
+		Say(TEXT("Muret : la voiture de sécurité rentre. Prépare la relance !"));
+	}
+	if (SCEnding > 0.f)
+	{
+		SCEnding -= Dt;
+		if (SCEnding <= 0.f)
+		{
+			for (AGPMCar* C : Cars) C->Field.Remove(SC);
+			SC->Destroy(); SC = nullptr; SCAhead.Reset();
+			Say(TEXT("Muret : fin de la voiture de sécurité, c'est reparti !"));
+		}
+		return;
+	}
+	// joueur : pénalité s'il passe une voiture qui était devant lui
+	if (!Car || Car->PitPhase) { SCAhead.Reset(); return; }
+	for (auto It = SCAhead.CreateIterator(); It; ++It)
+	{
+		AGPMCar* C = *It;
+		if (C->PitPhase) { It.RemoveCurrent(); continue; }
+		if (Car->Progress() - C->Progress() > 4.f)
+		{
+			It.RemoveCurrent();
+			if (Car->bPlayerControlled) { Car->Penalty += 5.f; Say(TEXT("Muret : dépassement sous voiture de sécurité, pénalité de 5 s !")); }
+		}
+	}
 }
 
 // gomme la plus tendre qui tient jusqu'à l'arrivée sans passer sous 40 % (MAXW = 0,6)
@@ -234,7 +396,7 @@ void AGPMGameMode::Strategy(float Dt)
 
 float AGPMGameMode::ResultTime(const AGPMCar* C) const
 {
-	if (C->bFinished) return C->FinishTime;
+	if (C->bFinished) return C->FinishTime + C->Penalty;
 	const FGPMTrackData* T = C->GetTrack();
 	const float Total = (TotalLaps + 1) * (T ? T->WX.Num() : 1);
 	return Clock * Total / FMath::Max(1.f, C->Progress());
@@ -288,6 +450,7 @@ void AGPMGameMode::Collide()
 					const float K = Close * 0.55f;
 					A.V -= K * (FaX * Dx + FaZ * Dz);
 					B.V += K * (FbX * Dx + FbZ * Dz);
+					if (Close > 14) RequestSafety(false);
 					if (Close > 5)
 					{
 						const float Kick = FMath::Min(0.5f, (Close - 5) * 0.03f) * (FMath::FRand() < 0.5f ? -1.f : 1.f);
@@ -313,4 +476,13 @@ static FAutoConsoleCommandWithWorldAndArgs GCircuitCmd(
 			return;
 		}
 		if (AGPMGameMode* GM = World->GetAuthGameMode<AGPMGameMode>()) GM->LoadCircuit(Args[0]);
+	}));
+
+// Commande console : GPM.SC (voiture de sécurité tout de suite)
+static FAutoConsoleCommandWithWorldAndArgs GSafetyCmd(
+	TEXT("GPM.SC"),
+	TEXT("Fait sortir la voiture de sécurité."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		if (AGPMGameMode* GM = World ? World->GetAuthGameMode<AGPMGameMode>() : nullptr) GM->RequestSafety(true);
 	}));

@@ -158,7 +158,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Heading = Track->H[Idx];
 	V = Beta = Ax = Ay = SpinT = 0.f;
 	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
-	bFinished = false; FinishTime = 0.f;
+	bFinished = false; FinishTime = 0.f; Penalty = 0.f; bSCMode = false;
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	UpdateTransform();
 }
@@ -210,6 +210,8 @@ void AGPMCar::Tick(float DeltaSeconds)
 	else DriveAI(DeltaSeconds);
 	if (bHold) { Throttle = 0.f; Brake = 1.f; }
 	if (bFinished && V > 20.f) Throttle = 0.f;   // tour de décélération
+	// voiture de sécurité : limiteur doux pour le joueur
+	if (bSCMode && bPlayerControlled && Track && Track->AISpeed.IsValidIndex(Idx) && V > Track->AISpeed[Idx] * 0.72f) Throttle = 0.f;
 	Accum = FMath::Min(Accum + DeltaSeconds, 0.1f);
 	const int32 N = Track->WX.Num();
 	while (Accum >= PhysDt)

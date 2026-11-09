@@ -30,6 +30,7 @@ private:
 	FString Gap(float Seconds) const;
 	void DrawCentered(const FString& Text, FLinearColor Color, float W, float Y, class UFont* Font, float S);
 	void DrawLights(int32 On, float W);
+	void DrawQuali(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	void DrawResults(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	bool bWasDown = true;
 

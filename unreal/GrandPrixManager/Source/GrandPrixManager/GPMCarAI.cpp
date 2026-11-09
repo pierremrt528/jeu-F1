@@ -49,13 +49,18 @@ void AGPMCar::DriveAI(float Dt)
 	{
 		if (!O || O == this || O->PitPhase) continue;
 		const float D = ((O->Idx - Idx + N) % N) * SplineDS;
-		if (D > 0 && D < 40 && FMath::Abs(O->Lat - Lat) < 2.6f && D < Gap) { Gap = D; Ahead = O; }
+		if (D > 0 && D < 40 && FMath::Abs(O->Lat - Lat) < (bSCMode ? 99.f : 2.6f) && D < Gap) { Gap = D; Ahead = O; }
 	}
 	PassTimer -= Dt;
 	const float Lim = T.Width / 2.f - 1.4f;
 	float LaneTarget = T.RL[Idx] * 0.85f + LaneBias;
 	float VCap = 1e9f;
-	if (Ahead && (Ahead->V < V + 3 || Gap < 14))
+	if (bSCMode)
+	{
+		// voiture de sécurité : file indienne, pas de dépassement
+		if (Ahead) VCap = Ahead->V + (Gap - 16) * 0.6f;
+	}
+	else if (Ahead && (Ahead->V < V + 3 || Gap < 14))
 	{
 		if (PassTimer <= 0)
 		{
@@ -69,7 +74,7 @@ void AGPMCar::DriveAI(float Dt)
 
 	// consigne d'équipe : l'équipier n°2 s'écarte et lève le pied quand le joueur le suit de près
 	bYielding = false;
-	if (AGPMCar* P = YieldTo; P && Lap >= 2)
+	if (AGPMCar* P = YieldTo; P && Lap >= 2 && !bSCMode)
 	{
 		const float D = Progress() - P->Progress();
 		YieldCd = FMath::Max(0.f, YieldCd - Dt);
@@ -90,7 +95,7 @@ void AGPMCar::DriveAI(float Dt)
 	// vitesse cible
 	float Vt = T.AISpeed.IsValidIndex(Idx) ? T.AISpeed[Idx] : 40.f;
 	for (int32 k = 1; k <= 4; ++k) if (T.AISpeed.IsValidIndex((Idx + k) % N)) Vt = FMath::Min(Vt, T.AISpeed[(Idx + k) % N]);
-	Vt = FMath::Min(Vt * Skill, VCap);
+	Vt = FMath::Min(Vt * Skill * (bSCMode ? (Ahead ? 0.72f : 0.9f) : 1.f), VCap);
 	if (bYielding) Vt *= 0.9f;
 	if (bOffTrack) Vt = FMath::Min(Vt, 25.f);
 	if (V < Vt - 0.8f) { Throttle = 1; Brake = 0; }
