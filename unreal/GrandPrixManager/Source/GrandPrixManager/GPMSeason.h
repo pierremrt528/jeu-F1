@@ -33,22 +33,35 @@ public:
 	UPROPERTY() TArray<FGPMRaceResult> Results;
 	// Écurie et usine (team.js, garage.js)
 	UPROPERTY() float Budget = 70.f;        // M€
-	UPROPERTY() int32 Rep = 50, Moral = 60;
+	UPROPERTY() int32 Rep = 50;
+	UPROPERTY() int32 Moral = 60;
 	UPROPERTY() TArray<FString> Owned;      // pièces installées
 	UPROPERTY() TMap<FString, FString> DevPart;   // pôle → pièce en cours
-	UPROPERTY() TMap<FString, float> DevLeft, DevTot;   // pôle → jours restants / total
+	UPROPERTY() TMap<FString, float> DevLeft;   // pôle → jours restants / total
+	UPROPERTY() TMap<FString, float> DevTot;
 	UPROPERTY() TArray<FString> Delayed;    // pièces déjà retardées une fois
 	UPROPERTY() TMap<FString, float> RivalDev;    // progrès des écuries rivales (perf)
 	UPROPERTY() TArray<FString> News;       // messages de l'usine depuis le dernier GP
 
 	// Carrière (career.js) : identité de l'écurie, motoriste, équipier et son contrat
 	UPROPERTY() bool bCreated = false;
-	UPROPERTY() FString TeamName, PlayerName, Tier = TEXT("mid"), Engine, Sponsor;
-	UPROPERTY() int32 Col1 = 0, Col2 = 6;
-	UPROPERTY() float BasePerf = 0.96f, Fuel = 1.f;
+	UPROPERTY() FString TeamName;
+	UPROPERTY() FString PlayerName;
+	UPROPERTY() FString Tier = TEXT("mid");
+	UPROPERTY() FString Engine;
+	UPROPERTY() FString Sponsor;
+	UPROPERTY() int32 Col1 = 0;
+	UPROPERTY() int32 Col2 = 6;
+	UPROPERTY() float BasePerf = 0.96f;
+	UPROPERTY() float Fuel = 1.f;
 	UPROPERTY() FString MateName;
-	UPROPERTY() float MateSpd = 80.f, MateStrat = 75.f, MateTyre = 74.f, MatePot = 60.f, MateSal = 1.f;
-	UPROPERTY() int32 MateYears = 1, MateSince = 2027;
+	UPROPERTY() float MateSpd = 80.f;
+	UPROPERTY() float MateStrat = 75.f;
+	UPROPERTY() float MateTyre = 74.f;
+	UPROPERTY() float MatePot = 60.f;
+	UPROPERTY() float MateSal = 1.f;
+	UPROPERTY() int32 MateYears = 1;
+	UPROPERTY() int32 MateSince = 2027;
 	UPROPERTY() FString MateRole = TEXT("eq");
 	UPROPERTY() TMap<FString, FString> Seats;     // « écurie|0 » → pilote (écuries rivales, après les transferts)
 	UPROPERTY() TMap<FString, float> Skill;       // niveau des pilotes rivaux et libres
@@ -60,11 +73,18 @@ public:
 	UPROPERTY() TArray<FString> DealName;
 	UPROPERTY() TArray<float> DealGp;
 	UPROPERTY() TArray<int32> DealN;
-	UPROPERTY() TArray<FString> Flags, SeenEv, SeenSt;
+	UPROPERTY() TArray<FString> Flags;
+	UPROPERTY() TArray<FString> SeenEv;
+	UPROPERTY() TArray<FString> SeenSt;
 	UPROPERTY() TArray<int32> PressSeen;
-	UPROPERTY() FString StoryId, StoryStep;
-	UPROPERTY() int32 StoryDue = 0, StoryEp = 0, StoryVar = 0, GridPen = 0;
-	UPROPERTY() bool bReviewed = false, bFired = false;
+	UPROPERTY() FString StoryId;
+	UPROPERTY() FString StoryStep;
+	UPROPERTY() int32 StoryDue = 0;
+	UPROPERTY() int32 StoryEp = 0;
+	UPROPERTY() int32 StoryVar = 0;
+	UPROPERTY() int32 GridPen = 0;
+	UPROPERTY() bool bReviewed = false;
+	UPROPERTY() bool bFired = false;
 };
 
 /** Une ligne de classement. */
