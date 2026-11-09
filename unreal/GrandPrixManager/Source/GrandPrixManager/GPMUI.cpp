@@ -117,9 +117,10 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 {
 	uint32 H = HashCombine(GetTypeHash(int32(GM->Phase)), GetTypeHash(Version));
 	H = HashCombine(H, GetTypeHash(GM->SetupStep * 100 + GM->MercatoPage));
-	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0)));
+	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
+	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
 	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
 	if (const UGPMCareerSubsystem* C = CareerSys())
 	{
@@ -149,9 +150,8 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 	}
 	if (GM->Phase == EP::Prerace && PC)
 	{
-		static const FKey PlanKeys[] = { EKeys::One, EKeys::Two, EKeys::Three };
 		for (int32 k = 0; k < GM->Plans.Num() && k < 3; ++k)
-			if (PC->WasInputKeyJustPressed(PlanKeys[k])) GM->Stints = GM->Plans[k].Stints;
+			if (AGPMGameMode::DigitPressed(PC, k + 1)) GM->Stints = GM->Plans[k].Stints;
 		if (PC->WasInputKeyJustPressed(EKeys::Enter)) GM->Go(false);
 		return;
 	}
@@ -162,9 +162,8 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		if (!PC) return;
 		if (Dl->Chosen < 0)
 		{
-			static const FKey Keys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five };
 			for (int32 k = 0; k < Dl->Choices.Num() && k < 5; ++k)
-				if (PC->WasInputKeyJustPressed(Keys[k]) && !Dl->Choices[k].bOff) { C->Choose(k); return; }
+				if (AGPMGameMode::DigitPressed(PC, k + 1) && !Dl->Choices[k].bOff) { C->Choose(k); return; }
 		}
 		else if (PC->WasInputKeyJustPressed(EKeys::Enter))
 		{
@@ -531,6 +530,14 @@ TSharedRef<SWidget> FGPMUI::SoloScreen(AGPMGameMode* GM)
 			Button(FString::Printf(TEXT("%d tours"), L), GM->SoloLaps == L ? Acc : CNeutral, [WGM, L]() { if (WGM.IsValid()) WGM->SoloLaps = L; }, true, 120.f, 46.f, 16)
 		];
 
+	TSharedRef<SHorizontalBox> Wx = SNew(SHorizontalBox);
+	static const TCHAR* WxOpts[] = { TEXT("Au hasard"), TEXT("Sec"), TEXT("Pluie"), TEXT("Averse") };
+	for (int32 k = 0; k < 4; ++k)
+		Wx->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+		[
+			Button(WxOpts[k], GM->SoloWeather == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) WGM->SoloWeather = k; }, true, 140.f, 46.f, 16)
+		];
+
 	const FString TrackLine = T ? FString::Printf(TEXT("Circuit %d / %d · %.2f km · largeur %.0f m"), GM->SoloIdx + 1, Ids.Num(), T->WX.Num() * 2.f / 1000.f, T->Width) : FString();
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 24.f))
@@ -563,6 +570,8 @@ TSharedRef<SWidget> FGPMUI::SoloScreen(AGPMGameMode* GM)
 			+ SHorizontalBox::Slot().AutoWidth()
 			[ Button(TEXT("Départ en milieu de grille"), !GM->bSoloQuali ? Acc : CNeutral, [WGM]() { if (WGM.IsValid()) WGM->bSoloQuali = false; }, true, 240.f, 46.f, 16) ]
 		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 18.f, 0.f, 8.f))[ Txt(TEXT("MÉTÉO"), 14, CDim, true) ]
+		+ SVerticalBox::Slot().AutoHeight()[ Wx ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SSpacer) ]
 		+ SVerticalBox::Slot().AutoHeight()
 		[

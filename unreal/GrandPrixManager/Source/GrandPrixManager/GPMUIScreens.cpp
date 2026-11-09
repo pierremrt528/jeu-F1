@@ -67,7 +67,11 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 		const FGPMTrackData* T = Data ? Data->GetTrack(S->CurrentCircuit()) : nullptr;
 		NextBox->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("PROCHAIN GRAND PRIX · %d / %d"), S->Round() + 1, S->NumRounds()), 14, CDim, true) ];
 		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 2.f))[ Txt(T ? T->Name : S->CurrentCircuit(), 30, CText, true, true) ];
-		if (T) NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Txt(FString::Printf(TEXT("%.2f km · largeur %.0f m"), T->WX.Num() * 2.f / 1000.f, T->Width), 15, CDim) ];
+		if (T) NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
+		[
+			Txt(GM->Circuit() == T ? FString::Printf(TEXT("%.2f km · largeur %.0f m · météo : %s"), T->WX.Num() * 2.f / 1000.f, T->Width, *GM->WeatherLabel().ToLower())
+				: FString::Printf(TEXT("%.2f km · largeur %.0f m"), T->WX.Num() * 2.f / 1000.f, T->Width), 15, GM->bRainStart || GM->WxChangeAt >= 0.f ? CInfo : CDim)
+		];
 		// format de course : Sprint (~11 min) ou Long (~22 min)
 		const int32 NLaps = GM->Circuit() == T ? GM->LapsFor() : 0;
 		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))

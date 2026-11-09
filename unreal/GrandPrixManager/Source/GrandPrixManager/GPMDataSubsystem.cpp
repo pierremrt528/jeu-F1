@@ -43,6 +43,7 @@ void UGPMDataSubsystem::ReadTheme(const TSharedPtr<FJsonObject>& O, FGPMTheme& T
 	O->TryGetStringField(TEXT("treeKind"), Th.TreeKind);
 	double D;
 	if (O->TryGetNumberField(TEXT("trees"), D)) Th.Trees = int32(D);
+	if (O->TryGetNumberField(TEXT("dry"), D)) Th.Dry = float(D);
 	if (O->TryGetArrayField(TEXT("treeHue"), A) && A->Num() == 2) Th.TreeHue = float(((*A)[0]->AsNumber() + (*A)[1]->AsNumber()) / 2);
 	O->TryGetBoolField(TEXT("sea"), Th.bSea);
 	const TSharedPtr<FJsonObject>* C = nullptr;
@@ -248,6 +249,18 @@ const FGPMCarModel* UGPMDataSubsystem::GetCarModel()
 		{
 			const FColor C = FColor::FromHex(V->AsString());   // valeurs déjà linéaires (three.js)
 			M.Fixed.Add(FLinearColor(C.R / 255.f, C.G / 255.f, C.B / 255.f));
+		}
+	// ailerons (dégâts visibles) : plages de sommets de la carrosserie
+	const TSharedPtr<FJsonObject>* Rg = nullptr;
+	if (O->TryGetObjectField(TEXT("R"), Rg))
+		for (int32 w = 0; w < 2; ++w)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Range = nullptr;
+			if ((*Rg)->TryGetArrayField(w ? TEXT("rw") : TEXT("fw"), Range) && Range->Num() == 2)
+			{
+				const int32 First = int32((*Range)[0]->AsNumber()), Count = int32((*Range)[1]->AsNumber());
+				if (First >= 0 && Count > 0 && First + Count <= M.P.Num()) { M.Wing[w][0] = First; M.Wing[w][1] = Count; }
+			}
 		}
 	Files.Remove(TEXT("car.json"));
 	UE_LOG(LogGPM, Log, TEXT("Monoplace : %d triangles"), M.P.Num() / 3);

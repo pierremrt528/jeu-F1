@@ -95,7 +95,9 @@ void AGPMCar::DriveAI(float Dt)
 	// vitesse cible
 	float Vt = T.AISpeed.IsValidIndex(Idx) ? T.AISpeed[Idx] : 40.f;
 	for (int32 k = 1; k <= 4; ++k) if (T.AISpeed.IsValidIndex((Idx + k) % N)) Vt = FMath::Min(Vt, T.AISpeed[(Idx + k) % N]);
-	Vt = FMath::Min(Vt * Skill * (bSCMode ? (Ahead ? 0.72f : 0.9f) : 1.f), VCap);
+	// adhérence du moment (gomme, usure, piste mouillée, poids de l'essence) et appui perdu (aileron abîmé), comme ai.js
+	const float GripNow = FMath::Max(0.2f, GripMul / (1.f + (Mass - 1.f) * 0.25f) * (0.4f + 0.6f * DmgKd));
+	Vt = FMath::Min(Vt * Skill * (bSCMode ? (Ahead ? 0.72f : 0.9f) : 1.f) * FMath::Sqrt(GripNow), VCap);
 	if (bYielding) Vt *= 0.9f;
 	if (bOffTrack) Vt = FMath::Min(Vt, 25.f);
 	if (V < Vt - 0.8f) { Throttle = 1; Brake = 0; }

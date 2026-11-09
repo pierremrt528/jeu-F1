@@ -7,6 +7,7 @@
 
 class AGPMTrack;
 class AGPMCar;
+class APlayerController;
 
 /**
  * Mode de jeu de base. Étape 3 : charge un circuit (option ?circuit=<id>, comme le jeu web, ou commande GPM.Circuit <id>)
@@ -75,6 +76,7 @@ public:
 	/** Fin des fenêtres à choix (presse, flash info, négociation). */
 	void EndDialogs();
 	int32 SetupStep = 0, SoloIdx = 0, SoloLaps = 5, MercatoPage = 0;
+	int32 SoloWeather = 0;          // course solo : 0 au hasard, 1 sec, 2 pluie, 3 averse
 	bool bSoloQuali = true, bNegoFromMercato = false, bChampShown = false;
 	TArray<FString> LastLines;      // bilan de la course (direction, sponsors)
 	// réglages (sauvegardés dans GameUserSettings.ini)
@@ -103,6 +105,32 @@ public:
 	float PlanTime(const TArray<TPair<TCHAR, int32>>& InStints, float LapTime, float* OutMaxWear = nullptr) const;
 	TArray<FPlan> MakePlans() const;
 	const FGPMTrackData* Circuit() const { return CurTrack(); }
+	// --- Course complète (strategy.js) : météo, radio du muret, secteurs ---
+	/** Météo du week-end (forecast) : pluie au départ, changement en cours de course, piste qui mouille puis sèche. */
+	bool bRainStart = false;                 // il pleut au départ
+	float WxChangeAt = -1.f;                 // part de la course où la météo change (−1 : jamais)
+	bool bWxDone = false, bWxWarned = false;
+	bool bRaining = false;
+	float TrackWet = 0.f;                    // piste : 0 sèche … 1 détrempée
+	float RainShow = 0.f;                    // pluie à l'écran (suit bRaining en douceur)
+	void Forecast();
+	FString WeatherLabel() const;            // « Sec », « Pluie », « Averse attendue », « Éclaircie attendue »
+	/** Tour plus lent sur le mouillé (qualifications et courses simulées). */
+	float WetLapK() const { return 1.f + 0.1f * TrackWet; }
+	float RaceWetK() const;
+	/** Radio du muret (3 boutons, touches 1 2 3 ou I M N) : 0 point complet, 1 rythme, 2 pneus du prochain arrêt. */
+	void RadioCall(int32 K);
+	TCHAR NextStopTyre(const AGPMCar* C) const;
+	TCHAR ManualTyre = 0;                    // pneus demandés à la radio pour un arrêt hors stratégie
+	bool bTyrePicked = false;                // le joueur a choisi lui-même les pneus du prochain arrêt
+	/** Qualifications : secteurs S1 S2 S3 (0 = pas encore), couleur (1 violet, 2 vert, 3 jaune), records perso du week-end. */
+	float QSec[3] = { 0.f, 0.f, 0.f };
+	int32 QCol[3] = { 0, 0, 0 };
+	float QPB[3] = { 0.f, 0.f, 0.f };
+	float QPole() const;                     // meilleur temps des IA (la pole à battre)
+	bool QDelta(float& Out) const;           // écart en direct avec la pole sur le tour en cours
+	/** Touche chiffre 1 à 5, aussi sur un clavier AZERTY (& é " ' () et sur le pavé numérique. */
+	static bool DigitPressed(const APlayerController* PC, int32 D);
 	/** Images par seconde (moyenne glissante) et résolution adaptative en %. */
 	float Fps = 60.f;
 	int32 ScreenPct = 100;
@@ -167,4 +195,21 @@ private:
 	void ApplySetup();
 	void SimRace();
 	bool bNoIntro = false;
+	// météo, dégâts, radio, secteurs
+	void ResetWeather();
+	void UpdateWeather(float Dt);
+	void UpdateSky(float Dt);
+	void AddDamage(AGPMCar* C, float Amount, bool bRear);
+	bool WantBox(const AGPMCar* C) const;
+	FString RadioBrief() const;
+	void UpdateSectors();
+	int32 SectorColour(int32 K) const;
+	float QSplit[2] = { 0.f, 0.f };
+	float QPB0[3] = { 0.f, 0.f, 0.f };
+	TArray<float> QCum;                      // temps de référence cumulé le long du tour (profil de vitesse)
+	float SkyGloom = 0.f, SkyGloomSet = -1.f, SkyCaptured = 0.f, WetSet = -1.f;
+	float FogBase = 0.004f;
+	FLinearColor FogTint = FLinearColor(0.36f, 0.42f, 0.48f);
+	UPROPERTY() TObjectPtr<class USkyAtmosphereComponent> Atmos;
+	UPROPERTY() TObjectPtr<class AGPMDebris> Debris;
 };

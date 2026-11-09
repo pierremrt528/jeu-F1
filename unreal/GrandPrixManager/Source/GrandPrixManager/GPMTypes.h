@@ -54,6 +54,7 @@ struct FGPMTheme
 	int32 City = 0; float CityHMin = 15.f, CityHMax = 60.f;
 	FLinearColor MountFar = FLinearColor(0.35f, 0.45f, 0.55f), MountNear = FLinearColor(0.2f, 0.3f, 0.22f);
 	float FarH0 = 160.f, FarH1 = 520.f, NearH0 = 60.f, NearH1 = 260.f;
+	float Dry = 0.55f;                              // probabilité d'un week-end sec (forecast de strategy.js)
 };
 
 USTRUCT(BlueprintType)
@@ -112,5 +113,6 @@ struct FGPMCarModel
 	TArray<FVector> P, N;              // sommets non indexés (3 par triangle), normales
 	TArray<int32> K;                   // couleur : 0 = principale, 1 = accent, 2 = casque, sinon Fixed[K]
 	TArray<FLinearColor> Fixed;        // couleurs fixes (carbone, pneus…), linéaires
+	int32 Wing[2][2] = { { 0, 0 }, { 0, 0 } };   // ailerons avant / arrière : premier sommet, nombre de sommets (dégâts)
 };
 

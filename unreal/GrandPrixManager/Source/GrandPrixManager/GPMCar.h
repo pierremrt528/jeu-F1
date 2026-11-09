@@ -99,6 +99,7 @@ public:
 	float Wear = 0.f, Fuel = 0.f, GripMul = 1.f, Mass = 1.f;
 	int32 Stops = 0, TeamIdx = 0;
 	bool bBox = false;                     // rentrer au stand au prochain passage
+	TArray<TPair<TCHAR, int32>> Plan;      // stratégie d'une IA : gomme et tours de chaque relais
 	TCHAR NextTyre = 'H';
 	/** Voie des stands : 0 = en piste, 1 = entrée, 2 = arrêt, 3 = sortie ; PitKf = position (indice signé). */
 	int32 PitPhase = 0;
@@ -108,6 +109,36 @@ public:
 	static float TyreWpl(TCHAR T);
 	static float LifeGrip(float R);
 	float Progress() const { return Lap * (Track ? Track->WX.Num() : 1) + Idx; }
+
+	/** Modes de pilotage (MODES de strategy.js) : 0 attaque, 1 normal, 2 économie. */
+	int32 Mode = 1;
+	float PowerMul = 1.f, AccMul = 1.f;    // vitesse de pointe et accélération (mode, crevaison)
+	static float ModeV(int32 InMode) { return InMode == 0 ? 1.012f : InMode == 2 ? 0.985f : 1.f; }
+	static float ModeA(int32 InMode) { return InMode == 0 ? 1.04f : InMode == 2 ? 0.94f : 1.f; }
+	static float ModeFuel(int32 InMode) { return InMode == 0 ? 1.15f : InMode == 2 ? 0.8f : 1.f; }
+	static float ModeWear(int32 InMode) { return InMode == 0 ? 1.3f : InMode == 2 ? 0.75f : 1.f; }
+	static FString ModeName(int32 InMode) { return InMode == 0 ? TEXT("attaque") : InMode == 2 ? TEXT("économie") : TEXT("normal"); }
+	/** Adhérence d'une gomme selon l'humidité de la piste (tyreGrip de strategy.js, hors usure) : pneus pluie seuls efficaces sur le mouillé. */
+	static float WetGrip(TCHAR T, float Wet) { return T == 'W' ? TyreGrip(T) - 0.04f * Wet : TyreGrip(T) * (1.f - 0.45f * Wet); }
+
+	/** Dégâts (addDamage de strategy.js) : aileron avant → sous-virage, arrière → survirage ; réparés au stand. */
+	float Dmg = 0.f, DmgR = 0.f;           // 0 intact … 1 détruit
+	float DmgNew = 0.f, DmgNewR = 0.f;     // chocs de l'image, appliqués par le mode de jeu
+	float DmgKd = 1.f, RwKd = 1.f;         // part de l'appui restant à l'avant et à l'arrière
+	float Bump = 0.f;                      // pas de nouveaux dégâts pendant un court instant après un contact
+	bool bFwOff = false, bRwOff = false;   // aileron arraché
+	bool bFlat = false;                    // crevaison (pneu à 0 %)
+	bool bAdvised = false;                 // conseil du muret déjà donné ce tour-ci
+	float WetCall = 0.45f;                 // humidité de la piste à partir de laquelle ce pilote passe aux pneus pluie
+	/** Aileron tordu d'un côté (−1 / 1), arraché, ou voiture réparée (debris.js). */
+	void BendWing(bool bRear, float Side);
+	void DetachWing(bool bRear);
+	void RepairWings();
+	/** Morceau d'aileron (repère de la voiture, cm) avec ses couleurs, pour le débris qui s'envole. */
+	bool WingPiece(bool bRear, TArray<FVector>& OutP, TArray<FVector>& OutN, TArray<FLinearColor>& OutC) const;
+	UMaterialInterface* BodyMaterial() const;
+	/** Rugosité de chaque couleur de la palette du modèle (passée par l'alpha des sommets). */
+	static float PaintRough(int32 K);
 
 	// Constantes (SPEC du jeu web) : vtop ≈ 335 km/h
 	static constexpr float VTop = 93.f, Acc = 12.5f, Brake0 = 17.f, BrakeK = 0.0032f, Mu = 1.65f, Kd = 0.0034f, WB = 3.6f, SteerMax = 0.34f;
@@ -123,6 +154,11 @@ private:
 	UStaticMeshComponent* AddPart(const TCHAR* Name, const TCHAR* Shape, FVector Loc, FVector Scale, bool bAccent);
 
 	const FGPMTrackData* Track = nullptr;
+	const FGPMCarModel* CarModel = nullptr;   // modèle partagé (positions d'origine pour tordre / réparer les ailerons)
+	float WingBend[2] = { 0.f, 0.f };
+	bool bWingsShaped = false;
+	FLinearColor LiveryMain = FLinearColor::Red, LiveryAccent = FLinearColor::White;
+	void ShapeWings();
 	float SteerSmooth = 0.f, Accum = 0.f;
 	bool bCockpit = false;
 

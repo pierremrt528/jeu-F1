@@ -37,5 +37,6 @@ function push(geo, fixed) {
 }
 push(g.children[0].geometry);          // carrosserie
 push(g.children[1].geometry, '1a1a1c'); // roues
-writeFileSync(join(root, 'unreal', 'GrandPrixManager', 'Content', 'Data', 'car.json'), JSON.stringify({ palette: pal, P, N, K }));
+const R = g.userData.ranges || {};   // ailerons (fw, rw) : [premier sommet, nombre] pour les dégâts
+writeFileSync(join(root, 'unreal', 'GrandPrixManager', 'Content', 'Data', 'car.json'), JSON.stringify({ palette: pal, P, N, K, R }));
 console.log(`car.json : ${P.length / 3} sommets, ${pal.length} couleurs`);

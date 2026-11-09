@@ -112,19 +112,21 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 	// Vraie monoplace (modèle du jeu web) : couleurs par sommet ; les formes simples restent en secours si car.json manque.
 	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
+	LiveryMain = Main; LiveryAccent = Accent;
 	if (const FGPMCarModel* CM = Data ? Data->GetCarModel() : nullptr)
 	{
+		CarModel = CM;
+		WingBend[0] = WingBend[1] = 0.f; bWingsShaped = false;   // modèle reconstruit : ailerons intacts
 		TArray<int32> Tri; Tri.SetNum(CM->P.Num());
 		TArray<FLinearColor> Col; Col.SetNum(CM->P.Num());
 		// matériau éclairé de Tools/gpm_assets.py : la rugosité de chaque pièce passe par l'alpha du sommet
 		// (palette de car.json : livrée, accent, casque, carbone, noir, visière, écran, rétroviseur, feu, gris, jantes)
 		UMaterialInstanceDynamic* CarMat = GPMArt::Make(TEXT("M_GPM_Lit"), this);
-		static const float Rough[11] = { 0.3f, 0.3f, 0.22f, 0.42f, 0.85f, 0.05f, 0.3f, 0.1f, 0.3f, 0.6f, 0.45f };
 		for (int32 i = 0; i < CM->P.Num(); ++i)
 		{
 			const int32 K = CM->K[i];
 			Col[i] = K == 0 ? Main : K <= 2 ? Accent : CM->Fixed.IsValidIndex(K) ? CM->Fixed[K] : FLinearColor::Black;
-			Col[i].A = CarMat ? Rough[FMath::Clamp(K, 0, 10)] : 1.f;
+			Col[i].A = CarMat ? PaintRough(K) : 1.f;
 		}
 		if (CarMat)
 		{
@@ -153,6 +155,13 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 		if (UMaterialInstanceDynamic* M = W->CreateDynamicMaterialInstance(0)) M->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.02f, 0.02f, 0.02f));
 }
 
+// rugosité par couleur de la palette de car.json : livrée, accent, casque, carbone, noir, visière, écran, rétroviseur, feu, gris, jantes
+float AGPMCar::PaintRough(int32 K)
+{
+	static const float Rough[11] = { 0.3f, 0.3f, 0.22f, 0.42f, 0.85f, 0.05f, 0.3f, 0.1f, 0.3f, 0.6f, 0.45f };
+	return Rough[FMath::Clamp(K, 0, 10)];
+}
+
 void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 {
 	Track = InTrack;
@@ -172,6 +181,11 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
 	bFinished = false; FinishTime = 0.f; Penalty = 0.f; bSCMode = false;
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
+	// nouvelle séance : voiture réparée, mode normal
+	Mode = 1; PowerMul = AccMul = 1.f;
+	Dmg = DmgR = DmgNew = DmgNewR = Bump = 0.f; DmgKd = RwKd = 1.f;
+	bFlat = bAdvised = false;
+	RepairWings();
 	UpdateTransform();
 }
 
@@ -279,22 +293,23 @@ void AGPMCar::Step(float Dt)
 	const float Vc = (T.WY[W(I0 - 6)] - 2 * T.WY[I0] + T.WY[W(I0 + 6)]) / 144.f;
 	const float Nz = FMath::Clamp(1.f + V * V * Vc / Grav, 0.45f, 1.6f);
 	const float Grip = (bOffTrack ? 0.55f : 1.f) * (bKerb ? 0.9f : 1.f) * (1.f + 0.03f * Bump * FMath::Min(1.f, V / 60.f));
-	const float VTopNow = VTop * Perf * UpVTop * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
+	const float VTopNow = VTop * Perf * UpVTop * PowerMul * (1.f - 0.02f * Dmg) * (bRwOff ? 1.03f : 1.f) * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
 
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
 	const float Aero = Kd * UpKd * (1.f - 0.3f * Wake) * V * V;
 	const float MuB = Mu * UpMu * Grip * GripMul / (1.f + (Mass - 1.f) * 0.25f);
 	const float RollF = FMath::Min(1.f, FMath::Abs(Ay) / 45.f);
-	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
-	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero) * (1 - 0.05f * RollF * RollF));
+	// aileron abîmé : moins d'appui sur l'essieu concerné (avant → sous-virage, arrière → survirage)
+	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero * DmgKd) * (1 - 0.05f * RollF * RollF));
+	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero * RwKd) * (1 - 0.05f * RollF * RollF));
 
 	// longitudinal
 	float A = -Sign(V) * (0.8f + 0.0009f * V * V), Spin = 0.f;
 	bLock = false; bAbsOn = bTcOn = false;
 	if (Throttle > 0 && V >= -0.5f)
 	{
-		float Ad = Throttle * Acc * Perf * UpAcc / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
+		float Ad = Throttle * Acc * Perf * UpAcc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);
 		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * FMath::Sqrt(1 - Uy * Uy));
 		if (Ad > Room)
@@ -382,6 +397,7 @@ void AGPMCar::Step(float Dt)
 
 	// murs
 	HitWall = FMath::Max(0.f, HitWall - Dt);
+	Bump = FMath::Max(0.f, Bump - Dt);
 	const TArray<float>& WallArr = Lat > 0 ? T.WallRight : T.WallLeft;
 	const float WLim = (WallArr.IsValidIndex(i) ? WallArr[i] : Half + 9.f) - 1.0f;
 	if (FMath::Abs(Lat) > WLim)
@@ -391,6 +407,12 @@ void AGPMCar::Step(float Dt)
 		const float Rel = WrapPi(Course - T.H[i]);
 		const float Dir = FMath::Abs(Rel) < PI / 2 ? 0.f : PI;
 		const float Impact = FMath::Abs(FMath::Sin(Rel));
+		// choc franc à vitesse : aileron avant abîmé (arrière si la voiture arrive de travers)
+		if (V > 25.f && HitWall <= 0.f && Impact > 0.25f)
+		{
+			const float Hurt = Impact * FMath::Min(1.f, V / 60.f) * 0.25f;
+			if (FMath::Abs(Beta) > 1.f || SpinT > 0.f) DmgNewR += Hurt; else DmgNew += Hurt;
+		}
 		V *= 1 - FMath::Min(0.7f, 0.1f + Impact * 0.9f);
 		Heading += WrapPi(T.H[i] + Dir - Heading) * 0.5f;
 		Beta *= 0.3f;

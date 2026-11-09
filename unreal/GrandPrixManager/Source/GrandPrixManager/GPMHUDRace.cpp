@@ -18,6 +18,8 @@ namespace
 	const FLinearColor RaceDim(1.f, 1.f, 1.f, 0.65f);
 	const FLinearColor RacePurple(0.75f, 0.4f, 1.f);
 	const FLinearColor RaceYellow(1.f, 0.85f, 0.2f);
+	const FLinearColor RaceRain(0.35f, 0.65f, 1.f);
+	const FLinearColor RaceRadio(0.3f, 0.75f, 1.f);
 	FLinearColor TyreColour(TCHAR T)
 	{
 		return T == 'S' ? FLinearColor(1.f, 0.2f, 0.2f) : T == 'H' ? FLinearColor(0.92f, 0.92f, 0.92f) : T == 'W' ? FLinearColor(0.2f, 0.55f, 1.f) : FLinearColor(1.f, 0.85f, 0.15f);
@@ -159,6 +161,159 @@ void AGPMHUD::DrawCluster(AGPMCar* Car, float W, float H)
 	if (Car->bAbsOn) DrawText(TEXT("ABS"), RaceYellow, X + CW - 92 * Scale, Y + 18 * Scale, Mid, Scale * 0.75f);
 	if (Car->bTcOn) DrawText(TEXT("TC"), RaceYellow, X + CW - 92 * Scale, Y + 34 * Scale, Mid, Scale * 0.75f);
 	if (Car->bBox) DrawText(TEXT("BOX"), FLinearColor(0.3f, 0.8f, 1.f), X + CW - 92 * Scale, Y + 50 * Scale, Mid, Scale * 0.75f);
+	DrawDamage(Car, X - 46.f * Scale, Y, CH);
+}
+
+// Dégâts : silhouette de la voiture, ailerons colorés (jaune abîmé, rouge cassé, barré s'il est parti)
+void AGPMHUD::DrawDamage(AGPMCar* Car, float X, float Y, float H)
+{
+	if (Car->Dmg < 0.05f && Car->DmgR < 0.05f && !Car->bFlat) return;
+	const float PW = 40.f * Scale;
+	DrawRect(RacePanel, X, Y, PW, H);
+	auto Shade = [](float D, bool bOff) { return bOff ? FLinearColor(1.f, 0.15f, 0.1f) : D > 0.5f ? FLinearColor(1.f, 0.3f, 0.2f) : D > 0.15f ? FLinearColor(1.f, 0.8f, 0.2f) : FLinearColor(0.3f, 1.f, 0.4f); };
+	const float Cx = X + PW / 2;
+	// aileron avant, coque, aileron arrière
+	const FLinearColor Front = Shade(Car->Dmg, Car->bFwOff), Rear = Shade(Car->DmgR, Car->bRwOff);
+	DrawRect(Front, Cx - 15 * Scale, Y + 8 * Scale, 30 * Scale, 5 * Scale);
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.55f), Cx - 3 * Scale, Y + 15 * Scale, 6 * Scale, 34 * Scale);
+	DrawRect(Car->bFlat ? FLinearColor(1.f, 0.3f, 0.2f) : FLinearColor(1.f, 1.f, 1.f, 0.35f), Cx - 13 * Scale, Y + 18 * Scale, 6 * Scale, 9 * Scale);
+	DrawRect(Car->bFlat ? FLinearColor(1.f, 0.3f, 0.2f) : FLinearColor(1.f, 1.f, 1.f, 0.35f), Cx + 7 * Scale, Y + 18 * Scale, 6 * Scale, 9 * Scale);
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.35f), Cx - 13 * Scale, Y + 37 * Scale, 6 * Scale, 10 * Scale);
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.35f), Cx + 7 * Scale, Y + 37 * Scale, 6 * Scale, 10 * Scale);
+	DrawRect(Rear, Cx - 10 * Scale, Y + 52 * Scale, 20 * Scale, 5 * Scale);
+	if (Car->bFwOff) DrawLine(Cx - 16 * Scale, Y + 14 * Scale, Cx + 16 * Scale, Y + 7 * Scale, FLinearColor::Black, 2.f * Scale);
+	if (Car->bRwOff) DrawLine(Cx - 11 * Scale, Y + 58 * Scale, Cx + 11 * Scale, Y + 51 * Scale, FLinearColor::Black, 2.f * Scale);
+}
+
+// Pluie à l'écran : traits qui tombent, plus vite et plus penchés avec la vitesse (sans coût 3D)
+void AGPMHUD::DrawRain(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
+{
+	const float Amount = GM ? GM->RainShow : 0.f;
+	if (Amount < 0.02f) return;
+	const float Tm = GetWorld()->GetTimeSeconds();
+	const int32 Count = FMath::RoundToInt(120.f * Amount);
+	const float Spd = 1.f + FMath::Max(0.f, Car->V) / 45.f;
+	const float Lean = FMath::Clamp(-Car->Steer * 0.35f, -0.35f, 0.35f) + 0.08f;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const float R1 = FMath::Frac(FMath::Sin(i * 12.9898f) * 43758.547f);
+		const float R2 = FMath::Frac(FMath::Sin(i * 78.233f + 1.7f) * 24634.633f);
+		const float Len = (16.f + 26.f * R2) * Scale * FMath::Min(2.2f, Spd);
+		const float Fall = (700.f + 600.f * R1) * Scale * Spd;
+		const float Yp = FMath::Fmod(Tm * Fall + R2 * (H + Len) * 7.f, H + Len) - Len;
+		const float Xp = R1 * W + Lean * Yp;
+		DrawLine(Xp, Yp, Xp + Lean * Len, Yp + Len, FLinearColor(0.82f, 0.88f, 1.f, 0.16f + 0.14f * R2), (1.f + R2) * Scale);
+	}
+}
+
+// Message du muret sur plusieurs lignes (le point complet est long)
+void AGPMHUD::DrawRadioMsg(const FString& Msg, float W, float Y)
+{
+	UFont* Mid = GEngine->GetMediumFont();
+	const float MaxW = W * 0.56f;
+	TArray<FString> Words;
+	Msg.ParseIntoArray(Words, TEXT(" "));
+	TArray<FString> Lines;
+	FString Cur;
+	for (const FString& Wd : Words)
+	{
+		const FString Try = Cur.IsEmpty() ? Wd : Cur + TEXT(" ") + Wd;
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(Try, TW, TH, Mid, Scale);
+		if (TW > MaxW && !Cur.IsEmpty()) { Lines.Add(Cur); Cur = Wd; }
+		else Cur = Try;
+	}
+	if (!Cur.IsEmpty()) Lines.Add(Cur);
+	if (Lines.Num() == 0) return;
+	float BW = 0.f, LH = 0.f;
+	for (const FString& Ln : Lines)
+	{
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(Ln, TW, TH, Mid, Scale);
+		BW = FMath::Max(BW, TW); LH = FMath::Max(LH, TH);
+	}
+	const float BH = Lines.Num() * LH + 6.f * Scale, RX = (W - BW) / 2 - 10.f * Scale;
+	DrawRect(FLinearColor(0.02f, 0.1f, 0.18f, 0.8f), RX, Y, BW + 20.f * Scale, BH);
+	DrawRect(RaceRadio, RX, Y, 3.f * Scale, BH);
+	for (int32 i = 0; i < Lines.Num(); ++i) DrawText(Lines[i], FLinearColor(0.72f, 0.93f, 1.f), RX + 10.f * Scale, Y + 3.f * Scale + i * LH, Mid, Scale);
+}
+
+// Radio du muret : point complet, rythme (mode affiché), pneus du prochain arrêt ; touches 1 2 3 sur ordinateur
+void AGPMHUD::DrawRadioPad(AGPMGameMode* GM, AGPMCar* Car)
+{
+	UFont* Mid = GEngine->GetMediumFont();
+	const TCHAR NextT = Car->bBox ? Car->NextTyre : GM->NextStopTyre(Car);
+	const FLinearColor ModeCol = Car->Mode == 0 ? FLinearColor(1.f, 0.45f, 0.2f) : Car->Mode == 2 ? FLinearColor(0.35f, 1.f, 0.5f) : FLinearColor(0.8f, 0.8f, 0.85f);
+	const FString Keys[3] = { TEXT("1"), TEXT("2"), TEXT("3") };
+	const FString Labels[3] = { TEXT("POINT RADIO"), Car->Mode == 0 ? FString(TEXT("ATTAQUE")) : Car->Mode == 2 ? FString(TEXT("ÉCONOMIE")) : FString(TEXT("RYTHME NORMAL")), TEXT("PNEUS SUIVANTS") };
+	const FLinearColor Marks[3] = { RaceRadio, ModeCol, TyreColour(NextT) };
+	for (int32 k = 0; k < 3; ++k)
+	{
+		const FButton& Bt = RadioBtn[k];
+		DrawRect(bRadioDown[k] ? FLinearColor(1.f, 1.f, 1.f, 0.3f) : RacePanel, Bt.Pos.X, Bt.Pos.Y, Bt.Size.X, Bt.Size.Y);
+		DrawRect(Marks[k], Bt.Pos.X, Bt.Pos.Y, 3.f * Scale, Bt.Size.Y);
+		float TX = Bt.Pos.X + 8.f * Scale;
+		if (!bShowTouch)
+		{
+			DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.14f), TX, Bt.Pos.Y + 6.f * Scale, 14.f * Scale, 16.f * Scale);
+			DrawText(Keys[k], FLinearColor::White, TX + 3.5f * Scale, Bt.Pos.Y + 6.5f * Scale, Mid, Scale * 0.75f);
+			TX += 19.f * Scale;
+		}
+		DrawText(Labels[k], k == 1 ? ModeCol : FLinearColor::White, TX, Bt.Pos.Y + 7.f * Scale, Mid, Scale * 0.72f);
+		if (k == 2)
+		{
+			const float D = 12.f * Scale, DX = Bt.Pos.X + Bt.Size.X - D - 6.f * Scale, DY = Bt.Pos.Y + (Bt.Size.Y - D) / 2;
+			DrawRect(TyreColour(NextT), DX, DY, D, D);
+			DrawRect(FLinearColor(0.05f, 0.05f, 0.05f), DX + 3.f * Scale, DY + 3.f * Scale, D - 6.f * Scale, D - 6.f * Scale);
+		}
+	}
+}
+
+// Qualifications : pole à battre, écart en direct, secteurs (violet = meilleur, vert = record perso, jaune = plus lent)
+void AGPMHUD::DrawQualiPanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
+{
+	UFont* Mid = GEngine->GetMediumFont();
+	const float PW = 196.f * Scale, PH = 94.f * Scale;
+	DrawRect(RacePanel, X, Y, PW, PH);
+	const float Pole = GM->QPole();
+	DrawText(TEXT("Pole à battre"), RaceDim, X + 8.f * Scale, Y + 3.f * Scale, Mid, Scale * 0.8f);
+	DrawText(Pole > 0.f ? Chrono(Pole) : FString(TEXT("--:--.---")), RacePurple, X + 8.f * Scale, Y + 18.f * Scale, Mid, Scale * 1.05f);
+	float Delta = 0.f;
+	if (GM->QDelta(Delta))
+	{
+		const FString DS = FString::Printf(TEXT("%+.2f"), Delta);
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(DS, TW, TH, Mid, Scale * 1.3f);
+		DrawText(DS, Delta < 0.f ? FLinearColor(0.3f, 1.f, 0.45f) : FLinearColor(1.f, 0.38f, 0.3f), X + PW - TW - 8.f * Scale, Y + 8.f * Scale, Mid, Scale * 1.3f);
+	}
+	else if (Car->Lap < 1) DrawText(TEXT("tour de lancement"), RaceDim, X + PW - 104.f * Scale, Y + 6.f * Scale, Mid, Scale * 0.7f);
+	const float CW = (PW - 24.f * Scale) / 3.f;
+	for (int32 k = 0; k < 3; ++k)
+	{
+		const float CX = X + 8.f * Scale + k * (CW + 4.f * Scale), CY = Y + 46.f * Scale;
+		const int32 Tint = GM->QCol[k];
+		const FLinearColor Fill = Tint == 1 ? FLinearColor(0.55f, 0.25f, 0.9f, 0.92f) : Tint == 2 ? FLinearColor(0.12f, 0.62f, 0.28f, 0.92f) : Tint == 3 ? FLinearColor(0.8f, 0.66f, 0.08f, 0.92f) : FLinearColor(1.f, 1.f, 1.f, 0.08f);
+		DrawRect(Fill, CX, CY, CW, 40.f * Scale);
+		DrawText(FString::Printf(TEXT("S%d"), k + 1), FLinearColor(1.f, 1.f, 1.f, 0.75f), CX + 5.f * Scale, CY + 2.f * Scale, Mid, Scale * 0.7f);
+		const bool bNow = GM->QSec[k] > 0.f;
+		const float Sec = bNow ? GM->QSec[k] : GM->QPB[k];
+		DrawText(Sec > 0.f ? FString::Printf(TEXT("%.3f"), Sec) : FString(TEXT("--.---")), bNow ? FLinearColor::White : RaceDim, CX + 5.f * Scale, CY + 18.f * Scale, Mid, Scale * 0.85f);
+	}
+}
+
+// Météo (à gauche de la mini-carte) : pluie, humidité de la piste, changement annoncé
+void AGPMHUD::DrawWeatherChip(AGPMGameMode* GM, float Right, float Y)
+{
+	const bool bChange = GM->WxChangeAt >= 0.f && !GM->bWxDone;
+	if (!GM->bRaining && GM->TrackWet < 0.03f && !bChange) return;
+	UFont* Mid = GEngine->GetMediumFont();
+	const float CW = 108.f * Scale, CH = (bChange ? 44.f : 32.f) * Scale, X0 = Right - CW;
+	DrawRect(RacePanel, X0, Y, CW, CH);
+	const FString Top = GM->bRaining ? FString(TEXT("PLUIE")) : GM->TrackWet > 0.25f ? FString(TEXT("PISTE HUMIDE")) : FString(TEXT("TEMPS SEC"));
+	DrawText(Top, GM->bRaining ? RaceRain : FLinearColor::White, X0 + 7.f * Scale, Y + 3.f * Scale, Mid, Scale * 0.8f);
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.15f), X0 + 7.f * Scale, Y + 21.f * Scale, CW - 14.f * Scale, 4.f * Scale);
+	DrawRect(RaceRain, X0 + 7.f * Scale, Y + 21.f * Scale, (CW - 14.f * Scale) * FMath::Clamp(GM->TrackWet, 0.f, 1.f), 4.f * Scale);
+	if (bChange) DrawText(GM->bRainStart ? TEXT("éclaircie attendue") : TEXT("averse attendue"), RaceYellow, X0 + 7.f * Scale, Y + 28.f * Scale, Mid, Scale * 0.65f);
 }
 
 void AGPMHUD::DrawPause(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
@@ -194,6 +349,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (bPaused && !bLive) SetPaused(false);
 
 	if (GM && (GM->Phase == AGPMGameMode::EPhase::QualiDone || GM->Phase == AGPMGameMode::EPhase::Done)) return;
+	DrawRain(GM, Car, W, H);
 
 	// Tour et chronos (en haut au centre)
 	const float CW = 220.f * Scale, CX = (W - CW) / 2;
@@ -208,34 +364,20 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (GM && GM->Phase == AGPMGameMode::EPhase::Quali)
 	{
 		DrawCentered(TEXT("QUALIFICATIONS · TOUR LANCÉ"), RaceYellow, W, M + 52 * Scale, Mid, Scale);
-		float Pole = 1e9f;
-		for (const TPair<AGPMCar*, float>& Q : GM->QTimes) if (Q.Key != Car) Pole = FMath::Min(Pole, Q.Value);
-		if (Pole < 1e8f)
-		{
-			DrawRect(RacePanel, M, M, 150 * Scale, 40 * Scale);
-			DrawText(TEXT("Pole à battre"), RaceDim, M + 8 * Scale, M + 3 * Scale, Mid, Scale * 0.8f);
-			DrawText(Chrono(Pole), RacePurple, M + 8 * Scale, M + 18 * Scale, Mid, Scale * 1.05f);
-		}
+		DrawQualiPanel(GM, Car, M, M);
 	}
 	else if (GM && GM->NumCars() > 0)
 	{
 		DrawTower(GM, Car, M, M);
-		if (Car->Penalty > 0.f) DrawText(FString::Printf(TEXT("Pénalité +%.0f s"), Car->Penalty), FLinearColor(1.f, 0.3f, 0.2f), M, H * 0.62f, Mid, Scale);
+		if (Car->Penalty > 0.f) DrawCentered(FString::Printf(TEXT("Pénalité +%.0f s"), Car->Penalty), FLinearColor(1.f, 0.3f, 0.2f), W, H - (70.f + (bShowTouch ? 66.f : 12.f) + 22.f) * Scale, Mid, Scale);
 		if (Car->PitPhase) DrawCentered(Car->PitPhase == 2 ? TEXT("ARRÊT AU STAND") : TEXT("LIMITEUR 80 km/h"), RaceYellow, W, H * 0.24f, Mid, Scale * 1.4f);
 		if (GM->SafetyOut())
 		{
 			DrawRect(FLinearColor(1.f, 0.75f, 0.05f, 0.85f), (W - 260 * Scale) / 2, H * 0.17f, 260 * Scale, 26 * Scale);
 			DrawCentered(TEXT("VOITURE DE SÉCURITÉ"), FLinearColor(0.05f, 0.05f, 0.05f), W, H * 0.17f + 3 * Scale, Mid, Scale * 1.1f);
 		}
-		if (GM->RadioT > 0.f)
-		{
-			float RW, RH;
-			GetTextSize(GM->Radio, RW, RH, Mid, Scale);
-			const float RX = (W - RW) / 2 - 10 * Scale, RY = M + 52 * Scale;
-			DrawRect(FLinearColor(0.02f, 0.1f, 0.18f, 0.75f), RX, RY, RW + 20 * Scale, RH + 6 * Scale);
-			DrawRect(FLinearColor(0.3f, 0.75f, 1.f), RX, RY, 3 * Scale, RH + 6 * Scale);
-			DrawText(GM->Radio, FLinearColor(0.7f, 0.92f, 1.f), RX + 10 * Scale, RY + 3 * Scale, Mid, Scale);
-		}
+		if (GM->RadioT > 0.f) DrawRadioMsg(GM->Radio, W, M + 52 * Scale);
+		if (GM->Phase == AGPMGameMode::EPhase::Race && !Car->bFinished) DrawRadioPad(GM, Car);
 		if (GM->Phase == AGPMGameMode::EPhase::Lights) DrawLights(GM->LightsOn(), W);
 		else if (GM->Clock < 1.5f) DrawCentered(TEXT("GO !"), FLinearColor(0.2f, 1.f, 0.3f), W, H * 0.3f, Big, Scale * 3.f);
 		if (Car->bFinished) DrawCentered(FString::Printf(TEXT("Arrivée : P%d"), GM->PositionOf(Car)), FLinearColor::White, W, H * 0.3f, Big, Scale * 2.f);
@@ -246,9 +388,10 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	// Mini-carte (en haut à droite) et bouton pause dessous
 	const float MS = 112.f * Scale;
 	DrawMiniMap(Car, FVector2D(W - M - MS, M + 6 * Scale), MS);
+	if (GM) DrawWeatherChip(GM, W - M - 48 * Scale, M + MS + 18 * Scale);   // sous la mini-carte, à gauche du bouton pause
 	if (bLive && !bPaused && Btn(TEXT("II"), W - M - 40 * Scale, M + MS + 18 * Scale, 40 * Scale, 28 * Scale, FLinearColor(0.2f, 0.22f, 0.28f))) { SetPaused(true); return; }
 	if (bShowFps && GM)
-		DrawText(FString::Printf(TEXT("%.0f i/s  ·  %d %%"), GM->Fps, GM->ScreenPct), GM->Fps < 50.f ? FLinearColor(1.f, 0.4f, 0.3f) : FLinearColor(0.4f, 1.f, 0.5f), W - M - 110 * Scale, M + MS + 52 * Scale, Mid, Scale * 0.8f);
+		DrawText(FString::Printf(TEXT("%.0f i/s  ·  %d %%"), GM->Fps, GM->ScreenPct), GM->Fps < 50.f ? FLinearColor(1.f, 0.4f, 0.3f) : FLinearColor(0.4f, 1.f, 0.5f), W - M - 110 * Scale, M + MS + 68 * Scale, Mid, Scale * 0.8f);
 
 	// Commandes tactiles, ou aide clavier
 	if (bShowTouch)
@@ -260,7 +403,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		DrawButton(Box, bBoxBtn || Car->bBox);
 	}
 	else if (GM && GM->Clock < 20.f)
-		DrawText(TEXT("Flèches/ZQSD : conduire   C : caméra   B : stand   R : replacer   P : pause   F : i/s   T : tactile"), FLinearColor(1, 1, 1, 0.55f), M, H - 22 * Scale, Mid, Scale * 0.8f);
+		DrawText(TEXT("Flèches/ZQSD : conduire   C : caméra   B : stand   1 2 3 : radio   R : replacer   P : pause   T : tactile"), FLinearColor(1, 1, 1, 0.55f), M, H - 22 * Scale, Mid, Scale * 0.8f);
 
 	if (bPaused) DrawPause(GM, Car, W, H);
 }

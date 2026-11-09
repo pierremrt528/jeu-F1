@@ -46,6 +46,8 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UProceduralMeshComponent> Mesh;
 	const FGPMTrackData* Track = nullptr;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> RoadMID;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> GreenMID;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> KerbMID;
 
 	FVector Right(int32 i) const;   // vecteur latéral (côté WR) au point i, horizontal
 };

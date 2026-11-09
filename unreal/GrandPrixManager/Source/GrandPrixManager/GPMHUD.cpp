@@ -36,11 +36,14 @@ void AGPMHUD::Layout(float W, float H)
 	Gas = { FVector2D(W - M - B, Y - B * 0.35f), FVector2D(B, B * 1.35f), TEXT("GAZ") };
 	Brake = { FVector2D(W - M * 2 - B * 2, Y), FVector2D(B, B), TEXT("FREIN") };
 	Box = { FVector2D((W - B * 1.3f) / 2, H - M - B * 0.5f), FVector2D(B * 1.3f, B * 0.5f), TEXT("STAND") };
+	// radio du muret : 3 boutons à gauche, au-dessus des flèches
+	for (int32 k = 0; k < 3; ++k) RadioBtn[k] = { FVector2D(M, H * 0.47f + k * 32.f * Scale), FVector2D(112.f * Scale, 28.f * Scale), nullptr };
 }
 
 void AGPMHUD::ReadTouches(AGPMCar* Car)
 {
 	bLeft = bRight = bGas = bBrake = bBoxBtn = false;
+	for (bool& bDown : bRadioDown) bDown = false;
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !bShowTouch) { Car->TouchSteer = 0.f; Car->TouchGas = Car->TouchBrake = 0.f; Car->bTouchActive = false; return; }
 	auto Inside = [](const FButton& B, float X, float Y) { return X >= B.Pos.X && X <= B.Pos.X + B.Size.X && Y >= B.Pos.Y && Y <= B.Pos.Y + B.Size.Y; };
@@ -56,10 +59,17 @@ void AGPMHUD::ReadTouches(AGPMCar* Car)
 		bGas |= Inside(Gas, X, Y);
 		bBrake |= Inside(Brake, X, Y);
 		bBoxBtn |= Inside(Box, X, Y);
+		for (int32 k = 0; k < 3; ++k) bRadioDown[k] |= Inside(RadioBtn[k], X, Y);
 	}
 	if (bBoxBtn && !bBoxWas)
 		if (AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>()) GM->ToggleBox();
 	bBoxWas = bBoxBtn;
+	for (int32 k = 0; k < 3; ++k)
+	{
+		if (bRadioDown[k] && !bRadioWas[k])
+			if (AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>()) GM->RadioCall(k);
+		bRadioWas[k] = bRadioDown[k];
+	}
 	Car->bTouchActive = bAny;
 	Car->TouchSteer = (bRight ? 1.f : 0.f) - (bLeft ? 1.f : 0.f);
 	Car->TouchGas = bGas ? 1.f : 0.f;

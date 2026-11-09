@@ -18,6 +18,7 @@
 #include "UnrealClient.h"
 #include "Misc/Paths.h"
 #include "GPMScenery.h"
+#include "GPMDebris.h"
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
 #include "GPMFactory.h"
@@ -89,6 +90,7 @@ void AGPMGameMode::SetupWorld()
 		USkyAtmosphereComponent* C = NewObject<USkyAtmosphereComponent>(Sky);
 		Sky->SetRootComponent(C);
 		C->RegisterComponent();
+		Atmos = C;   // ciel plus blanc sous la pluie
 	}
 	// nuages volumétriques (matériau de nuages fourni avec le moteur) : vrai ciel en relief, éclairé par le soleil
 	if (AActor* Clouds = W->SpawnActor<AActor>())
@@ -106,6 +108,7 @@ void AGPMGameMode::SetupWorld()
 		L->SetIntensity(1.f);
 		L->RecaptureSky();
 	}
+	Debris = W->SpawnActor<AGPMDebris>();   // éclats de carbone et ailerons arrachés
 	Fog = W->SpawnActor<AExponentialHeightFog>();
 	if (Fog) Fog->GetComponent()->SetFogDensity(0.004f);
 	if (APostProcessVolume* PP = W->SpawnActor<APostProcessVolume>())
@@ -129,9 +132,12 @@ void AGPMGameMode::ApplyTheme(const FGPMTrackData* T)
 	if (Fog)
 	{
 		UExponentialHeightFogComponent* F = Fog->GetComponent();
-		F->SetFogDensity(0.004f * 1500.f / FMath::Max(600.f, Th.FogEnd));
+		FogBase = 0.004f * 1500.f / FMath::Max(600.f, Th.FogEnd);
+		FogTint = Th.Horizon * 0.6f;
+		F->SetFogDensity(FogBase);
 		F->SetStartDistance(Th.FogStart * 30.f);
-		F->SetFogInscatteringColor(Th.Horizon * 0.6f);
+		F->SetFogInscatteringColor(FogTint);
+		SkyGloomSet = -1.f;   // la grisaille de la pluie est réappliquée sur le nouveau ciel
 		Fog->SetActorLocation(FVector(0, 0, T->Points.Num() ? T->Points[0].Z : 0.f));
 	}
 	// capture du ciel une fois le soleil placé (à l'image suivante, quand le ciel est à jour)
@@ -183,6 +189,9 @@ void AGPMGameMode::PlaceCar()
 	ApplySettings();
 	QOrder.Reset(); QTimes.Reset();
 	bGridReady = false; SetupK = -1; Stints.Reset();
+	QPB[0] = QPB[1] = QPB[2] = 0.f;
+	WetSet = -1.f;
+	Forecast();   // météo du nouveau week-end
 	const int32 Then = Pending;
 	Pending = 0;
 	if (Then == 1) { GoHome(); return; }
@@ -350,13 +359,23 @@ void AGPMGameMode::StartQuali()
 	Car->Idx = I; Car->X = T->WX[I]; Car->Z = T->WZ[I]; Car->Y = T->WY[I]; Car->Heading = T->H[I];
 	Car->Lat = Car->Lane = 0.f; Car->V = 45.f; Car->bHold = false;
 	Car->Field = { Car.Get() };
-	Car->Tyre = 'S'; Car->Wear = 0.f; Car->Fuel = 10.f; Car->Mass = 1.f + Car->Fuel / 750.f; Car->GripMul = AGPMCar::TyreGrip('S');
+	ResetWeather();
+	if (Debris) Debris->Clear();
+	// tendres pour le tour lancé, pneus pluie sur piste mouillée
+	Car->Tyre = TrackWet > 0.4f ? TCHAR('W') : TCHAR('S'); Car->Wear = 0.f; Car->Fuel = 10.f; Car->Mass = 1.f + Car->Fuel / 750.f;
+	Car->GripMul = AGPMCar::WetGrip(Car->Tyre, TrackWet);
 	Order = { Car.Get() };
+	// secteurs : records perso du week-end (gardés quand on refait le tour), temps de référence le long du tour
+	if (QTimes.Num() == 0) QPB[0] = QPB[1] = QPB[2] = 0.f;
+	for (int32 k = 0; k < 3; ++k) { QSec[k] = 0.f; QCol[k] = 0; QPB0[k] = QPB[k]; }
+	QSplit[0] = QSplit[1] = 0.f;
+	QCum.SetNumZeroed(N + 1);
+	for (int32 i = 0; i < N; ++i) QCum[i + 1] = QCum[i] + 2.f / FMath::Max(5.f, T->AISpeed.IsValidIndex(i) ? T->AISpeed[i] : 40.f);
 	if (QTimes.Num() == 0)
 		for (AGPMCar* C : Cars)
-			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f);
+			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
 	RadioT = 0.f;
-	Say(TEXT("Qualifications : un tour lancé. Donne tout !"));
+	Say(bRaining ? TEXT("Qualifications sous la pluie : un tour lancé, pneus pluie. Doucement sur les freins !") : TEXT("Qualifications : un tour lancé. Donne tout !"));
 }
 
 void AGPMGameMode::EndQuali()
@@ -364,6 +383,9 @@ void AGPMGameMode::EndQuali()
 	Phase = EPhase::QualiDone;
 	bGridReady = true;
 	const float Mine = Car->LastLap;
+	// 3e secteur et records perso
+	if (QSplit[1] > 0.f && Mine > QSplit[1]) { QSec[2] = Mine - QSplit[1]; QCol[2] = SectorColour(2); }
+	for (int32 k = 0; k < 3; ++k) if (QSec[k] > 0.f && (QPB[k] <= 0.f || QSec[k] < QPB[k])) QPB[k] = QSec[k];
 	if (float* Prev = QTimes.Find(Car)) { if (Mine > 0.f && Mine < *Prev) *Prev = Mine; }
 	else QTimes.Add(Car, Mine > 0.f ? Mine : 999.f);
 	QTimes.GenerateKeyArray(QOrder);
@@ -424,15 +446,25 @@ void AGPMGameMode::StartRace()
 	// pneus et carburant au départ : assez d'essence pour la course (+3 %), gomme selon la durée
 	const FString TyreOpt = UGameplayStatics::ParseOption(OptionsString, TEXT("pneus"));
 	const float Km = T->WX.Num() * 2.f / 1000.f;
+	// météo remise au départ, débris effacés ; chaque IA prend une des stratégies du muret (pneus pluie sur piste mouillée)
+	ResetWeather();
+	if (Debris) Debris->Clear();
+	ManualTyre = 0; bTyrePicked = false;
+	const TArray<FPlan> AIPlans = MakePlans();
 	for (AGPMCar* C : Grid)
 	{
 		C->Fuel = FMath::Min(110.f, (TotalLaps + 0.3f) * Km * 1.7f * 1.03f);
 		C->Mass = 1.f + C->Fuel / 750.f;
-		C->Tyre = FMath::FRand() < 0.4f ? 'S' : 'M';
-		C->GripMul = AGPMCar::TyreGrip(C->Tyre);
+		C->Plan.Reset();
+		if (AIPlans.Num()) C->Plan = AIPlans[FMath::RandRange(0, AIPlans.Num() - 1)].Stints;
+		C->Tyre = C->Plan.Num() ? C->Plan[0].Key : bRainStart ? TCHAR('W') : TCHAR('M');
+		C->WetCall = 0.45f + 0.08f * (FMath::FRand() - 0.5f);
+		C->GripMul = AGPMCar::WetGrip(C->Tyre, TrackWet);
 	}
-	Car->Tyre = !TyreOpt.IsEmpty() ? TCHAR(FChar::ToUpper(TyreOpt[0])) : Stints.Num() ? Stints[0].Key : TCHAR('M');
-	Car->GripMul = AGPMCar::TyreGrip(Car->Tyre);
+	Car->Plan.Reset();
+	Car->Tyre = !TyreOpt.IsEmpty() ? TCHAR(FChar::ToUpper(TyreOpt[0])) : Stints.Num() ? Stints[0].Key : bRainStart ? TCHAR('W') : TCHAR('M');
+	Car->WetCall = 0.45f;
+	Car->GripMul = AGPMCar::WetGrip(Car->Tyre, TrackWet);
 	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 	ApplySettings();
@@ -460,6 +492,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
 	}
 	UpdateCine(DeltaSeconds);
+	UpdateSky(DeltaSeconds);
 	AutoCapture(DeltaSeconds);
 	// pointeur de la souris visible dans les menus et les écrans de résultats (sur ordinateur), caché en course
 	if (APlayerController* PCur = GetWorld()->GetFirstPlayerController())
@@ -501,6 +534,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
 	{
 		RadioT -= DeltaSeconds;
+		if (Phase == EPhase::Quali) UpdateSectors();
 		if (Phase == EPhase::Quali && Car && Car->Lap >= 2) EndQuali();
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
@@ -525,7 +559,13 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	}
 	RadioT -= DeltaSeconds;
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
 		if (PC->WasInputKeyJustPressed(EKeys::B)) ToggleBox();
+		// radio du muret : 1 (ou I) point complet, 2 (ou M) rythme, 3 (ou N) pneus du prochain arrêt
+		if (DigitPressed(PC, 1) || PC->WasInputKeyJustPressed(EKeys::I)) RadioCall(0);
+		if (DigitPressed(PC, 2) || PC->WasInputKeyJustPressed(EKeys::M)) RadioCall(1);
+		if (DigitPressed(PC, 3) || PC->WasInputKeyJustPressed(EKeys::N)) RadioCall(2);
+	}
 	// arrivée : tour de plus que la distance de course
 	for (AGPMCar* C : Cars)
 		if (!C->bFinished && C->Lap > TotalLaps) { C->bFinished = true; C->FinishTime = Clock; }
@@ -660,53 +700,90 @@ void AGPMGameMode::ToggleBox()
 	Car->bBox = !Car->bBox;
 	if (Car->bBox)
 	{
-		Car->NextTyre = Stints.IsValidIndex(Car->Stops + 1) ? Stints[Car->Stops + 1].Key : PickTyre(TotalLaps - Car->Lap);
+		Car->NextTyre = NextStopTyre(Car);
 		Say(FString::Printf(TEXT("Box à la fin du tour : %s."), *TyreName(Car->NextTyre)));
 	}
 	else Say(TEXT("Arrêt annulé."));
 }
 
-// Usure des pneus, carburant, arrêts (updateStrategy de strategy.js, sans la météo)
+// Usure des pneus, carburant, météo, dégâts, arrêts (updateStrategy de strategy.js)
 void AGPMGameMode::Strategy(float Dt)
 {
+	UpdateWeather(Dt);
 	for (AGPMCar* C : Cars)
 	{
 		const FGPMTrackData* T = C->GetTrack();
 		if (!T) continue;
-		const float Len = T->WX.Num() * 2.f, Dist = FMath::Abs(C->V) * Dt;
+		// chocs de l'image (murs, contacts) : dégâts sur l'aileron touché
+		if (C->DmgNew > 0.f) { AddDamage(C, C->DmgNew, false); C->DmgNew = 0.f; }
+		if (C->DmgNewR > 0.f) { AddDamage(C, C->DmgNewR, true); C->DmgNewR = 0.f; }
+		const bool bAuto = C != Car || !C->bPlayerControlled;
+		const int32 Left = TotalLaps - C->Lap, NPts = FMath::Max(1, T->WX.Num());
+		// IA : économie si l'essence ne suffit pas, sinon rythme normal
+		if (bAuto && !C->bFinished)
+		{
+			const float PerLapFuel = NPts * 2.f / 1000.f * 1.7f * C->UpFuel;
+			const float FuelNeed = FMath::Max(0.f, Left + 1 - float(C->Idx) / NPts);
+			C->Mode = PerLapFuel > 0.f && C->Fuel / PerLapFuel < FuelNeed + 0.15f ? 2 : 1;
+		}
+		const float Len = NPts * 2.f, Dist = FMath::Abs(C->V) * Dt;
 		if (!C->PitPhase)
 		{
-			// usure : distance, glissades (fortement), sorties de piste
+			// usure : distance, glissades (fortement), sorties de piste, mode ; les pneus pluie fondent sur le sec
 			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
-			const float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f);
+			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode);
+			if (C->Tyre == TCHAR('W')) K *= 1.f + 2.4f * (1.f - TrackWet);
 			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
-			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel);
+			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel * AGPMCar::ModeFuel(C->Mode));
+			// pneu à 0 % : il peut éclater à tout moment, retour au stand au ralenti
+			if (!C->bFlat && C->Wear >= 1.f && FMath::FRand() < Dt * (0.03f + 0.4f * (C->Wear - 1.f)))
+			{
+				C->bFlat = true;
+				if (Left >= 1 && !C->bFinished) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
+				if (C == Car) Say(TEXT("Muret : crevaison ! Rentre au stand doucement, on change les pneus."));
+				else Say(FString::Printf(TEXT("Muret : crevaison pour %s !"), *C->DriverName));
+			}
 		}
 		C->Mass = 1.f + C->Fuel / 750.f;
-		C->GripMul = AGPMCar::TyreGrip(C->Tyre) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->Wear >= 1.f ? 0.7f : 1.f);
-		if (C == Car && !bTyreWarn && C->Wear > 0.6f) { bTyreWarn = true; Say(TEXT("Muret : tes pneus passent sous 40 %, ils n'ont presque plus de grip.")); }
+		C->PowerMul = AGPMCar::ModeV(C->Mode) * (C->bFlat ? 0.8f : 1.f);
+		C->AccMul = AGPMCar::ModeA(C->Mode);
+		C->GripMul = AGPMCar::WetGrip(C->Tyre, TrackWet) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->bFlat ? 0.55f : 1.f) * (1.f - 0.04f * C->Dmg - 0.03f * C->DmgR);
+		// appui perdu : aileron avant → sous-virage, aileron arrière → survirage à haute vitesse
+		C->DmgKd = C->bFwOff ? 0.3f : 1.f - 0.45f * C->Dmg;
+		C->RwKd = C->bRwOff ? 0.3f : 1.f - 0.45f * C->DmgR;
+		if (C == Car && !bTyreWarn && C->Wear > 0.6f && !C->PitPhase) { bTyreWarn = true; Say(TEXT("Muret : tes pneus passent sous 40 %, ils n'ont presque plus de grip.")); }
 
 		// décision d'arrêt avant l'entrée des stands
-		const int32 K0 = T->PitK(C->Idx), Left = TotalLaps - C->Lap;
+		const int32 K0 = T->PitK(C->Idx);
 		const bool bZone = K0 > T->PitE0 - 30 && K0 < T->PitE0 - 10;
+		if (K0 > 200 && K0 < 210) C->bAdvised = false;   // nouveau tour : le muret peut reconseiller
 		if (!bZone || C->PitPhase || C->Lap < 1 || Left < 1 || C->bFinished) continue;
-		const bool bAuto = C != Car || !C->bPlayerControlled;
-		// joueur : arrêt prévu par sa stratégie (le muret l'appelle au bon tour)
-		if (!bAuto && !C->bBox && Stints.IsValidIndex(C->Stops + 1))
+		// arrêt prévu par la stratégie (le joueur : celle de l'écran de stratégie, le muret l'appelle au bon tour)
+		const TArray<TPair<TCHAR, int32>>& Pl = C == Car ? Stints : C->Plan;
+		if (!C->bBox && Pl.IsValidIndex(C->Stops + 1))
 		{
 			int32 Planned = 0;
-			for (int32 s = 0; s <= C->Stops; ++s) Planned += Stints[s].Value;
-			if (C->Lap >= Planned) { C->bBox = true; C->NextTyre = Stints[C->Stops + 1].Key; }
+			for (int32 s = 0; s <= C->Stops; ++s) Planned += Pl[s].Value;
+			if (C->Lap >= Planned) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
 		}
-		if (bAuto && !C->bBox && (1.f - C->Wear) - Left * AGPMCar::TyreWpl(C->Tyre) * 1.05f < 0.38f)
+		// IA : pluie, piste sèche, crevaison, pneus à bout, aileron cassé
+		if (bAuto && !C->bBox && WantBox(C)) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
+		// joueur : conseil du muret, une fois par tour
+		if (!bAuto && !C->bBox && !C->bAdvised && WantBox(C))
 		{
-			C->bBox = true;
-			C->NextTyre = PickTyre(Left);
+			C->bAdvised = true;
+			Say(FString::Printf(TEXT("Muret : rentre ce tour (touche B) : pneus %s%s."), *TyreName(NextStopTyre(C)), C->Dmg > 0.5f || C->DmgR > 0.5f ? TEXT(" et nouvel aileron") : TEXT("")));
 		}
 		if (C->bBox)
 		{
-			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f));
-			if (C == Car) { bTyreWarn = false; Say(FString::Printf(TEXT("Muret : box, box ! Pneus %s."), *TyreName(C->NextTyre))); }
+			const float Fix = (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
+			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f) + Fix);
+			if (C == Car)
+			{
+				bTyreWarn = false;
+				ManualTyre = 0; bTyrePicked = false;
+				Say(FString::Printf(TEXT("Muret : box, box ! Pneus %s%s."), *TyreName(C->NextTyre), Fix > 0.f ? TEXT(" et réparation") : TEXT("")));
+			}
 		}
 	}
 }
@@ -951,10 +1028,14 @@ void AGPMGameMode::Collide()
 					if (Close > 14) RequestSafety(false);
 					if (Close > 5)
 					{
+						// dégâts sur l'aileron touché (avant ou arrière), seulement sur un nouveau contact franc
+						if (A.Bump <= 0.f) (Pa > 0 ? A.DmgNew : A.DmgNewR) += Close * 0.01f;
+						if (B.Bump <= 0.f) (Pb > 0 ? B.DmgNew : B.DmgNewR) += Close * 0.01f;
 						const float Kick = FMath::Min(0.5f, (Close - 5) * 0.03f) * (FMath::FRand() < 0.5f ? -1.f : 1.f);
 						A.Beta += Kick * (Pa < 0 && !A.Assist.bStab ? 1.f : 0.3f);
 						B.Beta += Kick * (Pb < 0 && !B.Assist.bStab ? 1.f : 0.3f);
 					}
+					A.Bump = B.Bump = 0.6f;
 				}
 			}
 		}

@@ -31,9 +31,15 @@ namespace GPMUIWeekendText
 		return T == TCHAR('S') ? TEXT("Tendres") : T == TCHAR('H') ? TEXT("Durs") : T == TCHAR('W') ? TEXT("Pluie") : TEXT("Mediums");
 	}
 
+	// tendres → mediums → durs → pluie → tendres
 	TCHAR NextDry(TCHAR T)
 	{
-		return T == TCHAR('S') ? TCHAR('M') : T == TCHAR('M') ? TCHAR('H') : TCHAR('S');
+		return T == TCHAR('S') ? TCHAR('M') : T == TCHAR('M') ? TCHAR('H') : T == TCHAR('H') ? TCHAR('W') : TCHAR('S');
+	}
+
+	FLinearColor WeatherColor(const AGPMGameMode* GM)
+	{
+		return GM->bRainStart || GM->WxChangeAt >= 0.f ? FLinearColor(0.35f, 0.65f, 1.f, 1.f) : FLinearColor(1.f, 0.85f, 0.3f, 1.f);
 	}
 }
 
@@ -117,7 +123,12 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 
 	TSharedRef<SWidget> Left = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
-		[ Title(Kicker, T ? T->Name : FString(TEXT("Réglages")), Chip(TEXT("Tour estimé"), Clock(Est[Sel]), CGold)) ]
+		[
+			Title(Kicker, T ? T->Name : FString(TEXT("Réglages")),
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Météo"), GM->WeatherLabel(), WeatherColor(GM)) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ Chip(TEXT("Tour estimé"), Clock(Est[Sel]), CGold) ])
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
 		[
 			Txt(FString::Printf(TEXT("Plus d'appui = plus vite dans les virages, plus de vitesse = plus vite en ligne droite. Sur ce circuit, l'ingénieur conseille « %s ». Parc fermé : le réglage choisi reste pour la course."), AGPMGameMode::Setups[Best].Name), 15, CDim, false, true)
@@ -304,6 +315,7 @@ TSharedRef<SWidget> FGPMUI::PreraceScreen(AGPMGameMode* GM)
 	if (GridPos > 0) AddInfo(Chip(TEXT("Départ"), FString::Printf(TEXT("P%d"), GridPos), GridPos <= 3 ? CGold : CText));
 	AddInfo(Chip(TEXT("Réglage"), AGPMGameMode::Setups[Sk].Name, CInfo));
 	AddInfo(Chip(TEXT("Arrêt"), FString::Printf(TEXT("~%.0f s"), T ? T->PitLoss : 22.f), CDim));
+	AddInfo(Chip(TEXT("Météo"), GM->WeatherLabel(), WeatherColor(GM)));
 
 	TSharedRef<SWidget> Nav = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth()

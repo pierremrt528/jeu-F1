@@ -36,7 +36,13 @@ void AGPMCar::PitStep(float Dt)
 	{
 		V = 0.f;
 		PitStopT -= Dt;
-		if (PitStopT <= 0.f) { Tyre = NextTyre; Wear = 0.f; ++Stops; PitPhase = 3; }
+		if (PitStopT <= 0.f)
+		{
+			// pneus neufs, ailerons réparés
+			Tyre = NextTyre; Wear = 0.f; ++Stops; PitPhase = 3;
+			Dmg = DmgR = 0.f; bFlat = false;
+			RepairWings();
+		}
 	}
 	else
 	{

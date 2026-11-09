@@ -56,6 +56,16 @@ private:
 	void SetPaused(bool bPause);
 	FString Code3(const FString& Driver) const;
 	bool bShowFps = false;
+	// course complète : pluie à l'écran, radio du muret (3 boutons), secteurs des qualifications, météo
+	void DrawRain(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
+	void DrawRadioPad(class AGPMGameMode* GM, class AGPMCar* Car);
+	void DrawRadioMsg(const FString& Msg, float W, float Y);
+	void DrawQualiPanel(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
+	void DrawWeatherChip(class AGPMGameMode* GM, float Right, float Y);
+	void DrawDamage(class AGPMCar* Car, float X, float Y, float H);
+	FButton RadioBtn[3];
+	bool bRadioDown[3] = { false, false, false };
+	bool bRadioWas[3] = { false, false, false };
 
 	FButton Left, Right, Gas, Brake, Box;
 	bool bLeft = false, bRight = false, bGas = false, bBrake = false, bBoxBtn = false, bBoxWas = false;

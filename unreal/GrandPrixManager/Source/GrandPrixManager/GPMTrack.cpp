@@ -106,6 +106,8 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		WallM->SetScalarParameterValue(TEXT("Rough"), 0.8f);
 	}
 	RoadMID = bArt ? RoadM : nullptr;
+	GreenMID = bArt ? GreenM : nullptr;
+	KerbMID = bArt ? KerbM : nullptr;
 	const FLinearColor RoadC = bArt ? FLinearColor::White : Asphalt;
 	const FLinearColor GroundC = bArt ? FLinearColor::White : Ground;
 	float MinZ = TNumericLimits<float>::Max();
@@ -245,7 +247,11 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 
 void AGPMTrack::SetWet(float Wet)
 {
-	if (RoadMID) RoadMID->SetScalarParameterValue(TEXT("Wet"), FMath::Clamp(Wet, 0.f, 1.f));
+	const float K = FMath::Clamp(Wet, 0.f, 1.f);
+	if (RoadMID) RoadMID->SetScalarParameterValue(TEXT("Wet"), K);
+	// herbe un peu plus sombre, vibreurs brillants
+	if (GreenMID) GreenMID->SetScalarParameterValue(TEXT("Wet"), K * 0.5f);
+	if (KerbMID) KerbMID->SetScalarParameterValue(TEXT("Rough"), 0.5f - 0.38f * K);
 }
 
 FTransform AGPMTrack::GetStartTransform() const
