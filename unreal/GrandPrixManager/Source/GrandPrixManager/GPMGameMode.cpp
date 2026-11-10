@@ -23,6 +23,9 @@
 #include "GPMFactory.h"
 #include "GPMShowroom.h"
 #include "GPMCareer.h"
+#include "Engine/Engine.h"
+#include "RenderCore.h"
+#include "RHI.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Misc/ConfigCacheIni.h"
@@ -75,6 +78,8 @@ void AGPMGameMode::SetupWorld()
 {
 	// Soleil (ombres dynamiques proches seulement), lumière d'ambiance capturée du ciel (dôme AGPMSky posé par ApplyTheme), brouillard, post-traitement léger
 	UWorld* W = GetWorld();
+	// 60 images par seconde au plus, sans « lissage » : le lissage du moteur restait bloqué vers 30 i/s après un à-coup
+	if (GEngine) { GEngine->bSmoothFrameRate = false; GEngine->SetMaxFPS(60.f); }
 	Sun = W->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-40.f, 35.f, 0.f));
 	if (Sun)
 	{
@@ -265,8 +270,13 @@ void AGPMGameMode::UpdatePerf(float Dt)
 	if (PerfT >= 1.5f)
 	{
 		PerfT = 0.f;
+		// résolution adaptative : seulement quand la carte graphique est le goulot (baisser la résolution n'aide pas sinon)
+		const float GpuMs = FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		const bool bGpuKnown = GpuMs > 0.1f, bGpuBound = !bGpuKnown || GpuMs > 15.f;
 		int32 Want = ScreenPct;
-		if (Fps < 50.f) Want -= 10; else if (Fps < 56.f) Want -= 5; else if (Fps > 59.f) Want += 5;
+		if (Fps < 50.f && bGpuBound) Want -= 10;
+		else if (Fps < 56.f && bGpuBound) Want -= 5;
+		else if (Fps > 58.f || (bGpuKnown && GpuMs < 11.f)) Want += 5;
 		Want = FMath::Clamp(Want, 55, 100);
 		if (Want != ScreenPct)
 		{
@@ -277,7 +287,9 @@ void AGPMGameMode::UpdatePerf(float Dt)
 	if (PerfLogT >= 15.f)
 	{
 		PerfLogT = 0.f;
-		UE_LOG(LogGPM, Log, TEXT("Fluidité : %.0f i/s, résolution %d %%"), Fps, ScreenPct);
+		// temps de l'image par fil (jeu, rendu, carte graphique) pour savoir ce qui ralentit
+		UE_LOG(LogGPM, Log, TEXT("Fluidité : %.0f i/s, résolution %d %% · jeu %.1f ms, rendu %.1f ms, GPU %.1f ms"), Fps, ScreenPct,
+			FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
 	}
 }
 
@@ -629,7 +641,16 @@ void AGPMGameMode::AutoCapture(float Dt)
 	else if (Phase == EPhase::Quali) Wait = 8.f;
 	else if (Phase == EPhase::Intro || Phase == EPhase::Outro) Wait = 3.f;
 	if (Phase == EPhase::Setup) Name += FString::FromInt(SetupStep + 1);
-	if (CapT < Wait || Captured.Contains(Name)) return;
+	float At = CapT;
+	if (RoomCine())
+	{
+		// scènes de l'atelier : bienvenue, arrivée du pilote et de l'agent, poignée de main puis photo
+		At = CineT;
+		Name = Cine == ECine::Welcome ? TEXT("Bienvenue") : Cine == ECine::Meet ? TEXT("RendezVous") : TEXT("Signature");
+		Wait = Cine == ECine::Welcome ? 2.5f : Cine == ECine::Meet ? 4.1f : 1.3f;
+		if (Cine == ECine::Sign && CineT > 3.3f) { Name += TEXT("2"); Wait = 3.3f; }
+	}
+	if (At < Wait || Captured.Contains(Name)) return;
 	Captured.Add(Name);
 	const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Captures") / Name + TEXT(".png"));
 	FScreenshotRequest::RequestScreenshot(File, true, false);

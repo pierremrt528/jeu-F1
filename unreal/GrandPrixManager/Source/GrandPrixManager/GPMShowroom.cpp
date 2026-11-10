@@ -205,7 +205,7 @@ AGPMShowroom::AGPMShowroom()
 	};
 	RimA = MakeLamp(TEXT("ContreJourA"), FVector(-720.f, 640.f, 280.f), 460.f, 2000.f);
 	RimB = MakeLamp(TEXT("ContreJourB"), FVector(-640.f, -720.f, 320.f), 420.f, 2000.f);
-	FillLight = MakeLamp(TEXT("Remplissage"), FVector(950.f, -420.f, 460.f), 230.f, 2400.f);
+	FillLight = MakeLamp(TEXT("Remplissage"), FVector(900.f, -380.f, 780.f), 130.f, 2400.f);   // haut : pas de reflet éblouissant sur le sol
 	RimB->SetLightColor(FLinearColor(0.62f, 0.76f, 1.f));
 	FillLight->SetLightColor(FLinearColor(1.f, 0.97f, 0.92f));
 
@@ -600,7 +600,8 @@ void AGPMShowroom::Camera(int32 Shot, float T, FVector& Eye, FVector& Look, floa
 	case 0:
 	{
 		// création de l'écurie, réglages : la voiture dans le tiers droit (le panneau occupe la gauche), léger balancement
-		const float A = 0.3f * FMath::Sin(T * 0.07f);
+		// presque dans l'axe du panneau : le nom de l'écurie reste lisible au-dessus de la voiture
+		const float A = -0.05f + 0.05f * FMath::Sin(T * 0.07f);
 		Eye = O + FVector(FMath::Cos(A) * 1320.f, FMath::Sin(A) * 1320.f, 255.f);
 		const FVector F = (CarC - Eye).GetSafeNormal2D(), Right(-F.Y, F.X, 0.f);
 		Look = CarC - Right * 560.f;
