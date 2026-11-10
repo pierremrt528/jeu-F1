@@ -41,7 +41,7 @@ void UGPMFactorySubsystem::LoadQG()
 			O->TryGetStringField(TEXT("desc"), B.Desc);
 			B.Tag = GPMQGData::TagOf(B.Id);
 			const TArray<TSharedPtr<FJsonValue>>* Lv = nullptr;
-			if (O->TryGetArrayField(TEXT("lv"), Lv)) for (const TSharedPtr<FJsonValue>& L : *Lv) B.Lv.Add(L->AsString());
+			if (O->TryGetArrayField(TEXT("lv"), Lv)) for (const TSharedPtr<FJsonValue>& L : *Lv) B.Lv.Add(L->AsString().Replace(TEXT("\u2212"), TEXT("-")));
 			while (B.Lv.Num() < 3) B.Lv.Add(FString());
 			BuildingList.Add(B);
 		}
