@@ -73,7 +73,7 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 		if (bBest)
 			NameRow->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f, 0.f, 0.f))
 			[
-				SNew(SBorder).BorderImage(GPMUIStyle::Rounded(40.f)).BorderBackgroundColor(FSlateColor(CGood)).Padding(FMargin(10.f, 2.f))
+				SNew(SBorder).BorderImage(GPMUIStyle::Rounded(12.f)).BorderBackgroundColor(FSlateColor(CGood)).Padding(FMargin(14.f, 3.f, 14.f, 4.f))
 				[ Txt(TEXT("CONSEIL DE L'INGÉNIEUR"), 11, InkOn(CGood), true) ]
 			];
 		const float Delta = Est[k] - Fastest;

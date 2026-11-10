@@ -5,7 +5,7 @@ import os
 import traceback
 import unreal
 
-VERSION = 1
+VERSION = 2
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(TOOLS)
 TEX_SRC = os.path.join(TOOLS, "Textures")
@@ -39,7 +39,7 @@ def fail(msg):
 
 # ---------- textures ----------
 
-def import_texture(file_name, asset_name, normal=False):
+def import_texture(file_name, asset_name, normal=False, linear=False, sky=False):
     path = os.path.join(TEX_SRC, file_name)
     if not os.path.exists(path):
         fail("texture manquante " + path)
@@ -60,7 +60,16 @@ def import_texture(file_name, asset_name, normal=False):
         setp(tex, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
         setp(tex, "srgb", False)
         setp(tex, "flip_green_channel", True)   # photo au format OpenGL (three.js)
-    setp(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
+    else:
+        # photos en niveaux de gris (nuages) : format couleur ordinaire, pour que le matériau sache les lire
+        setp(tex, "compression_settings", unreal.TextureCompressionSettings.TC_DEFAULT)
+        if linear:
+            setp(tex, "srgb", False)
+    if sky:
+        setp(tex, "address_y", unreal.TextureAddress.TA_CLAMP)   # bande de ciel : pas de répétition en hauteur
+        setp(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_SKYBOX)
+    else:
+        setp(tex, "lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
     eal.save_loaded_asset(tex, False)
     log("texture " + asset_name)
     return tex
@@ -240,21 +249,73 @@ def make_inst():
     finish(mat, instanced=True)
 
 
+def make_sky():
+    """Ciel en dégradé, soleil et chaînes de montagnes à l'horizon (couleurs par sommet, sans éclairage, comme le jeu web).
+    Bright = intensité (le soleil brille fort pour le halo), Gloom = grisaille de la pluie (vers Grey)."""
+    mat = material("M_GPM_Sky")
+    setp(mat, "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    setp(mat, "two_sided", True)
+    vc = node(mat, unreal.MaterialExpressionVertexColor, -900, 0)
+    grey = vector(mat, "Grey", (0.33, 0.35, 0.38), -900, 160)
+    mix = lerp(mat, vc, "", grey, "", scalar(mat, "Gloom", 0.0, -900, 300), "", -600, 60)
+    output(mul(mat, mix, "", scalar(mat, "Bright", 1.0, -600, 260), "", -350, 100), "", MP.MP_EMISSIVE_COLOR)
+    finish(mat)
+
+
+def make_clouds(tex, alpha):
+    """Couche de nuages photographiques par-dessus le dégradé (comme le jeu web) : Drift = dérive lente,
+    Gloom = ciel couvert sous la pluie (nuages plus denses et plus gris)."""
+    mat = material("M_GPM_Clouds")
+    setp(mat, "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    setp(mat, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    setp(mat, "two_sided", True)
+    uv0 = node(mat, unreal.MaterialExpressionTextureCoordinate, -1500, 0)
+    t = node(mat, unreal.MaterialExpressionTime, -1500, 160)
+    drift = mul(mat, t, "", scalar(mat, "Drift", 0.0012, -1500, 260), "", -1300, 180)
+    shift = node(mat, unreal.MaterialExpressionAppendVector, -1150, 180)
+    link(drift, "", shift, "A")
+    link(const(mat, 0.0, -1300, 320), "", shift, "B")
+    uv = node(mat, unreal.MaterialExpressionAdd, -1000, 60)
+    link(uv0, "", uv, "A")
+    link(shift, "", uv, "B")
+    col = node(mat, unreal.MaterialExpressionTextureSampleParameter2D, -800, -120, parameter_name="Tex", texture=tex)
+    link(uv, "", col, "UVs")
+    msk = node(mat, unreal.MaterialExpressionTextureSampleParameter2D, -800, 200, parameter_name="Mask", texture=alpha,
+               sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
+    link(uv, "", msk, "UVs")
+    gloom = scalar(mat, "Gloom", 0.0, -800, 420)
+    tint = lerp(mat, vector(mat, "Tint", (1, 1, 1), -600, -300), "", vector(mat, "Grey", (0.42, 0.44, 0.47), -600, -180), "",
+                gloom, "", -400, -240)
+    c1 = mul(mat, col, "RGB", tint, "", -250, -150)
+    output(mul(mat, c1, "", scalar(mat, "Bright", 1.0, -400, -40), "", -100, -100), "", MP.MP_EMISSIVE_COLOR)
+    dens = node(mat, unreal.MaterialExpressionAdd, -500, 380)
+    link(scalar(mat, "Opacity", 1.0, -700, 340), "", dens, "A")
+    link(mul(mat, gloom, "", const(mat, 1.5, -700, 520), "", -600, 460), "", dens, "B")
+    a = mul(mat, msk, "R", dens, "", -300, 300)
+    sat = node(mat, unreal.MaterialExpressionSaturate, -150, 300)
+    link(a, "", sat, "")
+    output(sat, "", MP.MP_OPACITY)
+    finish(mat)
+
+
 def main():
     log("version %d, projet %s" % (VERSION, PROJECT))
     textures = {}
-    for file_name, asset_name, normal in [
-        ("asphalte.jpg", "T_Asphalt", False),
-        ("asphalte-normal.jpg", "T_Asphalt_N", True),
-        ("herbe.jpg", "T_Grass", False),
-        ("gravier.jpg", "T_Gravel", False),
-        ("sable.jpg", "T_Sand", False),
+    for file_name, asset_name, normal, linear, sky in [
+        ("asphalte.jpg", "T_Asphalt", False, False, False),
+        ("asphalte-normal.jpg", "T_Asphalt_N", True, False, False),
+        ("herbe.jpg", "T_Grass", False, False, False),
+        ("gravier.jpg", "T_Gravel", False, False, False),
+        ("sable.jpg", "T_Sand", False, False, False),
+        ("nuages.jpg", "T_Clouds", False, False, True),
+        ("nuages-alpha.jpg", "T_CloudsA", False, True, True),
     ]:
         try:
-            textures[asset_name] = import_texture(file_name, asset_name, normal)
+            textures[asset_name] = import_texture(file_name, asset_name, normal, linear, sky)
         except Exception:
             fail("texture %s : %s" % (asset_name, traceback.format_exc()))
-    for fn, args in [(make_lit, ()), (make_ground, (textures.get("T_Asphalt"), textures.get("T_Asphalt_N"))), (make_inst, ())]:
+    for fn, args in [(make_lit, ()), (make_ground, (textures.get("T_Asphalt"), textures.get("T_Asphalt_N"))), (make_inst, ()),
+                     (make_sky, ()), (make_clouds, (textures.get("T_Clouds"), textures.get("T_CloudsA")))]:
         try:
             fn(*args)
         except Exception:

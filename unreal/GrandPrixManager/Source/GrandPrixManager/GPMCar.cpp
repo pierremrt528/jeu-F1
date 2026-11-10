@@ -183,7 +183,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	// nouvelle séance : voiture réparée, mode normal
 	Mode = 1; PowerMul = AccMul = 1.f;
-	Dmg = DmgR = DmgNew = DmgNewR = Bump = 0.f; DmgKd = RwKd = 1.f;
+	Dmg = DmgR = DmgNew = DmgNewR = ContactT = 0.f; DmgKd = RwKd = 1.f;
 	bFlat = bAdvised = false;
 	RepairWings();
 	UpdateTransform();
@@ -342,6 +342,7 @@ void AGPMCar::Step(float Dt)
 	const float V0 = V;
 	V += A * Dt;
 	V = FMath::Max(V, -6.f);
+	if (bHold) V = 0.f;   // sur la grille, freins serrés : ni marche arrière ni glissade dans la pente
 	if (FMath::Abs(V) < 0.05f && Throttle == 0 && Brake == 0) V = 0;
 
 	// latéral : la voiture avance selon Course et pointe selon Heading = Course + Beta
@@ -397,7 +398,7 @@ void AGPMCar::Step(float Dt)
 
 	// murs
 	HitWall = FMath::Max(0.f, HitWall - Dt);
-	Bump = FMath::Max(0.f, Bump - Dt);
+	ContactT = FMath::Max(0.f, ContactT - Dt);
 	const TArray<float>& WallArr = Lat > 0 ? T.WallRight : T.WallLeft;
 	const float WLim = (WallArr.IsValidIndex(i) ? WallArr[i] : Half + 9.f) - 1.0f;
 	if (FMath::Abs(Lat) > WLim)

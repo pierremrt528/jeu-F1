@@ -191,6 +191,7 @@ private:
 	TSet<FString> Captured;
 	EPhase CapPhase = EPhase::Lights;
 	float CapT = 0.f;
+	bool bShadersBusy = false;   // matériaux en cours de compilation (damier gris) : pas de capture d'écran
 	void BaseUps();
 	void ApplySetup();
 	void SimRace();
@@ -210,6 +211,6 @@ private:
 	float SkyGloom = 0.f, SkyGloomSet = -1.f, SkyCaptured = 0.f, WetSet = -1.f;
 	float FogBase = 0.004f;
 	FLinearColor FogTint = FLinearColor(0.36f, 0.42f, 0.48f);
-	UPROPERTY() TObjectPtr<class USkyAtmosphereComponent> Atmos;
+	UPROPERTY() TObjectPtr<class AGPMSky> SkyDome;
 	UPROPERTY() TObjectPtr<class AGPMDebris> Debris;
 };

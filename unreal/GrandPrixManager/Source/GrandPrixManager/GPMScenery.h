@@ -10,8 +10,9 @@ class UMaterialInterface;
 struct FGPMTrackData;
 
 /**
- * Décor du circuit (scenery.js), sans asset : relief du terrain qui épouse l'altitude de la piste,
- * arbres (sapins, feuillus, palmiers), immeubles, tribunes, stands, montagnes à l'horizon, mer.
+ * Décor du circuit (scenery.js), sans asset : relief du terrain qui épouse l'altitude de la piste (prolongé jusqu'à
+ * l'horizon), arbres (sapins à étages, feuillus bosselés, palmiers à palmes), immeubles, tribunes, stands, mer et plage.
+ * Ciel et montagnes : AGPMSky.
  * Tout est instancié (un appel de rendu par type d'objet), sans ombres, pour tenir 60 i/s sur mobile.
  */
 UCLASS()
@@ -31,7 +32,6 @@ private:
 	void BuildTrees();
 	void BuildCity();
 	void BuildStands();
-	void BuildMountains();
 	/**
 	 * Calque de formes instanciées. Avec les matériaux de Tools/gpm_assets.py, chaque instance a sa propre teinte
 	 * (entre Color et Color2, plus ou moins claire) ; Windows : bandeaux vitrés des immeubles.
@@ -45,6 +45,8 @@ private:
 	const FGPMTrackData* Track = nullptr;
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Terrain;
 	UPROPERTY() TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Instances;
+	/** Arbres fusionnés par carrés de 600 m (un appel de rendu par carré, coupé hors du champ). */
+	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Foliage;
 	UPROPERTY() TObjectPtr<UMaterialInterface> ShapeMat;
 	UPROPERTY() TObjectPtr<UMaterialInterface> VertexMat;
 
@@ -55,4 +57,8 @@ private:
 	TArray<float> Heights;
 	TMap<int64, TArray<int32>> Hash;
 	float BaseZ = 0.f;
+	// mer au sud du circuit (comme le jeu web) : rivage à SeaY (cm), rien de construit à moins de 45 m
+	bool bSeaSide = false;
+	float SeaY = 0.f;
+	bool InSea(float Y) const { return bSeaSide && Y < SeaY + 4500.f; }
 };

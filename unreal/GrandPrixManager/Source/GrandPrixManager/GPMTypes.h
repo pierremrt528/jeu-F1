@@ -49,10 +49,12 @@ struct FGPMTheme
 	float FogStart = 250.f, FogEnd = 1500.f;        // m
 	FString Surface = TEXT("grass"), TreeKind = TEXT("mix");
 	int32 Trees = 800;
-	float TreeHue = -1.f;                           // teinte des feuillages (automne, vignes…), −1 = vert
+	float TreeHue = -1.f, TreeHueSpan = 0.f;        // teinte des feuillages (automne, vignes…) ± écart, −1 = vert
 	bool bSea = false;
 	int32 City = 0; float CityHMin = 15.f, CityHMax = 60.f;
+	// chaînes de montagnes à l'horizon (scenery.js) : couleur du pied et des sommets, hauteurs mini/maxi (m) ; 0 = pas de chaîne
 	FLinearColor MountFar = FLinearColor(0.35f, 0.45f, 0.55f), MountNear = FLinearColor(0.2f, 0.3f, 0.22f);
+	FLinearColor MountFarTop = FLinearColor(0.48f, 0.58f, 0.67f), MountNearTop = FLinearColor(0.27f, 0.37f, 0.29f);
 	float FarH0 = 160.f, FarH1 = 520.f, NearH0 = 60.f, NearH1 = 260.f;
 	float Dry = 0.55f;                              // probabilité d'un week-end sec (forecast de strategy.js)
 };

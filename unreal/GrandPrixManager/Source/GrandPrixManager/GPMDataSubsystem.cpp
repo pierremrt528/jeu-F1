@@ -44,7 +44,11 @@ void UGPMDataSubsystem::ReadTheme(const TSharedPtr<FJsonObject>& O, FGPMTheme& T
 	double D;
 	if (O->TryGetNumberField(TEXT("trees"), D)) Th.Trees = int32(D);
 	if (O->TryGetNumberField(TEXT("dry"), D)) Th.Dry = float(D);
-	if (O->TryGetArrayField(TEXT("treeHue"), A) && A->Num() == 2) Th.TreeHue = float(((*A)[0]->AsNumber() + (*A)[1]->AsNumber()) / 2);
+	if (O->TryGetArrayField(TEXT("treeHue"), A) && A->Num() == 2)
+	{
+		Th.TreeHue = float(((*A)[0]->AsNumber() + (*A)[1]->AsNumber()) / 2);
+		Th.TreeHueSpan = float(FMath::Abs((*A)[1]->AsNumber() - (*A)[0]->AsNumber()) / 2);
+	}
 	O->TryGetBoolField(TEXT("sea"), Th.bSea);
 	const TSharedPtr<FJsonObject>* C = nullptr;
 	if (O->TryGetObjectField(TEXT("city"), C))
@@ -56,17 +60,20 @@ void UGPMDataSubsystem::ReadTheme(const TSharedPtr<FJsonObject>& O, FGPMTheme& T
 	const TSharedPtr<FJsonObject>* Mo = nullptr;
 	if (O->TryGetObjectField(TEXT("mountains"), Mo))
 	{
-		auto Read = [&](const TCHAR* K, float& H0, float& H1, FLinearColor& Col)
+		// [hauteur mini, maxi, couleur du pied, couleur des sommets] ; null = pas de chaîne (villes)
+		auto Read = [&](const TCHAR* K, float& H0, float& H1, FLinearColor& Col, FLinearColor& Top)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* M = nullptr;
 			if ((*Mo)->TryGetArrayField(K, M) && M->Num() >= 3)
 			{
 				H0 = (*M)[0]->AsNumber(); H1 = (*M)[1]->AsNumber();
 				Col = HexToColor((int64)(*M)[2]->AsNumber());
+				Top = M->Num() >= 4 ? HexToColor((int64)(*M)[3]->AsNumber()) : Col;
 			}
+			else H0 = H1 = 0.f;
 		};
-		Read(TEXT("far"), Th.FarH0, Th.FarH1, Th.MountFar);
-		Read(TEXT("near"), Th.NearH0, Th.NearH1, Th.MountNear);
+		Read(TEXT("far"), Th.FarH0, Th.FarH1, Th.MountFar, Th.MountFarTop);
+		Read(TEXT("near"), Th.NearH0, Th.NearH1, Th.MountNear, Th.MountNearTop);
 	}
 }
 

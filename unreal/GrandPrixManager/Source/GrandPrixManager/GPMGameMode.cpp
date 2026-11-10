@@ -8,16 +8,15 @@
 #include "GPMHUD.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
-#include "Components/SkyAtmosphereComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/SkyLight.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/PostProcessVolume.h"
-#include "Components/VolumetricCloudComponent.h"
 #include "UnrealClient.h"
 #include "Misc/Paths.h"
 #include "GPMScenery.h"
+#include "GPMSky.h"
 #include "GPMDebris.h"
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
@@ -32,6 +31,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "HAL/IConsoleManager.h"
 #include "TimerManager.h"
+#include "ShaderCompiler.h"
 
 AGPMGameMode::AGPMGameMode()
 {
@@ -72,7 +72,7 @@ void AGPMGameMode::LoadCircuit(const FString& Id)
 
 void AGPMGameMode::SetupWorld()
 {
-	// Soleil (ombres dynamiques proches seulement), ciel physique, lumière d'ambiance capturée du ciel, brouillard, post-traitement léger
+	// Soleil (ombres dynamiques proches seulement), lumière d'ambiance capturée du ciel (dôme AGPMSky posé par ApplyTheme), brouillard, post-traitement léger
 	UWorld* W = GetWorld();
 	Sun = W->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-40.f, 35.f, 0.f));
 	if (Sun)
@@ -80,25 +80,12 @@ void AGPMGameMode::SetupWorld()
 		UDirectionalLightComponent* D = Cast<UDirectionalLightComponent>(Sun->GetLightComponent());
 		D->SetMobility(EComponentMobility::Movable);
 		D->SetIntensity(8.f);
-		D->SetAtmosphereSunLight(true);
+		D->SetLightColor(FLinearColor(1.f, 0.94f, 0.85f));   // soleil un peu chaud (0xfff0d8 du jeu web)
 		D->SetCastShadows(true);
 		D->SetDynamicShadowDistanceMovableLight(9000.f);   // 90 m : ombres des voitures proches
 		D->SetDynamicShadowCascades(2);
 	}
-	if (AActor* Sky = W->SpawnActor<AActor>())
-	{
-		USkyAtmosphereComponent* C = NewObject<USkyAtmosphereComponent>(Sky);
-		Sky->SetRootComponent(C);
-		C->RegisterComponent();
-		Atmos = C;   // ciel plus blanc sous la pluie
-	}
-	// nuages volumétriques (matériau de nuages fourni avec le moteur) : vrai ciel en relief, éclairé par le soleil
-	if (AActor* Clouds = W->SpawnActor<AActor>())
-	{
-		UVolumetricCloudComponent* VC = NewObject<UVolumetricCloudComponent>(Clouds);
-		Clouds->SetRootComponent(VC);
-		VC->RegisterComponent();
-	}
+	SkyDome = W->SpawnActor<AGPMSky>();   // dégradé, soleil, nuages photo et montagnes (comme le jeu web)
 	SkyLight = W->SpawnActor<ASkyLight>();
 	if (SkyLight)
 	{
@@ -106,6 +93,8 @@ void AGPMGameMode::SetupWorld()
 		L->SetMobility(EComponentMobility::Movable);
 		L->bRealTimeCapture = false;   // capture unique du ciel (au chargement de chaque circuit) : beaucoup moins cher
 		L->SetIntensity(1.f);
+		L->bLowerHemisphereIsBlack = true;
+		L->LowerHemisphereColor = FLinearColor(0.08f, 0.09f, 0.05f);   // lumière renvoyée par l'herbe (0x6a7448 de l'hémisphère du jeu web, atténué)
 		L->RecaptureSky();
 	}
 	Debris = W->SpawnActor<AGPMDebris>();   // éclats de carbone et ailerons arrachés
@@ -132,16 +121,22 @@ void AGPMGameMode::ApplyTheme(const FGPMTrackData* T)
 	if (Fog)
 	{
 		UExponentialHeightFogComponent* F = Fog->GetComponent();
-		FogBase = 0.004f * 1500.f / FMath::Max(600.f, Th.FogEnd);
-		FogTint = Th.Horizon * 0.6f;
+		// fog [début, fin] du jeu web : voile qui commence à FogStart, ~60 % à FogEnd, total vers 4 km ; couleur de l'horizon
+		// du ciel (raccord invisible). Au-delà de 12 km (dôme, nuages, montagnes) : pas de brouillard.
+		FogBase = 17.4f / FMath::Max(400.f, Th.FogEnd - Th.FogStart);
+		FogTint = Th.Horizon;
 		F->SetFogDensity(FogBase);
-		F->SetStartDistance(Th.FogStart * 30.f);
+		F->SetFogHeightFalloff(0.02f);
+		F->SetStartDistance(Th.FogStart * 100.f);
+		F->SetFogCutoffDistance(GPMSkyCfg::FogCutoff);
 		F->SetFogInscatteringColor(FogTint);
 		SkyGloomSet = -1.f;   // la grisaille de la pluie est réappliquée sur le nouveau ciel
 		Fog->SetActorLocation(FVector(0, 0, T->Points.Num() ? T->Points[0].Z : 0.f));
 	}
 	// capture du ciel une fois le soleil placé (à l'image suivante, quand le ciel est à jour)
 	if (SkyLight) GetWorldTimerManager().SetTimerForNextTick([this]() { if (SkyLight) SkyLight->GetLightComponent()->RecaptureSky(); });
+	if (!SkyDome) SkyDome = GetWorld()->SpawnActor<AGPMSky>();
+	if (SkyDome) SkyDome->Build(T);
 	if (!Scenery) Scenery = GetWorld()->SpawnActor<AGPMScenery>();
 	if (Scenery) Scenery->Build(T);
 }
@@ -611,6 +606,11 @@ void AGPMGameMode::AutoCapture(float Dt)
 	static_assert(int32(UE_ARRAY_COUNT(Names)) == int32(EPhase::Outro) + 1, "un nom par phase");
 	if (Phase != CapPhase) { CapPhase = Phase; CapT = 0.f; }
 	CapT += Dt;
+	// premier lancement : les matériaux se compilent quelques secondes (damier gris) ; on attend, puis on recapture le ciel
+	const bool bBusy = GShaderCompilingManager && GShaderCompilingManager->IsCompiling();
+	if (bShadersBusy && !bBusy && SkyLight) SkyLight->GetLightComponent()->RecaptureSky();
+	bShadersBusy = bBusy;
+	if (bBusy) return;
 	FString Name = Names[int32(Phase)];
 	float Wait = 1.5f;
 	if (Phase == EPhase::Race) { Wait = 12.f; if (CapT > 45.f) { Name += TEXT("2"); Wait = 45.f; } }
@@ -1029,13 +1029,13 @@ void AGPMGameMode::Collide()
 					if (Close > 5)
 					{
 						// dégâts sur l'aileron touché (avant ou arrière), seulement sur un nouveau contact franc
-						if (A.Bump <= 0.f) (Pa > 0 ? A.DmgNew : A.DmgNewR) += Close * 0.01f;
-						if (B.Bump <= 0.f) (Pb > 0 ? B.DmgNew : B.DmgNewR) += Close * 0.01f;
+						if (A.ContactT <= 0.f) (Pa > 0 ? A.DmgNew : A.DmgNewR) += Close * 0.01f;
+						if (B.ContactT <= 0.f) (Pb > 0 ? B.DmgNew : B.DmgNewR) += Close * 0.01f;
 						const float Kick = FMath::Min(0.5f, (Close - 5) * 0.03f) * (FMath::FRand() < 0.5f ? -1.f : 1.f);
 						A.Beta += Kick * (Pa < 0 && !A.Assist.bStab ? 1.f : 0.3f);
 						B.Beta += Kick * (Pb < 0 && !B.Assist.bStab ? 1.f : 0.3f);
 					}
-					A.Bump = B.Bump = 0.6f;
+					A.ContactT = B.ContactT = 0.6f;
 				}
 			}
 		}

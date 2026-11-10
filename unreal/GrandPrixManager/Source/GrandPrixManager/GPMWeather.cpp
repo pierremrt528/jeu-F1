@@ -7,7 +7,7 @@
 #include "GPMDebris.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
-#include "Components/SkyAtmosphereComponent.h"
+#include "GPMSky.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/SkyLight.h"
@@ -101,16 +101,12 @@ void AGPMGameMode::UpdateSky(float Dt)
 	const float G = SkyGloom;
 	if (Sun)
 		if (UDirectionalLightComponent* SunLight = Cast<UDirectionalLightComponent>(Sun->GetLightComponent())) SunLight->SetIntensity(8.f * (1.f - 0.72f * G));
-	if (Atmos)
-	{
-		Atmos->SetRayleighScatteringScale(1.f - 0.55f * G);
-		Atmos->SetMieScatteringScale(1.f + 3.f * G);
-	}
+	if (SkyDome) SkyDome->SetGloom(G);
 	if (Fog)
 	{
 		UExponentialHeightFogComponent* FogC = Fog->GetComponent();
 		FogC->SetFogDensity(FogBase * (1.f + 2.2f * G));
-		FogC->SetFogInscatteringColor(FogTint + (FLinearColor(0.3f, 0.32f, 0.35f) - FogTint) * G);
+		FogC->SetFogInscatteringColor(FogTint + (AGPMSky::GloomGrey() - FogTint) * (0.85f * G));   // même gris que l'horizon du ciel couvert
 	}
 	// lumière d'ambiance : nouvelle capture du ciel par paliers (coûteuse, donc rare)
 	const bool bEnd = (G <= 0.001f || G >= 0.999f) && !FMath::IsNearlyEqual(G, SkyCaptured, 0.001f);

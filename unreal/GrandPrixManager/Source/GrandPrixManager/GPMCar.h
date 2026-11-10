@@ -125,7 +125,7 @@ public:
 	float Dmg = 0.f, DmgR = 0.f;           // 0 intact … 1 détruit
 	float DmgNew = 0.f, DmgNewR = 0.f;     // chocs de l'image, appliqués par le mode de jeu
 	float DmgKd = 1.f, RwKd = 1.f;         // part de l'appui restant à l'avant et à l'arrière
-	float Bump = 0.f;                      // pas de nouveaux dégâts pendant un court instant après un contact
+	float ContactT = 0.f;                   // pas de nouveaux dégâts pendant un court instant après un contact
 	bool bFwOff = false, bRwOff = false;   // aileron arraché
 	bool bFlat = false;                    // crevaison (pneu à 0 %)
 	bool bAdvised = false;                 // conseil du muret déjà donné ce tour-ci

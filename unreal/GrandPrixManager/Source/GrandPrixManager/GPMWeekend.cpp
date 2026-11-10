@@ -46,7 +46,7 @@ float AGPMGameMode::SetupLap(int32 K) const
 	const int32 N = T->Curvature.Num();
 	if (N < 10) return 90.f;
 	const FSetup& St = Setups[FMath::Clamp(K, 0, 4)];
-	const float Grav = 9.81f, Mu = AGPMCar::Mu * 0.94f * Car->UpMu, Kd = AGPMCar::Kd * Car->UpKd * (1.f + St.Kd);
+	const float GravA = 9.81f, Mu = AGPMCar::Mu * 0.94f * Car->UpMu, Kd = AGPMCar::Kd * Car->UpKd * (1.f + St.Kd);
 	const float Vt = AGPMCar::VTop * Car->Perf * Car->UpVTop * (1.f + St.VTop);
 	TArray<float> V;
 	V.SetNumUninitialized(N);
@@ -55,7 +55,7 @@ float AGPMGameMode::SetupLap(int32 K) const
 		float Cv = 0.f;
 		for (int32 j = -3; j <= 3; ++j) Cv = FMath::Max(Cv, FMath::Abs(T->Curvature[(i + j + N) % N]));
 		const float Den = Cv - Mu * Kd;
-		V[i] = Den > 0.f ? FMath::Min(Vt, FMath::Sqrt(Mu * Grav / Den)) : Vt;
+		V[i] = Den > 0.f ? FMath::Min(Vt, FMath::Sqrt(Mu * GravA / Den)) : Vt;
 	}
 	for (int32 Pass = 0; Pass < 2; ++Pass)
 		for (int32 i = N - 1; i >= 0; --i)

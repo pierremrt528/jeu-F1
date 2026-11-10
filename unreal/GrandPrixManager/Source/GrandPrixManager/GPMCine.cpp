@@ -78,10 +78,11 @@ void AGPMGameMode::UpdateCine(float Dt)
 		{
 			// création de l'écurie, réglages : la voiture tourne sous la caméra, comme à l'atelier,
 			// décalée à droite de l'écran (le panneau occupe la gauche)
-			const float A = CineT * 0.3f;
-			Eye = CarPos + FVector(FMath::Cos(A) * 620.f, FMath::Sin(A) * 620.f, 210.f);
+			// assez loin pour que toute la voiture tienne dans la moitié droite, même vue de profil
+			const float A = CineT * 0.3f, Orbit = 1150.f;
+			Eye = CarPos + FVector(FMath::Cos(A) * Orbit, FMath::Sin(A) * Orbit, 300.f);
 			const FVector Dir = (CarPos - Eye).GetSafeNormal2D();
-			Look = CarPos + FVector(0, 0, 40.f) - FVector::CrossProduct(FVector::UpVector, Dir) * 330.f;
+			Look = CarPos + FVector(0, 0, 40.f) - FVector::CrossProduct(FVector::UpVector, Dir) * (Orbit * 0.6f);
 			break;
 		}
 		// survol lent du circuit derrière les menus

@@ -61,7 +61,7 @@ private:
 	void DrawRadioPad(class AGPMGameMode* GM, class AGPMCar* Car);
 	void DrawRadioMsg(const FString& Msg, float W, float Y);
 	void DrawQualiPanel(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
-	void DrawWeatherChip(class AGPMGameMode* GM, float Right, float Y);
+	void DrawWeatherChip(class AGPMGameMode* GM, float RightX, float Y);
 	void DrawDamage(class AGPMCar* Car, float X, float Y, float H);
 	FButton RadioBtn[3];
 	bool bRadioDown[3] = { false, false, false };

@@ -449,7 +449,11 @@ TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TAr
 		const FLinearColor Col = Colors.IsValidIndex(k) ? Colors[k] : CText;
 		TSharedRef<SWidget> Cell = Txt(Cells[k].Key, 16, bMe ? CGold : Col, bMe || k == 0);
 		if (Cells[k].Value > 0.f)
-			Box->AddSlot().AutoWidth().VAlign(VAlign_Center)[ SNew(SBox).WidthOverride(Cells[k].Value)[ Cell ] ];
+			Box->AddSlot().AutoWidth().VAlign(VAlign_Center)
+			[
+				// colonne de largeur fixe : un nom trop long est coupé au bord au lieu d'empiéter sur la colonne suivante
+				SNew(SBox).WidthOverride(Cells[k].Value).Clipping(EWidgetClipping::ClipToBounds).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Cell ]
+			];
 		else
 			Box->AddSlot().FillWidth(1.f).VAlign(VAlign_Center)[ Cell ];
 	}
