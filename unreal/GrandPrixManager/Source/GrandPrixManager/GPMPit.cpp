@@ -7,8 +7,9 @@ namespace
 	constexpr float PitDS = 2.f;
 }
 
-float AGPMCar::TyreGrip(TCHAR T) { return T == 'S' ? 1.09f : T == 'H' ? 0.93f : T == 'W' ? 0.86f : 1.f; }
-float AGPMCar::TyreWpl(TCHAR T) { return T == 'S' ? 0.16f : T == 'H' ? 0.055f : T == 'W' ? 0.06f : 0.085f; }
+// intermédiaires (I) : entre les durs et les pneus pluie au sec, rois de la piste humide
+float AGPMCar::TyreGrip(TCHAR T) { return T == 'S' ? 1.09f : T == 'H' ? 0.93f : T == 'W' ? 0.86f : T == 'I' ? 0.9f : 1.f; }
+float AGPMCar::TyreWpl(TCHAR T) { return T == 'S' ? 0.16f : T == 'H' ? 0.055f : T == 'W' ? 0.06f : T == 'I' ? 0.07f : 0.085f; }
 
 // adhérence selon la vie restante du pneu (R = 1 neuf … 0 usé) : 100-85 % maximal, 85-60 % bon, 60-40 % faible, dessous presque nul
 float AGPMCar::LifeGrip(float R)

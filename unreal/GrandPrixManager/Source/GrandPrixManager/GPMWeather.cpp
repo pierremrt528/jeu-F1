@@ -17,7 +17,8 @@
 
 // ---------- météo ----------
 
-// tirage du week-end (forecast) : sec, pluie toute la course, averse en cours de course, ou éclaircie ; ?meteo=pluie|averse|eclaircie|sec
+// tirage du week-end (forecast) : sec, pluie toute la course, averse en cours de course, ou éclaircie ; pluie forte ou fine
+// (piste humide : intermédiaires) ; ?meteo=pluie|averse|eclaircie|bruine|sec
 void AGPMGameMode::Forecast()
 {
 	const FGPMTrackData* T = CurTrack();
@@ -25,8 +26,11 @@ void AGPMGameMode::Forecast()
 	WxChangeAt = -1.f;
 	// météo imposée : option de test, ou choix de la course solo (1 sec, 2 pluie, 3 averse, 4 éclaircie)
 	const FString Opt = UGameplayStatics::ParseOption(OptionsString, TEXT("meteo"));
-	const int32 Forced = !Opt.IsEmpty() ? (Opt == TEXT("pluie") ? 2 : Opt == TEXT("averse") ? 3 : Opt == TEXT("eclaircie") ? 4 : 1) : !bCareer ? SoloWeather : 0;
-	if (Forced == 2) bRainStart = true;
+	const int32 Forced = !Opt.IsEmpty() ? (Opt == TEXT("pluie") ? 2 : Opt == TEXT("averse") ? 3 : Opt == TEXT("eclaircie") ? 4 : Opt == TEXT("bruine") ? 5 : 1) : !bCareer ? SoloWeather : 0;
+	// pluie fine 4 fois sur 10 quand il pleut : la piste reste humide, les intermédiaires sont les plus rapides
+	RainLevel = FMath::FRand() < 0.4f ? 0.42f : 0.9f;
+	if (Forced == 2) { bRainStart = true; RainLevel = 0.9f; }
+	else if (Forced == 5) { bRainStart = true; RainLevel = 0.42f; }
 	else if (Forced == 3) WxChangeAt = 0.3f + 0.2f * FMath::FRand();
 	else if (Forced == 4) { bRainStart = true; WxChangeAt = 0.4f; }
 	else if (Forced == 0 && T && T->Theme.Surface != TEXT("sand"))   // désert : toujours sec
@@ -46,27 +50,28 @@ void AGPMGameMode::Forecast()
 void AGPMGameMode::ResetWeather()
 {
 	bRaining = bRainStart;
-	TrackWet = bRainStart ? 0.9f : 0.f;
+	TrackWet = bRainStart ? RainLevel : 0.f;
 	bWxDone = bWxWarned = false;
 }
 
 FString AGPMGameMode::WeatherLabel() const
 {
 	if (WxChangeAt >= 0.f && !bWxDone) return bRainStart ? TEXT("Pluie, éclaircie attendue") : TEXT("Sec, averse attendue");
-	if (bRaining) return TEXT("Pluie");
+	if (bRaining) return RainLevel < 0.6f ? TEXT("Pluie fine") : TEXT("Pluie");
 	return TrackWet > 0.25f ? TEXT("Piste humide") : TEXT("Sec");
 }
 
 // humidité moyenne de la course, pour les courses simulées
 float AGPMGameMode::RaceWetK() const
 {
-	float Avg = bRainStart ? 0.9f : 0.f;
+	float Avg = bRainStart ? RainLevel : 0.f;
 	if (WxChangeAt >= 0.f)
-		Avg = bRainStart ? 0.9f * WxChangeAt + 0.3f * (1.f - WxChangeAt) : 0.8f * (1.f - WxChangeAt);
+		Avg = bRainStart ? RainLevel * WxChangeAt + 0.3f * (1.f - WxChangeAt) : RainLevel * 0.9f * (1.f - WxChangeAt);
 	return 1.f + 0.1f * Avg;
 }
 
-// pendant la course : changement de temps quand le leader atteint la part prévue, piste qui mouille (35 s) ou sèche (90 s)
+// pendant la course : changement de temps quand le leader atteint la part prévue ; la piste mouille (50 s) jusqu'au niveau
+// de la pluie (forte ou fine) ou sèche (140 s)
 void AGPMGameMode::UpdateWeather(float Dt)
 {
 	if (WxChangeAt >= 0.f && !bWxDone && Order.Num() && TotalLaps > 0)
@@ -86,13 +91,14 @@ void AGPMGameMode::UpdateWeather(float Dt)
 			Say(bRaining ? TEXT("Muret : la pluie arrive ! Surveille la piste.") : TEXT("Muret : la pluie s'arrête, la piste va sécher."));
 		}
 	}
-	TrackWet = FMath::Clamp(TrackWet + (bRaining ? Dt / 35.f : -Dt / 90.f), 0.f, 1.f);
+	const float WetGoal = bRaining ? RainLevel : 0.f;
+	TrackWet = TrackWet < WetGoal ? FMath::Min(WetGoal, TrackWet + Dt / 50.f) : FMath::Max(WetGoal, TrackWet - Dt / 140.f);
 }
 
 // ciel couvert sous la pluie : soleil voilé, ciel plus blanc, brouillard gris ; asphalte sombre et brillant (matériau)
 void AGPMGameMode::UpdateSky(float Dt)
 {
-	RainShow = FMath::FInterpConstantTo(RainShow, bRaining ? 1.f : 0.f, Dt, 0.25f);
+	RainShow = FMath::FInterpConstantTo(RainShow, bRaining ? (RainLevel < 0.6f ? 0.5f : 1.f) : 0.f, Dt, 0.25f);
 	const float Want = FMath::Max(bRaining ? 1.f : 0.f, TrackWet * 0.45f);
 	SkyGloom = FMath::FInterpConstantTo(SkyGloom, Want, Dt, 0.12f);
 	if (Track && FMath::Abs(TrackWet - WetSet) > 0.01f) { WetSet = TrackWet; Track->SetWet(TrackWet); }
@@ -151,9 +157,13 @@ bool AGPMGameMode::WantBox(const AGPMCar* C) const
 	const int32 Left = TotalLaps - C->Lap;
 	if (C->Lap < 1 || Left < 1) return false;
 	if (C->bFlat) return true;
-	const bool bWetNeed = TrackWet > C->WetCall, bDryNeed = TrackWet < 0.2f && !bRaining;
-	if (C->Tyre != TCHAR('W') && bWetNeed) return true;
-	if (C->Tyre == TCHAR('W') && bDryNeed && Left > 2) return true;
+	// pluie : slicks → intermédiaires ou pluie ; trop d'eau pour les intermédiaires ; piste qui sèche → slicks
+	const TCHAR Want = WetTyreFor(C);
+	const bool bSlicks = C->Tyre != TCHAR('W') && C->Tyre != TCHAR('I');
+	if (bSlicks && Want != 0) return true;
+	if (C->Tyre == TCHAR('I') && Want == TCHAR('W') && TrackWet > 0.62f) return true;
+	if (C->Tyre == TCHAR('W') && Want == TCHAR('I') && bRaining && TrackWet < 0.5f && Left > 2) return true;
+	if (!bSlicks && Want == 0 && TrackWet < C->WetCall - 0.05f && Left > 2) return true;
 	if (1.f - C->Wear < 0.25f && Left > 1) return true;
 	if ((C->Dmg > 0.5f || C->DmgR > 0.5f) && Left > 2) return true;
 	return false;
@@ -164,12 +174,23 @@ TCHAR AGPMGameMode::NextStopTyre(const AGPMCar* C) const
 {
 	const bool bMine = C == Car.Get();
 	if (bMine && bTyrePicked && ManualTyre != 0) return ManualTyre;
-	if (TrackWet > 0.4f || (bRaining && TrackWet > 0.15f)) return TCHAR('W');
+	if (const TCHAR Wet = WetTyreFor(C)) return Wet;
 	const TArray<TPair<TCHAR, int32>>& Pl = bMine ? Stints : C->Plan;
 	TCHAR Want = Pl.IsValidIndex(C->Stops + 1) ? Pl[C->Stops + 1].Key : TCHAR(0);
 	if (bMine && ManualTyre != 0) Want = ManualTyre;
-	if (Want == 0 || Want == TCHAR('W')) Want = PickTyre(FMath::Max(1, TotalLaps - C->Lap));
+	if (Want == 0 || Want == TCHAR('W') || Want == TCHAR('I')) Want = PickTyre(FMath::Max(1, TotalLaps - C->Lap));
 	return Want;
+}
+
+// gomme pour la pluie : pluie forte qui tombe ou piste détrempée → pluie ; piste humide → intermédiaires ;
+// piste qui sèche sous 38 % → on attend les slicks (WetCall : seuil de chaque pilote, ~25 %)
+TCHAR AGPMGameMode::WetTyreFor(const AGPMCar* C) const
+{
+	const float Call = C ? C->WetCall : 0.25f;
+	if (TrackWet > 0.58f || (bRaining && RainLevel >= 0.6f && TrackWet > Call * 0.6f)) return TCHAR('W');
+	if (bRaining && TrackWet > Call * 0.6f) return TCHAR('I');
+	if (TrackWet > Call && (bRaining || TrackWet >= 0.38f)) return TCHAR('I');
+	return 0;
 }
 
 // ---------- radio du muret ----------
@@ -184,9 +205,9 @@ void AGPMGameMode::RadioCall(int32 K)
 		Say(FString::Printf(TEXT("Muret : bien reçu, mode %s."), *AGPMCar::ModeName(Car->Mode)));
 		return;
 	}
-	// pneus du prochain arrêt : tendres → mediums → durs → pluie
+	// pneus du prochain arrêt : tendres → mediums → durs → intermédiaires → pluie
 	const TCHAR Cur = Car->bBox ? Car->NextTyre : NextStopTyre(Car);
-	const TCHAR Pick = Cur == TCHAR('S') ? TCHAR('M') : Cur == TCHAR('M') ? TCHAR('H') : Cur == TCHAR('H') ? TCHAR('W') : TCHAR('S');
+	const TCHAR Pick = Cur == TCHAR('S') ? TCHAR('M') : Cur == TCHAR('M') ? TCHAR('H') : Cur == TCHAR('H') ? TCHAR('I') : Cur == TCHAR('I') ? TCHAR('W') : TCHAR('S');
 	ManualTyre = Pick;
 	bTyrePicked = true;
 	if (Car->bBox) Car->NextTyre = Pick;
@@ -203,7 +224,7 @@ FString AGPMGameMode::RadioBrief() const
 	const TCHAR* Band = Life >= 0.85f ? TEXT("maximal") : Life >= 0.6f ? TEXT("bon") : Life >= 0.4f ? TEXT("faible") : TEXT("quasi nul");
 	const float PerLapFuel = N * 2.f / 1000.f * 1.7f * Car->UpFuel * AGPMCar::ModeFuel(Car->Mode);
 	const float FuelLaps = PerLapFuel > 0.f ? Car->Fuel / PerLapFuel : 99.f;
-	const float Need = FMath::Max(0.f, TotalLaps - Car->Lap + 1 - float(Car->Idx) / N);
+	const float Need = LapsToRefuel(Car);
 	FString Msg = FString::Printf(TEXT("Muret : pneus %d %% (grip %s) · essence %.1f tours%s"), FMath::RoundToInt(Life * 100.f), Band, FuelLaps, FuelLaps < Need + 0.2f ? TEXT(" (juste !)") : TEXT(""));
 	const int32 Me = Order.IndexOfByKey(Car.Get());
 	auto GapS = [this, N](const AGPMCar* Front, const AGPMCar* Back) { return (Front->Progress() - Back->Progress()) / N * LapEstimate; };

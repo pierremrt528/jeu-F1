@@ -63,7 +63,7 @@ public:
 	/** Message radio du muret affiché quelques secondes. */
 	FString Radio; float RadioT = 0.f;
 	void Say(const FString& Msg) { Radio = Msg; RadioT = 5.f; }
-	static FString TyreName(TCHAR T) { return T == 'S' ? TEXT("tendres") : T == 'H' ? TEXT("durs") : T == 'W' ? TEXT("pluie") : TEXT("mediums"); }
+	static FString TyreName(TCHAR T) { return T == 'S' ? TEXT("tendres") : T == 'H' ? TEXT("durs") : T == 'W' ? TEXT("pluie") : T == 'I' ? TEXT("intermédiaires") : TEXT("mediums"); }
 	static constexpr int32 Points[10] = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
 
 	// --- Menus (étape 15) ---
@@ -77,11 +77,16 @@ public:
 	/** Fin des fenêtres à choix (presse, flash info, négociation). */
 	void EndDialogs();
 	int32 SetupStep = 0, SoloIdx = 0, SoloLaps = 5, MercatoPage = 0;
-	int32 SoloWeather = 0;          // course solo : 0 au hasard, 1 sec, 2 pluie, 3 averse
+	int32 SoloWeather = 0;          // course solo : 0 au hasard, 1 sec, 2 pluie, 3 averse, 4 éclaircie, 5 pluie fine
 	bool bSoloQuali = true, bNegoFromMercato = false, bChampShown = false;
 	TArray<FString> LastLines;      // bilan de la course (direction, sponsors)
 	// réglages (sauvegardés dans GameUserSettings.ini)
 	bool bSetABS = true, bSetTC = true, bSetStab = true, bSetCockpit = false, bSetSound = true;
+	/** Niveau des pilotes IA : 0 débutant … 4 expert (multiplie leur rythme, DIFFS de data.js). */
+	int32 AILevel = 2;
+	static float AIDiff(int32 L) { static const float K[5] = { 0.95f, 0.975f, 1.f, 1.012f, 1.025f }; return K[FMath::Clamp(L, 0, 4)]; }
+	static const TCHAR* AILevelName(int32 L) { static const TCHAR* const Nm[5] = { TEXT("Débutant"), TEXT("Facile"), TEXT("Normal"), TEXT("Difficile"), TEXT("Expert") }; return Nm[FMath::Clamp(L, 0, 4)]; }
+	void SetAILevel(int32 L);
 	void SaveSettings();
 	/** Clic d'un bouton des menus (son généré). */
 	void UiClick();
@@ -95,6 +100,16 @@ public:
 	bool bLongRace = false;                  // format Long (~22 min) au lieu de Sprint (~11 min)
 	TArray<TPair<TCHAR, int32>> Stints;      // stratégie du joueur pour la course
 	TArray<FPlan> Plans;                     // 3 stratégies proposées
+	/** Carburant au départ choisi par le joueur : 0 très léger (−8 %) … 2 normal (+3 %) … 4 réservoir plein ; ravitaillement à chaque arrêt. */
+	int32 FuelK = 2;
+	static constexpr float Tank = 110.f;     // réservoir (kg, TANK de strategy.js)
+	static const TCHAR* FuelName(int32 K) { static const TCHAR* const Nm[5] = { TEXT("Très léger"), TEXT("Léger"), TEXT("Normal"), TEXT("Marge"), TEXT("Plein") }; return Nm[FMath::Clamp(K, 0, 4)]; }
+	/** Essence pour Laps tours de cette voiture (kg, consommation du motoriste comprise). */
+	float FuelFor(const AGPMCar* C, float Laps) const;
+	/** Essence du joueur au départ selon FuelK, pour le premier relais (ou toute la course sans arrêt). */
+	float PlayerStartFuel(int32 K) const;
+	/** Tours à couvrir jusqu'au prochain arrêt prévu (ravitaillement) ou jusqu'à l'arrivée. */
+	float LapsToRefuel(const AGPMCar* C) const;
 	void OpenTuning();
 	void PlayQuali(int32 K);
 	void SimQuali(int32 K);
@@ -115,6 +130,10 @@ public:
 	bool bWxDone = false, bWxWarned = false;
 	bool bRaining = false;
 	float TrackWet = 0.f;                    // piste : 0 sèche … 1 détrempée
+	float RainLevel = 0.9f;                  // pluie forte (0,9) ou fine (0,42 : piste humide, le domaine des intermédiaires)
+	TCHAR RainTyre() const { return RainLevel < 0.6f ? TCHAR('I') : TCHAR('W'); }
+	/** Pneus pour la pluie qu'il faut à cette voiture maintenant : 'W' pluie, 'I' intermédiaires, 0 slicks. */
+	TCHAR WetTyreFor(const AGPMCar* C) const;
 	float RainShow = 0.f;                    // pluie à l'écran (suit bRaining en douceur)
 	void Forecast();
 	FString WeatherLabel() const;            // « Sec », « Pluie », « Averse attendue », « Éclaircie attendue »
@@ -203,6 +222,7 @@ private:
 	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f;
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
 	bool bTyreWarn = false;
+	int32 FuelWarn = 0;   // 1 : essence juste annoncée, 2 : panne sèche
 	// captures d'écran automatiques (Saved/Captures, une par écran et par partie) pour régler l'interface et les graphismes
 	void AutoCapture(float Dt);
 	TSet<FString> Captured;

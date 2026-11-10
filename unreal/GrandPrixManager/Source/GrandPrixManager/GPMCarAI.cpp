@@ -42,14 +42,23 @@ void AGPMCar::DriveAI(float Dt)
 	const FGPMTrackData& T = *Track;
 	const int32 N = T.WX.Num();
 
-	// voiture devant sur la même portion de piste ?
+	// voitures autour : devant sur la même trajectoire, et à côté (pour ne pas se rabattre sur elles)
 	AGPMCar* Ahead = nullptr;
 	float Gap = 1e9f;
+	float SideL = -1e9f, SideR = 1e9f;   // limites de trajectoire imposées par une voiture à gauche / à droite (m)
 	for (AGPMCar* O : Field)
 	{
 		if (!O || O == this || O->PitPhase) continue;
-		const float D = ((O->Idx - Idx + N) % N) * SplineDS;
-		if (D > 0 && D < 40 && FMath::Abs(O->Lat - Lat) < (bSCMode ? 99.f : 2.6f) && D < Gap) { Gap = D; Ahead = O; }
+		int32 Di = (O->Idx - Idx + N) % N;
+		if (Di > N / 2) Di -= N;
+		const float D = Di * SplineDS, DLat = O->Lat - Lat;   // D > 0 : devant
+		if (D > 0 && D < 45 && FMath::Abs(DLat) < (bSCMode ? 99.f : 2.6f) && D < Gap) { Gap = D; Ahead = O; }
+		// roues dans les roues : on garde 2,7 m d'écart latéral
+		if (!bSCMode && FMath::Abs(D) < 6.5f && FMath::Abs(DLat) < 4.2f)
+		{
+			if (DLat < 0.f || (DLat == 0.f && D > 0.f)) SideL = FMath::Max(SideL, O->Lat + 2.7f);
+			else SideR = FMath::Min(SideR, O->Lat - 2.7f);
+		}
 	}
 	PassTimer -= Dt;
 	const float Lim = T.Width / 2.f - 1.4f;
@@ -64,12 +73,28 @@ void AGPMCar::DriveAI(float Dt)
 	{
 		if (PassTimer <= 0)
 		{
+			// on ne se décale que du côté libre : personne à côté ni juste devant sur la trajectoire de dépassement
+			auto Clear = [this, Ahead, N, Lim](float Target)
+			{
+				if (FMath::Abs(Target) > Lim) return false;
+				for (const AGPMCar* O : Field)
+				{
+					if (!O || O == this || O == Ahead || O->PitPhase) continue;
+					int32 Dk = (O->Idx - Idx + N) % N;
+					if (Dk > N / 2) Dk -= N;
+					if (Dk * SplineDS > -9.f && Dk * SplineDS < 30.f && FMath::Abs(O->Lat - Target) < 2.8f) return false;
+				}
+				return true;
+			};
 			const float L = Ahead->Lat - 3.4f, R = Ahead->Lat + 3.4f;
-			PassSide = FMath::Abs(L) < FMath::Abs(R) ? -1.f : 1.f;
-			PassTimer = 2.5f;
+			const bool bLeftOk = Clear(L), bRightOk = Clear(R);
+			PassSide = bLeftOk && bRightOk ? (FMath::Abs(L) < FMath::Abs(R) ? -1.f : 1.f) : bLeftOk ? -1.f : bRightOk ? 1.f : 0.f;
+			PassTimer = PassSide == 0.f ? 0.7f : 2.5f;
 		}
-		LaneTarget = Ahead->Lat + PassSide * 3.4f;
-		if (Gap < 12) VCap = Ahead->V - 0.5f + Gap * 0.15f;   // ne pas percuter
+		if (PassSide != 0.f) LaneTarget = Ahead->Lat + PassSide * 3.4f;
+		// distance de sécurité : on suit sans percuter tant qu'on n'est pas décalé (plus d'écart à haute vitesse)
+		const float Keep = 5.f + FMath::Max(V, 0.f) * 0.08f;
+		if (Gap < Keep + 12.f) VCap = Ahead->V + (Gap - Keep) * 0.5f;
 	}
 
 	// consigne d'équipe : l'équipier n°2 s'écarte et lève le pied quand le joueur le suit de près
@@ -87,6 +112,9 @@ void AGPMCar::DriveAI(float Dt)
 		}
 		else if (D <= 0) YieldRun = 0;
 	}
+	// pas de rabattement sur une voiture à côté (prise en sandwich : on reste au milieu de l'espace)
+	if (SideL > SideR) LaneTarget = 0.5f * (SideL + SideR);
+	else LaneTarget = FMath::Clamp(LaneTarget, SideL, SideR);
 	LaneTarget = FMath::Clamp(LaneTarget, -Lim, Lim);
 	Lane += (LaneTarget - Lane) * FMath::Min(1.f, Dt * 1.5f);
 

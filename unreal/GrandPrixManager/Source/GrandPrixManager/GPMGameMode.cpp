@@ -173,7 +173,7 @@ void AGPMGameMode::PlaceCar()
 				C->TeamColor = Team.Color;
 				C->TeamIdx = Data->Teams.IndexOfByPredicate([&Team](const FGPMTeam& X) { return &X == &Team; });
 				if (!Car && (Team.Drivers[d].bPlayer || &Team == &Data->Teams[0])) Car = C;
-				else C->MakeAI(Team.Drivers[d].Skill);   // difficulté (DIFFS.k) : 1 en « Normal »
+				else C->MakeAI(Team.Drivers[d].Skill * AIDiff(AILevel));   // niveau choisi dans les réglages (DIFFS.k : 1 en « Normal »)
 				Cars.Add(C);
 			}
 		if (!Car) return;
@@ -238,7 +238,7 @@ void AGPMGameMode::RefreshRoster()
 			if (t == 0 && !C->TeamColor.Equals(Tm.Color)) C->SetLivery(Tm.Color, Tm.Accent);
 			C->TeamColor = Tm.Color;
 			C->Perf = Tm.Perf;
-			if (C != Car) C->Skill = Tm.Drivers[d].Skill;
+			if (C != Car) C->Skill = Tm.Drivers[d].Skill * AIDiff(AILevel);
 		}
 }
 
@@ -302,6 +302,54 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
+	GConfig->GetInt(TEXT("GPM"), TEXT("AILevel"), AILevel, GGameUserSettingsIni);
+	GConfig->GetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
+	AILevel = FMath::Clamp(AILevel, 0, 4);
+	FuelK = FMath::Clamp(FuelK, 0, 4);
+}
+
+// niveau des IA : le rythme de chaque pilote IA suit le nouveau coefficient tout de suite
+void AGPMGameMode::SetAILevel(int32 L)
+{
+	const int32 Was = AILevel;
+	AILevel = FMath::Clamp(L, 0, 4);
+	if (Was == AILevel) return;
+	for (AGPMCar* C : Cars) if (C && C != Car) C->Skill *= AIDiff(AILevel) / AIDiff(Was);
+	SaveSettings();
+}
+
+// ---------- carburant ----------
+
+float AGPMGameMode::FuelFor(const AGPMCar* C, float Laps) const
+{
+	const FGPMTrackData* T = CurTrack();
+	const float Km = T ? T->WX.Num() * 2.f / 1000.f : 5.f;
+	return FMath::Max(0.f, Laps) * Km * 1.7f * (C ? C->UpFuel : 1.f);
+}
+
+float AGPMGameMode::PlayerStartFuel(int32 K) const
+{
+	static const float Margin[5] = { -0.08f, -0.04f, 0.03f, 0.08f, 0.f };
+	const int32 Kc = FMath::Clamp(K, 0, 4);
+	if (Kc == 4) return Tank;
+	const int32 First = Stints.Num() > 1 ? Stints[0].Value : LapsFor();
+	return FMath::Min(Tank, FuelFor(Car.Get(), First + 0.3f) * (1.f + Margin[Kc]));
+}
+
+float AGPMGameMode::LapsToRefuel(const AGPMCar* C) const
+{
+	if (!C) return 0.f;
+	const FGPMTrackData* T = C->GetTrack();
+	const int32 N = T ? FMath::Max(1, T->WX.Num()) : 1;
+	const TArray<TPair<TCHAR, int32>>& Pl = C == Car.Get() ? Stints : C->Plan;
+	int32 Upto = TotalLaps;
+	if (Pl.IsValidIndex(C->Stops + 1))
+	{
+		int32 Planned = 0;
+		for (int32 s = 0; s <= C->Stops; ++s) Planned += Pl[s].Value;
+		Upto = FMath::Min(TotalLaps, Planned);
+	}
+	return FMath::Max(0.f, Upto - C->Lap + 1 - float(C->Idx) / N);
 }
 
 void AGPMGameMode::SaveSettings()
@@ -314,6 +362,8 @@ void AGPMGameMode::SaveSettings()
 		GConfig->SetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("AILevel"), AILevel, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
 	ApplySettings();
@@ -374,8 +424,9 @@ void AGPMGameMode::StartQuali()
 	Car->Field = { Car.Get() };
 	ResetWeather();
 	if (Debris) Debris->Clear();
-	// tendres pour le tour lancé, pneus pluie sur piste mouillée
-	Car->Tyre = TrackWet > 0.4f ? TCHAR('W') : TCHAR('S'); Car->Wear = 0.f; Car->Fuel = 10.f; Car->Mass = 1.f + Car->Fuel / 750.f;
+	// tendres pour le tour lancé, intermédiaires ou pneus pluie sur piste mouillée
+	const TCHAR QWet = WetTyreFor(Car);
+	Car->Tyre = QWet ? QWet : TCHAR('S'); Car->Wear = 0.f; Car->Fuel = 10.f; Car->Mass = 1.f + Car->Fuel / 750.f;
 	Car->GripMul = AGPMCar::WetGrip(Car->Tyre, TrackWet);
 	Order = { Car.Get() };
 	// secteurs : records perso du week-end (gardés quand on refait le tour), temps de référence le long du tour
@@ -466,18 +517,23 @@ void AGPMGameMode::StartRace()
 	const TArray<FPlan> AIPlans = MakePlans();
 	for (AGPMCar* C : Grid)
 	{
-		C->Fuel = FMath::Min(110.f, (TotalLaps + 0.3f) * Km * 1.7f * 1.03f);
-		C->Mass = 1.f + C->Fuel / 750.f;
 		C->Plan.Reset();
 		if (AIPlans.Num()) C->Plan = AIPlans[FMath::RandRange(0, AIPlans.Num() - 1)].Stints;
-		C->Tyre = C->Plan.Num() ? C->Plan[0].Key : bRainStart ? TCHAR('W') : TCHAR('M');
-		C->WetCall = 0.45f + 0.08f * (FMath::FRand() - 0.5f);
+		// essence pour le premier relais (+4 %), ravitaillement à chaque arrêt (comme le jeu web)
+		C->Fuel = FMath::Min(Tank, FuelFor(C, (C->Plan.Num() > 1 ? C->Plan[0].Value : TotalLaps) + 0.3f) * 1.04f);
+		C->Mass = 1.f + C->Fuel / 750.f;
+		C->Tyre = C->Plan.Num() ? C->Plan[0].Key : bRainStart ? RainTyre() : TCHAR('M');
+		C->WetCall = 0.25f + 0.08f * (FMath::FRand() - 0.5f);
 		C->GripMul = AGPMCar::WetGrip(C->Tyre, TrackWet);
 	}
 	Car->Plan.Reset();
-	Car->Tyre = !TyreOpt.IsEmpty() ? TCHAR(FChar::ToUpper(TyreOpt[0])) : Stints.Num() ? Stints[0].Key : bRainStart ? TCHAR('W') : TCHAR('M');
-	Car->WetCall = 0.45f;
+	Car->Tyre = !TyreOpt.IsEmpty() ? TCHAR(FChar::ToUpper(TyreOpt[0])) : Stints.Num() ? Stints[0].Key : bRainStart ? RainTyre() : TCHAR('M');
+	Car->WetCall = 0.25f;
 	Car->GripMul = AGPMCar::WetGrip(Car->Tyre, TrackWet);
+	// carburant choisi par le joueur à l'écran de stratégie
+	Car->Fuel = PlayerStartFuel(FuelK);
+	Car->Mass = 1.f + Car->Fuel / 750.f;
+	FuelWarn = 0;
 	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 	ApplySettings();
@@ -752,12 +808,12 @@ void AGPMGameMode::Strategy(float Dt)
 		if (C->DmgNewR > 0.f) { AddDamage(C, C->DmgNewR, true); C->DmgNewR = 0.f; }
 		const bool bAuto = C != Car || !C->bPlayerControlled;
 		const int32 Left = TotalLaps - C->Lap, NPts = FMath::Max(1, T->WX.Num());
-		// IA : économie si l'essence ne suffit pas, sinon rythme normal
+		// IA : économie si l'essence ne suffit pas jusqu'au prochain ravitaillement, sinon rythme normal
+		const float PerLapFuel = NPts * 2.f / 1000.f * 1.7f * C->UpFuel;
+		const float FuelLapsLeft = PerLapFuel > 0.f ? C->Fuel / PerLapFuel : 99.f;
 		if (bAuto && !C->bFinished)
 		{
-			const float PerLapFuel = NPts * 2.f / 1000.f * 1.7f * C->UpFuel;
-			const float FuelNeed = FMath::Max(0.f, Left + 1 - float(C->Idx) / NPts);
-			C->Mode = PerLapFuel > 0.f && C->Fuel / PerLapFuel < FuelNeed + 0.15f ? 2 : 1;
+			C->Mode = FuelLapsLeft < LapsToRefuel(C) + 0.15f ? 2 : 1;
 		}
 		const float Len = NPts * 2.f, Dist = FMath::Abs(C->V) * Dt;
 		if (!C->PitPhase)
@@ -765,7 +821,7 @@ void AGPMGameMode::Strategy(float Dt)
 			// usure : distance, glissades (fortement), sorties de piste, mode ; les pneus pluie fondent sur le sec
 			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
 			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode) * C->UpTyre;
-			if (C->Tyre == TCHAR('W')) K *= 1.f + 2.4f * (1.f - TrackWet);
+			K *= AGPMCar::WetWear(C->Tyre, TrackWet);
 			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
 			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel * AGPMCar::ModeFuel(C->Mode));
 			// pneu à 0 % : il peut éclater à tout moment, retour au stand au ralenti
@@ -778,8 +834,19 @@ void AGPMGameMode::Strategy(float Dt)
 			}
 		}
 		C->Mass = 1.f + C->Fuel / 750.f;
-		C->PowerMul = AGPMCar::ModeV(C->Mode) * (C->bFlat ? 0.8f : 1.f);
-		C->AccMul = AGPMCar::ModeA(C->Mode);
+		// panne sèche : le moteur ne tourne plus qu'au ralenti jusqu'à l'arrivée (ou au stand)
+		const bool bDry = C->Fuel <= 0.f && !C->bFinished && Phase == EPhase::Race;
+		C->PowerMul = AGPMCar::ModeV(C->Mode) * (C->bFlat ? 0.8f : 1.f) * (bDry ? 0.35f : 1.f);
+		C->AccMul = AGPMCar::ModeA(C->Mode) * (bDry ? 0.3f : 1.f);
+		if (C == Car && !C->bFinished && Phase == EPhase::Race)
+		{
+			if (bDry && FuelWarn < 2) { FuelWarn = 2; Say(TEXT("Muret : panne sèche ! Plus d'essence, la voiture n'avance plus qu'au ralenti.")); }
+			else if (FuelWarn == 0 && C->Mode != 2 && C->Lap >= 1 && FuelLapsLeft < LapsToRefuel(C) - 0.05f)
+			{
+				FuelWarn = 1;
+				Say(TEXT("Muret : l'essence ne suffira pas, passe en économie (radio, touche 2)."));
+			}
+		}
 		C->GripMul = AGPMCar::WetGrip(C->Tyre, TrackWet) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->bFlat ? 0.55f : 1.f) * (1.f - 0.04f * C->Dmg - 0.03f * C->DmgR);
 		// appui perdu : aileron avant → sous-virage, aileron arrière → survirage à haute vitesse
 		C->DmgKd = C->bFwOff ? 0.3f : 1.f - 0.45f * C->Dmg;
@@ -813,6 +880,19 @@ void AGPMGameMode::Strategy(float Dt)
 			// pièces Stands et Centre des mécaniciens : l'équipe du joueur gagne du temps à chaque arrêt
 			const float Crew = Car && C->TeamIdx == Car->TeamIdx ? Car->UpPit : 0.f;
 			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + Crew) + Fix);
+			// ravitaillement : de quoi aller jusqu'à l'arrêt suivant de la stratégie, ou jusqu'à l'arrivée
+			{
+				const TArray<TPair<TCHAR, int32>>& Next = C == Car ? Stints : C->Plan;
+				int32 Upto = TotalLaps;
+				if (Next.IsValidIndex(C->Stops + 2))
+				{
+					int32 Planned = 0;
+					for (int32 s = 0; s <= C->Stops + 1; ++s) Planned += Next[s].Value;
+					Upto = FMath::Min(TotalLaps, Planned);
+				}
+				C->Fuel = FMath::Max(C->Fuel, FMath::Min(Tank, FuelFor(C, FMath::Max(1, Upto - C->Lap) + 0.3f) * 1.04f));
+				if (C == Car) FuelWarn = 0;
+			}
 			if (C == Car)
 			{
 				bTyreWarn = false;

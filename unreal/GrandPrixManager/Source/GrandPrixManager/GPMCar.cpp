@@ -307,7 +307,9 @@ void AGPMCar::Step(float Dt)
 	// longitudinal
 	float A = -Sign(V) * (0.8f + 0.0009f * V * V), Spin = 0.f;
 	bLock = false; bAbsOn = bTcOn = false;
-	if (Throttle > 0 && V >= -0.5f)
+	// en marche arrière, l'accélérateur repart tout de suite vers l'avant (pas besoin d'attendre l'arrêt)
+	if (Throttle > 0 && V < -0.5f) A = 30.f * Throttle;
+	else if (Throttle > 0)
 	{
 		float Ad = Throttle * Acc * Perf * UpAcc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);

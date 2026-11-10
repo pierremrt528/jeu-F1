@@ -579,12 +579,17 @@ TSharedRef<SWidget> FGPMUI::SoloScreen(AGPMGameMode* GM)
 		];
 
 	TSharedRef<SHorizontalBox> Wx = SNew(SHorizontalBox);
-	static const TCHAR* WxOpts[] = { TEXT("Au hasard"), TEXT("Sec"), TEXT("Pluie"), TEXT("Averse") };
-	for (int32 k = 0; k < 4; ++k)
+	// météo : au hasard, sec, pluie forte, pluie fine (intermédiaires), averse en cours de course
+	static const TCHAR* WxOpts[] = { TEXT("Au hasard"), TEXT("Sec"), TEXT("Pluie"), TEXT("Pluie fine"), TEXT("Averse") };
+	static const int32 WxVals[] = { 0, 1, 2, 5, 3 };
+	for (int32 k = 0; k < 5; ++k)
+	{
+		const int32 Wv = WxVals[k];
 		Wx->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
 		[
-			Button(WxOpts[k], GM->SoloWeather == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) WGM->SoloWeather = k; }, true, 140.f, 46.f, 16)
+			Button(WxOpts[k], GM->SoloWeather == Wv ? Acc : CNeutral, [WGM, Wv]() { if (WGM.IsValid()) WGM->SoloWeather = Wv; }, true, 130.f, 46.f, 16)
 		];
+	}
 
 	const FString TrackLine = T ? FString::Printf(TEXT("Circuit %d / %d · %.2f km · largeur %.0f m"), GM->SoloIdx + 1, Ids.Num(), T->WX.Num() * 2.f / 1000.f, T->Width) : FString();
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
@@ -666,6 +671,31 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 				CCardBg, 14.f)
 		];
 	}
+	// niveau des pilotes IA : 5 crans, du débutant à l'expert
+	TSharedRef<SHorizontalBox> Levels = SNew(SHorizontalBox);
+	for (int32 k = 0; k < 5; ++k)
+		Levels->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
+		[
+			Button(AGPMGameMode::AILevelName(k), GM->AILevel == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) WGM->SetAILevel(k); }, true, 100.f, 44.f, 14)
+		];
+	static const TCHAR* const LevelHelp[5] = {
+		TEXT("Les IA roulent nettement moins vite : idéal pour apprendre les circuits."),
+		TEXT("Les IA laissent un peu de marge."),
+		TEXT("Le niveau prévu pour chaque pilote."),
+		TEXT("Les IA attaquent plus fort, chaque dixième compte."),
+		TEXT("Les IA roulent à la limite : pour les meilleurs pilotes.") };
+	List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+	[
+		Card(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Niveau des pilotes IA"), 20, CText, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(LevelHelp[FMath::Clamp(GM->AILevel, 0, 4)], 14, CDim, false, true) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Levels ],
+			CCardBg, 14.f)
+	];
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 24.f))[ Title(TEXT("PILOTAGE ET AFFICHAGE"), TEXT("Réglages"), SNullWidget::NullWidget) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ]
@@ -674,7 +704,7 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth()[ Button(TEXT("RETOUR"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Home; }, true, 180.f) ]
 		];
-	return SNew(SBox).HAlign(HAlign_Center).Padding(FMargin(0.f, 30.f))[ SNew(SBox).WidthOverride(900.f)[ Page(Body, FLinearColor(0.01f, 0.012f, 0.025f, 0.88f)) ] ];
+	return SNew(SBox).HAlign(HAlign_Center).Padding(FMargin(0.f, 30.f))[ SNew(SBox).WidthOverride(1060.f)[ Page(Body, FLinearColor(0.01f, 0.012f, 0.025f, 0.88f)) ] ];
 }
 
 // ---------- fenêtres à choix : presse, flash info, histoires, négociations ----------

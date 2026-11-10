@@ -22,7 +22,8 @@ namespace
 	const FLinearColor RaceRadio(0.3f, 0.75f, 1.f);
 	FLinearColor TyreColour(TCHAR T)
 	{
-		return T == 'S' ? FLinearColor(1.f, 0.2f, 0.2f) : T == 'H' ? FLinearColor(0.92f, 0.92f, 0.92f) : T == 'W' ? FLinearColor(0.2f, 0.55f, 1.f) : FLinearColor(1.f, 0.85f, 0.15f);
+		return T == 'S' ? FLinearColor(1.f, 0.2f, 0.2f) : T == 'H' ? FLinearColor(0.92f, 0.92f, 0.92f) : T == 'W' ? FLinearColor(0.2f, 0.55f, 1.f)
+			: T == 'I' ? FLinearColor(0.25f, 0.85f, 0.35f) : FLinearColor(1.f, 0.85f, 0.15f);
 	}
 }
 
@@ -156,14 +157,14 @@ void AGPMHUD::DrawCluster(AGPMCar* Car, float W, float H)
 	DrawText(FString::Printf(TEXT("%d %%"), FMath::RoundToInt(Life * 100)), LifeCol, LX + 23 * Scale, LY + 1 * Scale, Mid, Scale * 0.9f);
 	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.15f), LX, LY + 22 * Scale, 62 * Scale, 3 * Scale);
 	DrawRect(LifeCol, LX, LY + 22 * Scale, 62 * Scale * Life, 3 * Scale);
-	// carburant : marge en tours par rapport à l'arrivée
+	// carburant : marge en tours jusqu'au prochain ravitaillement (arrêt prévu) ou jusqu'à l'arrivée
 	if (const FGPMTrackData* T = Car->GetTrack())
 	{
 		AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>();
 		const float PerLap = T->WX.Num() * 2.f / 1000.f * 1.7f * Car->UpFuel;
 		if (GM && PerLap > 0.f && GM->Phase == AGPMGameMode::EPhase::Race)
 		{
-			const float FuelLaps = Car->Fuel / PerLap, Need = FMath::Max(0.f, GM->TotalLaps - Car->Lap + 1 - float(Car->Idx) / FMath::Max(1, T->WX.Num()));
+			const float FuelLaps = Car->Fuel / PerLap, Need = GM->LapsToRefuel(Car);
 			const float Margin = FuelLaps - Need;
 			DrawText(FString::Printf(TEXT("Ess. %+.1f T"), Margin), Margin < 0.f ? FLinearColor(1.f, 0.3f, 0.2f) : RaceDim, LX, LY + 28 * Scale, Mid, Scale * 0.75f);
 		}

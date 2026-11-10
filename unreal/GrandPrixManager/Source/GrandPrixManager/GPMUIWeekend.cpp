@@ -23,18 +23,18 @@ namespace GPMUIWeekendText
 	FLinearColor TyreColor(TCHAR T)
 	{
 		return T == TCHAR('S') ? FLinearColor(1.f, 0.27f, 0.25f, 1.f) : T == TCHAR('H') ? FLinearColor(0.9f, 0.91f, 0.94f, 1.f)
-			: T == TCHAR('W') ? FLinearColor(0.3f, 0.6f, 1.f, 1.f) : FLinearColor(1.f, 0.83f, 0.2f, 1.f);
+			: T == TCHAR('W') ? FLinearColor(0.3f, 0.6f, 1.f, 1.f) : T == TCHAR('I') ? FLinearColor(0.3f, 0.85f, 0.4f, 1.f) : FLinearColor(1.f, 0.83f, 0.2f, 1.f);
 	}
 
 	FString TyreLabel(TCHAR T)
 	{
-		return T == TCHAR('S') ? TEXT("Tendres") : T == TCHAR('H') ? TEXT("Durs") : T == TCHAR('W') ? TEXT("Pluie") : TEXT("Mediums");
+		return T == TCHAR('S') ? TEXT("Tendres") : T == TCHAR('H') ? TEXT("Durs") : T == TCHAR('W') ? TEXT("Pluie") : T == TCHAR('I') ? TEXT("Inters") : TEXT("Mediums");
 	}
 
-	// tendres → mediums → durs → pluie → tendres
+	// tendres → mediums → durs → intermédiaires → pluie → tendres
 	TCHAR NextDry(TCHAR T)
 	{
-		return T == TCHAR('S') ? TCHAR('M') : T == TCHAR('M') ? TCHAR('H') : T == TCHAR('H') ? TCHAR('W') : TCHAR('S');
+		return T == TCHAR('S') ? TCHAR('M') : T == TCHAR('M') ? TCHAR('H') : T == TCHAR('H') ? TCHAR('I') : T == TCHAR('I') ? TCHAR('W') : TCHAR('S');
 	}
 
 	FLinearColor WeatherColor(const AGPMGameMode* GM)
@@ -301,6 +301,40 @@ TSharedRef<SWidget> FGPMUI::PreraceScreen(AGPMGameMode* GM)
 		Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Txt(TEXT("Un relais finit sous 40 % de pneus : le grip chute en fin de relais."), 14, CGold, false, true) ];
 	if (Sum != Laps)
 		Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Txt(FString::Printf(TEXT("Les relais font %d tours pour une course de %d tours."), Sum, Laps), 14, CBad, true, true) ];
+	// carburant au départ : plus léger = plus rapide, mais il faut économiser pour finir le relais ; plein à chaque arrêt
+	{
+		const int32 Fk = FMath::Clamp(GM->FuelK, 0, 4);
+		const float Kg = GM->PlayerStartFuel(Fk);
+		const float PerLapKg = GM->FuelFor(Me, 1.f);
+		const int32 FirstLaps = Mine.Num() > 1 ? Mine[0].Value : Laps;
+		static const TCHAR* const FuelHelp[5] = {
+			TEXT("Très léger : la voiture est plus vive, mais il faudra rouler en économie pour finir le relais."),
+			TEXT("Léger : un peu plus rapide, économie à prévoir en fin de relais."),
+			TEXT("Normal : de quoi finir le relais avec 3 % de marge."),
+			TEXT("Marge : un peu plus lourd, tu peux attaquer sans compter."),
+			TEXT("Plein : réservoir de 110 kg, la voiture la plus lourde.") };
+		Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 16.f, 0.f, 6.f))[ Txt(TEXT("CARBURANT AU DÉPART"), 13, CDim, true) ];
+		Sumup->AddSlot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[ Button(TEXT("−"), CNeutral, [WGM]() { if (WGM.IsValid() && WGM->FuelK > 0) { --WGM->FuelK; WGM->SaveSettings(); } }, Fk > 0, 46.f, 42.f, 20) ]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(AGPMGameMode::FuelName(Fk), 17, Fk < 2 ? CGold : CText, true, false, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(PerLapKg > 0.f ? FString::Printf(TEXT("%.0f kg · %.1f tours"), Kg, Kg / PerLapKg) : FString::Printf(TEXT("%.0f kg"), Kg), 13, CDim, false, false, true) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[ Button(TEXT("+"), CNeutral, [WGM]() { if (WGM.IsValid() && WGM->FuelK < 4) { ++WGM->FuelK; WGM->SaveSettings(); } }, Fk < 4, 46.f, 42.f, 20) ]
+		];
+		Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(FuelHelp[Fk], 13, Fk < 2 ? CGold : CDim, false, true) ];
+		Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))
+		[
+			Txt(Mine.Num() > 1 ? FString::Printf(TEXT("Premier relais : %d tours, ravitaillement à chaque arrêt."), FirstLaps)
+				: FString::Printf(TEXT("Sans arrêt : l'essence doit tenir %d tours."), FirstLaps), 12, CFaint, false, true)
+		];
+	}
 	Sumup->AddSlot().AutoHeight().Padding(FMargin(0.f, 12.f, 0.f, 0.f))
 	[
 		Txt(FString::Printf(TEXT("Le muret t'appelle au stand au bon tour. B : arrêt manuel. Chaque arrêt coûte environ %.0f s."), T ? T->PitLoss : 22.f), 13, CFaint, false, true)

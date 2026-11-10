@@ -227,9 +227,9 @@ float AGPMGameMode::PlanTime(const TArray<TPair<TCHAR, int32>>& InStints, float 
 	{
 		const TCHAR Ty = InStints[i].Key;
 		const int32 L = InStints[i].Value;
-		// pneus pluie : usure ×(1 + 2,4 × piste sèche) ; course sous la pluie : piste à 90 %
-		const float PlanWet = bRainStart ? 0.9f : 0.f;
-		const float W = AGPMCar::TyreWpl(Ty) * 1.05f * (Ty == TCHAR('W') ? 1.f + 2.4f * (1.f - PlanWet) : 1.f);
+		// pneus pluie et intermédiaires : usure en plus sur piste sèche ; course sous la pluie : piste au niveau de la pluie
+		const float PlanWet = bRainStart ? RainLevel : 0.f;
+		const float W = AGPMCar::TyreWpl(Ty) * 1.05f * AGPMCar::WetWear(Ty, PlanWet);
 		if (i) Tm += Loss;
 		for (int32 k = 0; k < L; ++k)
 		{
@@ -250,9 +250,9 @@ TArray<AGPMGameMode::FPlan> AGPMGameMode::MakePlans() const
 {
 	const int32 Laps = LapsFor();
 	const float LapT = BaseLap();
-	// gommes possibles : sèches, ou pneus pluie seulement si la course part sous la pluie
+	// gommes possibles : sèches, ou pneus pluie (pluie forte) / intermédiaires (pluie fine) si la course part sous la pluie
 	TArray<TCHAR> Set;
-	if (bRainStart) Set.Add(TCHAR('W'));
+	if (bRainStart) Set.Add(RainTyre());
 	else { Set.Add(TCHAR('S')); Set.Add(TCHAR('M')); Set.Add(TCHAR('H')); }
 	const int32 NSet = Set.Num();
 	TMap<int32, float> Memo;
@@ -265,6 +265,7 @@ TArray<AGPMGameMode::FPlan> AGPMGameMode::MakePlans() const
 		float Wear = 0.f;
 		float Val = PlanTime(One, LapT, &Wear);
 		if (Wear > 0.6f) Val = 1e9f;   // le muret fait rentrer avant la chute (40 %)
+		if (FuelFor(Car.Get(), Num + 0.3f) * 1.03f > Tank) Val = 1e9f;   // un relais ne dépasse pas un plein
 		Memo.Add(Key, Val);
 		return Val;
 	};
@@ -322,7 +323,7 @@ TArray<AGPMGameMode::FPlan> AGPMGameMode::MakePlans() const
 	if (Cands.Num() == 0)
 	{
 		FPlan P;
-		P.Stints.Emplace(bRainStart ? TCHAR('W') : TCHAR('H'), Laps);
+		P.Stints.Emplace(bRainStart ? RainTyre() : TCHAR('H'), Laps);
 		P.Time = PlanTime(P.Stints, LapT, &P.MaxWear);
 		Out.Add(P);
 	}
@@ -353,7 +354,9 @@ TArray<AGPMGameMode::FPlan> AGPMGameMode::MakePlans() const
 		P.Name = k == 0 ? FString(TEXT("Recommandée")) : FString::Printf(TEXT("Alternative %d"), k);
 		bool bSoft = false;
 		for (const TPair<TCHAR, int32>& S : P.Stints) bSoft |= S.Key == TCHAR('S');
-		P.Desc = bRainStart ? (P.Stints.Num() == 1 ? TEXT("Pneus pluie jusqu'au bout. Le muret t'appelle si la piste sèche.") : TEXT("Pneus pluie neufs à mi-course. Le muret t'appelle si la piste sèche."))
+		const bool bInters = RainTyre() == TCHAR('I');
+		P.Desc = bRainStart ? (bInters ? (P.Stints.Num() == 1 ? TEXT("Pluie fine : intermédiaires jusqu'au bout. Le muret t'appelle si la piste sèche ou se noie.") : TEXT("Pluie fine : intermédiaires neufs à mi-course. Le muret t'appelle si la piste change."))
+			: P.Stints.Num() == 1 ? TEXT("Pneus pluie jusqu'au bout. Le muret t'appelle si la piste sèche.") : TEXT("Pneus pluie neufs à mi-course. Le muret t'appelle si la piste sèche."))
 			: P.Stints.Num() == 1 ? TEXT("Un seul relais : on gère les pneus jusqu'au bout.")
 			: bSoft ? TEXT("Tendres rapides mais fragiles : plus d'attaque, plus d'arrêts.") : TEXT("Gommes durables : relais longs et peu de risques.");
 	}
