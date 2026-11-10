@@ -92,7 +92,7 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Txt(TEXT("Tab : onglet suivant · flèches : choisir · Entrée : lancer · U : saison"), 13, CFaint) ]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ Content ];
-	return Page(Body, CPageBg);
+	return Page(Body, CRoomBg);
 }
 
 // ---------- onglet Recherche : les 5 arbres de pièces ----------

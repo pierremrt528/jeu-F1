@@ -81,8 +81,10 @@ public:
 	bool bSoloQuali = true, bNegoFromMercato = false, bChampShown = false;
 	TArray<FString> LastLines;      // bilan de la course (direction, sponsors)
 	// réglages (sauvegardés dans GameUserSettings.ini)
-	bool bSetABS = true, bSetTC = true, bSetStab = true, bSetCockpit = false;
+	bool bSetABS = true, bSetTC = true, bSetStab = true, bSetCockpit = false, bSetSound = true;
 	void SaveSettings();
+	/** Clic d'un bouton des menus (son généré). */
+	void UiClick();
 	// --- Week-end comme le jeu web : réglages → qualifs (jouées ou simulées) → stratégie → course (ou simulée) ---
 	struct FSetup { const TCHAR* Name; const TCHAR* Desc; float Kd, VTop; };
 	static const FSetup Setups[5];
@@ -137,7 +139,13 @@ public:
 	int32 ScreenPct = 100;
 
 	// --- Cinématiques (étape 16, cine.js) : seule la caméra bouge ---
-	enum class ECine : uint8 { None, Menu, Intro, Podium, Welcome };
+	enum class ECine : uint8 { None, Menu, Intro, Podium, Welcome, Meet, Sign };
+	/** Cinématiques jouées dans l'atelier 3D (bienvenue, rendez-vous avec l'agent, signature). */
+	bool RoomCine() const { return Cine == ECine::Welcome || Cine == ECine::Meet || Cine == ECine::Sign; }
+	/** Rendez-vous au QG avec un pilote et son agent (première rencontre de la partie). FromTeam : écurie actuelle, vide si libre. */
+	void StartMeet(const FString& Who, const FString& FromTeam);
+	/** Signature d'un pilote : poignée de main avec le joueur, puis photo devant la voiture. */
+	void StartSign(const FString& Who);
 	ECine Cine = ECine::None;
 	float CineT = 0.f;
 	FString CineTitle, CineSub;
@@ -158,6 +166,14 @@ private:
 	UPROPERTY() TObjectPtr<class AExponentialHeightFog> Fog;
 	UPROPERTY() TObjectPtr<class AGPMScenery> Scenery;
 	UPROPERTY() TObjectPtr<class UGPMEngineSound> EngineSound;
+	// sons de la course (GPMSound.cpp) : voiture la plus proche, chocs, feux, radio, foule
+	void UpdateAudio(float Dt);
+	const AGPMCar* SndNear = nullptr;
+	float SndNearD = 0.f, SndHit = 0.f, SndContact = 0.f, SndLeadT = 0.f;
+	int32 SndLights = 0, SndPos = 0;
+	EPhase SndPhase = EPhase::Home;
+	bool bSndFinished = false;
+	FString SndRadio;
 	void PlaceCar();
 	void Aspiration(float Dt);
 	void Collide();
@@ -214,4 +230,13 @@ private:
 	FLinearColor FogTint = FLinearColor(0.36f, 0.42f, 0.48f);
 	UPROPERTY() TObjectPtr<class AGPMSky> SkyDome;
 	UPROPERTY() TObjectPtr<class AGPMDebris> Debris;
+	// atelier 3D derrière les écrans de gestion (GPMShowroom), sous le circuit
+	UPROPERTY() TObjectPtr<class AGPMShowroom> Showroom;
+	bool bRoomOn = false;
+	int32 RoomScene = 0, RoomShot = -1;
+	FVector RoomEye = FVector::ZeroVector, RoomLook = FVector::ZeroVector;
+	float RoomFov = 62.f;
+	TSet<FString> MetDrivers;
+	bool RoomWanted() const;
+	void UpdateRoom();
 };

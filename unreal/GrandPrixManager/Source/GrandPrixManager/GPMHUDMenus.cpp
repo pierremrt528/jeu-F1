@@ -78,15 +78,18 @@ void AGPMHUD::DrawCine(AGPMGameMode* GM, float W, float H)
 			DrawRect(Conf[k % 5], X, Y, Sz, 7.f * Scale);
 		}
 	}
+	// photo de la signature : flash blanc qui s'éteint en 0,4 s
+	if (GM->Cine == AGPMGameMode::ECine::Sign && GM->CineT >= 2.65f && GM->CineT < 3.05f)
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.9f * (1.f - (GM->CineT - 2.65f) / 0.4f)), 0, 0, W, H);
 	const FString Title = GM->Cine == AGPMGameMode::ECine::Welcome ? FString(TEXT("BIENVENUE AU QG")) : GM->CineTitle;
 	DrawCentered(Title, FLinearColor(1, 1, 1, Fade), W, H - Bar - 74 * Scale, Big, Scale * 1.6f);
 	DrawCentered(GM->CineSub, FLinearColor(1.f, 0.85f, 0.2f, Fade), W, H - Bar - 30 * Scale, Mid, Scale * 1.05f);
-	DrawText(TEXT("Touche l'écran pour passer"), FLinearColor(1, 1, 1, 0.5f), W - 200 * Scale, H - Bar + 10 * Scale, Mid, Scale * 0.8f);
+	DrawText(TEXT("Touche l'écran ou Entrée pour passer"), FLinearColor(1, 1, 1, 0.5f), W - 290 * Scale, H - Bar + 10 * Scale, Mid, Scale * 0.8f);
 	if (bTap)
 	{
-		const bool bWelcome = GM->Cine == AGPMGameMode::ECine::Welcome;
+		const bool bRoom = GM->RoomCine();
 		GM->EndCine();
-		if (bWelcome) GM->StartCine(AGPMGameMode::ECine::Menu);
+		if (bRoom) GM->StartCine(AGPMGameMode::ECine::Menu);
 		bTap = false;
 		bWasDown = true;
 	}

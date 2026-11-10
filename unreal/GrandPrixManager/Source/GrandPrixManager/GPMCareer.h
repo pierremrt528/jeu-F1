@@ -136,6 +136,8 @@ public:
 	FString Status(const FGPMMarketDriver& D) const;
 	void OpenNego(const FGPMMarketDriver& D);
 	FGPMNego Nego;
+	/** Mis à vrai par une signature réussie (le jeu joue la scène de la signature puis le remet à faux). */
+	bool bJustSigned = false;
 	void AIMercato(int32 Moves);
 
 private:

@@ -625,6 +625,7 @@ void UGPMCareerSubsystem::Sign()
 	if (Nego.Pod > 0.f || Nego.Win > 0.f)
 		Dl->Result += FString::Printf(TEXT(" Primes : %.1f M€ par podium, %.1f M€ par victoire."), Nego.Pod, Nego.Win);
 	Nego.bOpen = false;
+	bJustSigned = true;
 	if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Season->Save();
 }
 

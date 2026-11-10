@@ -181,7 +181,7 @@ void AGPMHUD::DrawHUD()
 	if (!UI.IsValid()) UI = MakeShared<FGPMUI>(this);
 	if (GM && UI->Update(GM)) return;
 	// cinématiques (survol, tour d'honneur, bienvenue) : bandes noires et titres
-	if (GM && (GM->Cine == AGPMGameMode::ECine::Intro || GM->Cine == AGPMGameMode::ECine::Podium || GM->Cine == AGPMGameMode::ECine::Welcome)) { DrawCine(GM, W, H); return; }
+	if (GM && GM->Cine != AGPMGameMode::ECine::None && GM->Cine != AGPMGameMode::ECine::Menu) { DrawCine(GM, W, H); return; }
 	if (GM && GM->InMenu()) return;
 
 	DrawRace(GM, Car, W, H);

@@ -4,6 +4,17 @@
 #include "GPMGameMode.h"
 #include "GPMCar.h"
 #include "GPMTrack.h"
+#include "GPMShowroom.h"
+#include "GPMDataSubsystem.h"
+#include "GPMCareer.h"
+#include "GPMSeason.h"
+#include "GPMEngineSound.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Engine/SkyLight.h"
+#include "Components/SkyLightComponent.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -12,7 +23,7 @@
 namespace
 {
 	constexpr float ShotLen = 3.4f;            // durée d'un plan du survol (s)
-	constexpr float PodiumLen = 7.f, WelcomeLen = 5.5f;
+	constexpr float PodiumLen = 7.f, WelcomeLen = 5.5f, MeetLen = 4.6f, SignLen = 3.9f, FlashAt = 2.65f;
 }
 
 void AGPMGameMode::StartCine(ECine Mode)
@@ -28,6 +39,7 @@ void AGPMGameMode::StartCine(ECine Mode)
 	}
 	Cine = Mode;
 	CineT = 0.f;
+	UpdateRoom();   // l'atelier s'allume avant le premier plan (pas d'image du circuit entre deux)
 	UpdateCine(0.f);
 	PC->SetViewTargetWithBlend(CineCam, Mode == ECine::Podium ? 0.6f : 0.f);
 }
@@ -53,6 +65,34 @@ void AGPMGameMode::UpdateCine(float Dt)
 	// un écran de gestion ouvert pendant un plan de course : on repasse au survol lent
 	if ((Cine == ECine::Intro && Phase != EPhase::Intro) || (Cine == ECine::Podium && Phase != EPhase::Outro)) { EndCine(); return; }
 	CineT += Dt;
+	if (bRoomOn && Showroom)
+	{
+		// atelier : plans calculés dans le repère de la pièce ; les plans des écrans glissent doucement de l'un à l'autre
+		const int32 Shot = Cine == ECine::Welcome ? 2 : Cine == ECine::Meet ? 3 : Cine == ECine::Sign ? 4 : (Phase == EPhase::Setup || Phase == EPhase::Tuning) ? 0 : 1;
+		FVector Eye, Look;
+		float Fov = 62.f;
+		Showroom->Camera(Shot, CineT, Eye, Look, Fov);
+		if (Shot > 1 || RoomShot < 0 || Dt <= 0.f) { RoomEye = Eye; RoomLook = Look; RoomFov = Fov; }
+		else
+		{
+			RoomEye = FMath::VInterpTo(RoomEye, Eye, Dt, 2.2f);
+			RoomLook = FMath::VInterpTo(RoomLook, Look, Dt, 2.2f);
+			RoomFov = FMath::FInterpTo(RoomFov, Fov, Dt, 2.2f);
+		}
+		RoomShot = Shot;
+		// photo de la signature : déclic de l'appareil (le flash blanc est dessiné par le HUD)
+		if (Cine == ECine::Sign && CineT - Dt < FlashAt && CineT >= FlashAt && EngineSound && bSetSound)
+		{
+			EngineSound->Blip(2400.f, 0.04f, 0.07f, true, 0.f, true);
+			EngineSound->Blip(1700.f, 0.06f, 0.05f, true, 0.06f, true);
+		}
+		const float Len = Cine == ECine::Welcome ? WelcomeLen : Cine == ECine::Meet ? MeetLen : Cine == ECine::Sign ? SignLen : -1.f;
+		if (Len > 0.f && CineT >= Len) { EndCine(); StartCine(ECine::Menu); return; }
+		CineCam->GetCameraComponent()->SetFieldOfView(RoomFov);
+		CineCam->SetActorLocationAndRotation(RoomEye, (RoomLook - RoomEye).Rotation());
+		return;
+	}
+	CineCam->GetCameraComponent()->SetFieldOfView(62.f);
 	const FGPMTrackData* T = CurTrack();
 	if (!T || T->WX.Num() == 0) return;
 	const int32 N = T->WX.Num();
@@ -140,4 +180,77 @@ void AGPMGameMode::UpdateCine(float Dt)
 	default: break;
 	}
 	CineCam->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+}
+
+// ---------- atelier 3D derrière les écrans de gestion ----------
+
+bool AGPMGameMode::RoomWanted() const
+{
+	if (!Showroom) return false;
+	if (RoomCine()) return true;
+	if (Cine != ECine::Menu) return false;
+	return Phase == EPhase::Setup || Phase == EPhase::Tuning || Phase == EPhase::Factory || Phase == EPhase::Mercato || (Phase == EPhase::Press && bNegoFromMercato);
+}
+
+void AGPMGameMode::UpdateRoom()
+{
+	if (!Showroom) return;
+	const bool bWant = RoomWanted();
+	if (bWant != bRoomOn)
+	{
+		// la pièce est fermée : ni soleil ni brouillard dedans, un peu de lumière d'ambiance seulement
+		bRoomOn = bWant;
+		RoomShot = -1;
+		Showroom->SetShown(bWant);
+		if (Sun) Sun->GetLightComponent()->SetVisibility(!bWant);
+		if (Fog) Fog->GetComponent()->SetVisibility(!bWant);
+		if (SkyLight) SkyLight->GetLightComponent()->SetIntensity(bWant ? 0.15f : 1.f);
+	}
+	if (!bWant) return;
+	// couleurs et nom de l'écurie du joueur (changent pendant la création de l'écurie)
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (Data->Teams.Num() > 0)
+		{
+			FString Name = Data->Teams[0].Name;
+			if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>())
+				if (const UGPMSaveGame* G = Season->State())
+					if (G->bCreated && !G->TeamName.IsEmpty()) Name = G->TeamName;
+			Showroom->SetTeam(Data->Teams[0].Color, Data->Teams[0].Accent, Name);
+		}
+	const int32 Kind = Cine == ECine::Meet ? 1 : Cine == ECine::Sign ? 2 : 0;
+	if (Kind != 0 || RoomScene != 0) Showroom->PlayScene(Kind, CineT);
+	RoomScene = Kind;
+}
+
+void AGPMGameMode::StartMeet(const FString& Who, const FString& FromTeam)
+{
+	if (!Showroom || MetDrivers.Contains(Who)) return;
+	MetDrivers.Add(Who);
+	// le pilote dans la combinaison de son écurie actuelle (blanche s'il est libre), l'agent en costume sombre
+	FLinearColor Main(0.86f, 0.87f, 0.9f), Accent(0.12f, 0.13f, 0.16f);
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		for (const FGPMTeam& Tm : Data->Teams)
+			if (!FromTeam.IsEmpty() && Tm.Name == FromTeam) { Main = Tm.Color; Accent = Tm.Accent; }
+	Showroom->SetCast(AGPMShowroom::Outfit(Main, Accent, Who, false),
+		AGPMShowroom::Outfit(FLinearColor(0.07f, 0.075f, 0.09f), FLinearColor(0.45f, 0.06f, 0.08f), Who + TEXT(" agent"), true));
+	CineTitle = TEXT("RENDEZ-VOUS AU QG");
+	CineSub = FString::Printf(TEXT("%s et son agent"), *Who);
+	StartCine(ECine::Meet);
+}
+
+void AGPMGameMode::StartSign(const FString& Who)
+{
+	if (!Showroom) return;
+	// le nouveau pilote et toi, tous deux aux couleurs de l'écurie
+	FLinearColor Main = FLinearColor::Red, Accent = FLinearColor::White;
+	FString Team;
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (Data->Teams.Num() > 0) { Main = Data->Teams[0].Color; Accent = Data->Teams[0].Accent; Team = Data->Teams[0].Name; }
+	if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>())
+		if (const UGPMSaveGame* G = Season->State())
+			if (!G->TeamName.IsEmpty()) Team = G->TeamName;
+	Showroom->SetCast(AGPMShowroom::Outfit(Main, Accent, Who, false), AGPMShowroom::Outfit(Main, Accent, TEXT("Toi"), false));
+	CineTitle = TEXT("SIGNATURE !");
+	CineSub = FString::Printf(TEXT("%s rejoint %s"), *Who, *Team);
+	StartCine(ECine::Sign);
 }

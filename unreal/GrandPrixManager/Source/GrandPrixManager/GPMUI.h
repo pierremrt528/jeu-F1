@@ -24,6 +24,7 @@ namespace GPMUIStyle
 namespace GPMUIColor
 {
 	inline const FLinearColor CPageBg(0.012f, 0.016f, 0.03f, 0.9f);
+	inline const FLinearColor CRoomBg(0.012f, 0.016f, 0.03f, 0.74f);   // écrans devant l'atelier 3D : la voiture se devine derrière
 	inline const FLinearColor CPanel(0.04f, 0.05f, 0.08f, 0.94f);
 	inline const FLinearColor CCardBg(1.f, 1.f, 1.f, 0.06f);
 	inline const FLinearColor CCardHi(1.f, 1.f, 1.f, 0.11f);
@@ -66,6 +67,7 @@ private:
 	FLinearColor Acc2 = FLinearColor(0.15f, 0.4f, 0.75f, 1.f);
 
 	void Touch() { ++Version; }
+	void Click() const;   // petit clic sonore des boutons
 	uint32 Signature(AGPMGameMode* GM) const;
 	void HandleKeys(AGPMGameMode* GM);
 	TSharedRef<SWidget> Build(AGPMGameMode* GM);

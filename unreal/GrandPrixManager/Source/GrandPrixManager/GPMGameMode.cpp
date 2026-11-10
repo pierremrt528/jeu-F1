@@ -21,6 +21,7 @@
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
 #include "GPMFactory.h"
+#include "GPMShowroom.h"
 #include "GPMCareer.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -98,6 +99,9 @@ void AGPMGameMode::SetupWorld()
 		L->RecaptureSky();
 	}
 	Debris = W->SpawnActor<AGPMDebris>();   // éclats de carbone et ailerons arrachés
+	// atelier 3D des écrans de gestion : une pièce fermée 600 m sous le circuit, cachée pendant la course
+	Showroom = W->SpawnActor<AGPMShowroom>(FVector(0.f, 0.f, -60000.f), FRotator::ZeroRotator);
+	if (Showroom) { Showroom->Build(); Showroom->SetShown(false); }
 	Fog = W->SpawnActor<AExponentialHeightFog>();
 	if (Fog) Fog->GetComponent()->SetFogDensity(0.004f);
 	if (APostProcessVolume* PP = W->SpawnActor<APostProcessVolume>())
@@ -285,6 +289,7 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
 	GConfig->GetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
+	GConfig->GetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
 }
 
 void AGPMGameMode::SaveSettings()
@@ -296,6 +301,7 @@ void AGPMGameMode::SaveSettings()
 		GConfig->SetBool(TEXT("GPM"), TEXT("Stab"), bSetStab, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Cockpit"), bSetCockpit, GGameUserSettingsIni);
 		GConfig->SetBool(TEXT("GPM"), TEXT("Long"), bLongRace, GGameUserSettingsIni);
+		GConfig->SetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
 	ApplySettings();
@@ -481,11 +487,8 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	UpdatePerf(DeltaSeconds);
 	if (Cars.Num() == 0) return;
-	if (EngineSound && Car)
-	{
-		const float Skid = FMath::Clamp((FMath::Abs(Car->Beta) - 0.04f) * 6.f + (Car->bLock ? 0.6f : 0.f), 0.f, 1.f) * FMath::Min(1.f, Car->V / 15.f);
-		EngineSound->SetState(Car->Rpm(), Car->Throttle, Skid, Car->V);
-	}
+	UpdateAudio(DeltaSeconds);
+	UpdateRoom();
 	UpdateCine(DeltaSeconds);
 	UpdateSky(DeltaSeconds);
 	AutoCapture(DeltaSeconds);
@@ -510,9 +513,18 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	if (InMenu())
 	{
 		if (Cine == ECine::None) StartCine(ECine::Menu);
+		// contrat signé pendant une négociation : poignée de main et photo dans l'atelier
+		if (UGPMCareerSubsystem* CS = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
+			if (CS->bJustSigned) { CS->bJustSigned = false; StartSign(CS->Nego.D.Name); }
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
-			if (Phase == EPhase::Season && Cine != ECine::Welcome && PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
+			// scènes de l'atelier : Entrée, Espace ou Échap pour passer
+			if (RoomCine() && (PC->WasInputKeyJustPressed(EKeys::Enter) || PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::Escape)))
+			{
+				EndCine();
+				StartCine(ECine::Menu);
+			}
+			else if (Phase == EPhase::Season && PC->WasInputKeyJustPressed(EKeys::Enter)) Continue();
 			else if ((Phase == EPhase::Season || Phase == EPhase::Factory) && PC->WasInputKeyJustPressed(EKeys::U)) Phase = Phase == EPhase::Season ? EPhase::Factory : EPhase::Season;
 			else if ((Phase == EPhase::Factory || Phase == EPhase::Mercato) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Season;
 			else if ((Phase == EPhase::Solo || Phase == EPhase::Settings || Phase == EPhase::Setup) && PC->WasInputKeyJustPressed(EKeys::Escape)) Phase = EPhase::Home;

@@ -275,6 +275,8 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 				CS->OpenNego(Copy);
 				WGM->bNegoFromMercato = true;
 				WGM->Phase = AGPMGameMode::EPhase::Press;
+				// l'agent accepte de discuter : il arrive au QG avec son pilote (première rencontre)
+				if (CS->Current() && CS->Current()->Chosen < 0) WGM->StartMeet(Copy.Name, Copy.Seat >= 0 ? Copy.Team : FString());
 			})
 		];
 	}
@@ -290,7 +292,7 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
 		[ Txt(TEXT("Touche un pilote pour négocier avec son agent. Pendant la saison, les indemnités de transfert sont multipliées par 2,5."), 14, CDim, false, true) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ];
-	return Page(Body, CPageBg);
+	return Page(Body, CRoomBg);
 }
 
 // ---------- création de l'écurie (6 étapes) ----------

@@ -238,7 +238,7 @@ bool FGPMUI::Update(AGPMGameMode* GM)
 	if (!H || !GM) return false;
 	using EP = AGPMGameMode::EPhase;
 	using EC = AGPMGameMode::ECine;
-	const bool bCine = GM->Cine == EC::Intro || GM->Cine == EC::Podium || GM->Cine == EC::Welcome;
+	const bool bCine = GM->Cine != EC::None && GM->Cine != EC::Menu;
 	const bool bWant = !bCine && (GM->InMenu() || GM->Phase == EP::QualiDone || GM->Phase == EP::Done);
 	if (!bAdded)
 	{
@@ -341,13 +341,20 @@ TSharedRef<SWidget> FGPMUI::Button(const FString& Label, const FLinearColor& Col
 			.ContentPadding(FMargin(18.f, 4.f))
 			.OnClicked_Lambda([Self, OnClick]()
 			{
-				if (TSharedPtr<FGPMUI> Me = Self.Pin()) { if (OnClick) OnClick(); Me->Touch(); }
+				if (TSharedPtr<FGPMUI> Me = Self.Pin()) { Me->Click(); if (OnClick) OnClick(); Me->Touch(); }
 				return FReply::Handled();
 			})
 			[
 				Txt(Label, Size, bEnabled ? InkOn(Col) : CFaint, true)
 			]
 		];
+}
+
+void FGPMUI::Click() const
+{
+	const AGPMHUD* H = Hud.Get();
+	UWorld* W = H ? H->GetWorld() : nullptr;
+	if (AGPMGameMode* GM = W ? W->GetAuthGameMode<AGPMGameMode>() : nullptr) GM->UiClick();
 }
 
 TSharedRef<SWidget> FGPMUI::Pick(const TSharedRef<SWidget>& Content, bool bSel, TFunction<void()> OnClick, bool bEnabled)
@@ -361,7 +368,7 @@ TSharedRef<SWidget> FGPMUI::Pick(const TSharedRef<SWidget>& Content, bool bSel, 
 		.ContentPadding(FMargin(14.f, 10.f))
 		.OnClicked_Lambda([Self, OnClick]()
 		{
-			if (TSharedPtr<FGPMUI> Me = Self.Pin()) { if (OnClick) OnClick(); Me->Touch(); }
+			if (TSharedPtr<FGPMUI> Me = Self.Pin()) { Me->Click(); if (OnClick) OnClick(); Me->Touch(); }
 			return FReply::Handled();
 		})
 		[
@@ -637,7 +644,8 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 		{ TEXT("Antipatinage"), TEXT("Limite le patinage des roues arrière à l'accélération."), &GM->bSetTC },
 		{ TEXT("Aide à la stabilité"), TEXT("Rattrape les débuts de tête-à-queue."), &GM->bSetStab },
 		{ TEXT("Caméra cockpit au départ"), TEXT("Sinon, caméra derrière la voiture (touche C pour changer)."), &GM->bSetCockpit },
-		{ TEXT("Boutons tactiles à l'écran"), TEXT("Gauche, droite, frein, gaz et stand (touche T)."), &H->bShowTouch } };
+		{ TEXT("Boutons tactiles à l'écran"), TEXT("Gauche, droite, frein, gaz et stand (touche T)."), &H->bShowTouch },
+		{ TEXT("Son"), TEXT("Moteurs, radio du muret, chocs, foule et clics des menus."), &GM->bSetSound } };
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
 	for (const FOpt& O : Opts)
 	{
