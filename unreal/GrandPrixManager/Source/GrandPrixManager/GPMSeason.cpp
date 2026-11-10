@@ -26,6 +26,7 @@ void UGPMSeasonSubsystem::NewSeason(bool bNextYear)
 		S = DuplicateObject<UGPMSaveGame>(S, this);
 		S->Round = 0; S->Results.Reset(); S->DriverPts.Reset(); S->TeamPts.Reset(); S->DriverTeam.Reset(); S->News.Reset();
 		S->bReviewed = false; S->SeenEv.Reset(); S->StoryId.Reset(); S->GridPen = 0;
+		S->PerfHist.Reset(); S->PerfN = 0; S->MisRound = -1; S->bMisAcc = false;
 	}
 	else S = Cast<UGPMSaveGame>(UGameplayStatics::CreateSaveGameObject(UGPMSaveGame::StaticClass()));
 	S->Year = Y;

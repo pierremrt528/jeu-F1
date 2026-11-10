@@ -731,7 +731,7 @@ void AGPMGameMode::Strategy(float Dt)
 		{
 			// usure : distance, glissades (fortement), sorties de piste, mode ; les pneus pluie fondent sur le sec
 			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
-			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode);
+			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode) * C->UpTyre;
 			if (C->Tyre == TCHAR('W')) K *= 1.f + 2.4f * (1.f - TrackWet);
 			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
 			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel * AGPMCar::ModeFuel(C->Mode));
@@ -777,7 +777,9 @@ void AGPMGameMode::Strategy(float Dt)
 		if (C->bBox)
 		{
 			const float Fix = (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
-			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f) + Fix);
+			// pièces Stands et Centre des mécaniciens : l'équipe du joueur gagne du temps à chaque arrêt
+			const float Crew = Car && C->TeamIdx == Car->TeamIdx ? Car->UpPit : 0.f;
+			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + Crew) + Fix);
 			if (C == Car)
 			{
 				bTyreWarn = false;
@@ -805,13 +807,15 @@ void AGPMGameMode::RecordResult()
 	if (!G || !Factory) return;
 	// gains (racePrize de team.js) + part des sponsors ; moral et réputation suivent les résultats
 	static const float Prize[10] = { 5.f, 4.f, 3.4f, 2.8f, 2.4f, 2.1f, 1.8f, 1.6f, 1.4f, 1.2f };
-	LastPrize = (Pos >= 1 && Pos <= 10 ? Prize[Pos - 1] : 0.8f) * (0.8f + G->Rep / 250.f) + 2.f;
+	LastPartner = Factory->PartnerIncome();
+	LastPrize = (Pos >= 1 && Pos <= 10 ? Prize[Pos - 1] : 0.8f) * (0.8f + G->Rep / 250.f) * Factory->PrizeMul() + LastPartner;
 	Factory->AddMoney(LastPrize);
 	G->Moral = FMath::Clamp(G->Moral + (Pos <= 3 ? 6 : Pos <= 10 ? 2 : -3), 0, 100);
 	G->Rep = FMath::Clamp(G->Rep + (Pos <= 3 ? 2 : Pos <= 10 ? 1 : 0), 0, 100);
 	// les écuries rivales progressent un peu à chaque course
 	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
-		for (int32 t = 1; t < Data->Teams.Num(); ++t) G->RivalDev.FindOrAdd(Data->Teams[t].Name) += (0.0012f + FMath::FRand() * 0.0018f) * 0.67f;
+		for (int32 t = 1; t < Data->Teams.Num(); ++t)
+			G->RivalDev.FindOrAdd(Data->Teams[t].Name) += (0.0012f + FMath::FRand() * 0.0018f) * 0.67f * Factory->RivalDevMul(Data->Teams[t].Name);
 	// l'usine avance jusqu'au GP suivant (GAPS de season.js, en jours)
 	G->News.Reset();
 	int32 Days = 30;
@@ -822,6 +826,9 @@ void AGPMGameMode::RecordResult()
 			if (A.IsValidIndex(G->Round - 1)) Days = int32(A[G->Round - 1]->AsNumber());
 		}
 	Factory->Tick(Days);
+	const FString Built = Factory->TickInfra(Days);   // chantier des installations
+	Factory->RotateStaff();                            // chefs libres renouvelés
+	Factory->RecordPerf();                             // courbes de performance
 	// vie de l'écurie : direction, sponsors, puis conférence de presse et flash info
 	LastLines.Reset();
 	if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
@@ -837,7 +844,9 @@ void AGPMGameMode::RecordResult()
 		for (const AGPMCar* C : Order) if (C->BestLap > 0.f) Best = FMath::Min(Best, C->BestLap);
 		R.bFastest = Car->BestLap > 0.f && Car->BestLap <= Best;
 		for (int32 k = 0; k < Order.Num(); ++k) if (Order[k] != Car && Order[k]->TeamIdx == Car->TeamIdx) R.MatePos = k + 1;
+		for (int32 k = 0; k < Order.Num(); ++k) if (!G->MisWho.IsEmpty() && Order[k]->DriverName == G->MisWho) R.RivalPos = k + 1;
 		LastLines = Career->AfterRace(R);
+		if (!Built.IsEmpty()) LastLines.Add(Built);
 	}
 	Season->Save();
 }
@@ -851,6 +860,7 @@ void AGPMGameMode::ApplyCareer()
 	if (!bCareer || !Data || !Season || !Factory || !Season->State()) return;
 	const FGPMUpgrades U = Factory->Upgrades();
 	Car->UpVTop = U.VTop; Car->UpAcc = U.Acc; Car->UpMu = U.Mu; Car->UpBrake = U.Brake; Car->UpKd = U.Kd; Car->UpSteer = U.Steer; Car->UpFuel = U.Fuel;
+	Car->UpTyre = U.Tyre; Car->UpPit = U.Pit;
 	// bonus de la presse et des événements pour cette course, moral (±1 %), consommation du motoriste
 	if (UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
 	{

@@ -48,6 +48,7 @@ public:
 	bool bCareer = true;
 	int32 LastPts = 0;
 	float LastPrize = 0.f;
+	float LastPartner = 0.f;   // dont l'Espace partenaires
 	/** Qualifications : temps de chaque pilote (le joueur : son meilleur tour) et ordre de la grille. */
 	TMap<AGPMCar*, float> QTimes;
 	TArray<AGPMCar*> QOrder;

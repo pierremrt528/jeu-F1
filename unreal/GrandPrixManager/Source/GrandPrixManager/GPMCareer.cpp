@@ -4,6 +4,7 @@
 #include "GrandPrixManager.h"
 #include "GPMDataSubsystem.h"
 #include "GPMSeason.h"
+#include "GPMFactory.h"
 #include "Dom/JsonValue.h"
 
 namespace
@@ -19,6 +20,12 @@ namespace
 	const FPers& PersOf(const FString& Id) { for (const FPers& P : PersList) if (Id == P.Id) return P; return PersList[0]; }
 	const TCHAR* RoleName(const FString& R) { return R == TEXT("n1") ? TEXT("N°1") : R == TEXT("n2") ? TEXT("N°2") : TEXT("Égalité"); }
 	const float MidMult = 2.5f;   // indemnités de transfert pendant la saison (MID_MULT de market.js)
+	// primes proposées à l'équipier : par podium et par victoire, selon le salaire demandé
+	float PodBonus(float Demand) { return R1(FMath::Max(0.2f, Demand * 0.12f)); }
+	float WinBonus(float Demand) { return R1(FMath::Max(0.4f, Demand * 0.25f)); }
+	// sponsors ponctuels des missions (makeMission d'events.js)
+	const TCHAR* const MissionSponsors[] = { TEXT("Lumora"), TEXT("Kestrel Tech"), TEXT("Novacel"), TEXT("Brisa Mobile"), TEXT("Atlasbank"), TEXT("Orvane"),
+		TEXT("Pixalto"), TEXT("Verdania") };
 }
 
 void UGPMCareerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -164,10 +171,26 @@ void UGPMCareerSubsystem::CreateCareer()
 	G->MateName = M.Name; G->MateSpd = M.Spd; G->MateStrat = M.Strat; G->MateTyre = M.Tyre; G->MatePot = M.Pot;
 	G->MateSal = FMath::Max(0.f, Salary(M)); G->MateYears = 2; G->MateRole = TEXT("eq"); G->MateSince = G->Year;
 	for (const FGPMMarketDriver& D : Market) if (D.Name != M.Name) G->Free.Add(D.Name);
+	// bâtiments de départ selon le niveau (TIERS de career.js : milieu de peloton et top team ont déjà une usine équipée)
+	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (const TSharedPtr<FJsonValue> TierList = Data->GetRaw(TEXT("career"), TEXT("TIERS")))
+			for (const TSharedPtr<FJsonValue>& TierV : TierList->AsArray())
+			{
+				TSharedPtr<FJsonObject> TierO;
+				if (TierV.IsValid() && TierV->Type == EJson::Object) TierO = TierV->AsObject();
+				const TSharedPtr<FJsonObject>* Inf = nullptr;
+				if (TierO.IsValid() && JStr(TierO, TEXT("id")) == T.Id && TierO->TryGetObjectField(TEXT("infra"), Inf))
+					for (const TPair<FString, TSharedPtr<FJsonValue>>& Lv : (*Inf)->Values) G->InfraLv.Add(Lv.Key, FMath::Clamp(int32(Lv.Value->AsNumber()), 0, 3));
+			}
 	ApplyIdentity();
 	Season->NewSeason(true);   // classements avec le nom de l'écurie (garde l'écurie qu'on vient de créer)
 	if (UGPMSaveGame* G2 = Save()) G2->Year = 2027;
 	Season->Save();
+	if (UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>())
+	{
+		Factory->EnsureStaff();
+		Factory->EnsurePerfStart();
+	}
 	UE_LOG(LogGPM, Log, TEXT("Nouvelle écurie : %s (%s, moteur %s, équipier %s)"), *G->TeamName, *T.Name, *E.Name, *M.Name);
 }
 
@@ -218,6 +241,60 @@ void UGPMCareerSubsystem::ClearBoost() { if (UGPMSaveGame* G = Save()) G->Boost.
 
 void UGPMCareerSubsystem::News(const FString& Msg) { if (UGPMSaveGame* G = Save()) G->News.Add(Msg); }
 
+// mission d'un sponsor ponctuel avant chaque GP (makeMission d'events.js), à accepter dans l'écran de saison
+void UGPMCareerSubsystem::EnsureMission()
+{
+	UGPMSaveGame* G = Save();
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (!G || !G->bCreated || !Season || Season->IsOver() || G->MisRound == G->Round) return;
+	const int32 Exp = G->Tier == TEXT("new") ? 14 : G->Tier == TEXT("top") ? 4 : 9;
+	const TArray<FGPMStanding> Ds = Season->Drivers();
+	int32 Me = 0;
+	for (int32 k = 0; k < Ds.Num(); ++k) if (Ds[k].bPlayer) { Me = k; break; }
+	const int32 RivalIdx = Me > 0 ? Me - 1 : 1;
+	const FString Rival = Ds.IsValidIndex(RivalIdx) ? Ds[RivalIdx].Name : FString();
+	G->MisRound = G->Round;
+	G->bMisAcc = false;
+	G->MisWho.Reset();
+	G->MisV = 0;
+	G->MisSponsor = MissionSponsors[FMath::RandRange(0, int32(UE_ARRAY_COUNT(MissionSponsors)) - 1)];
+	const float Roll = FMath::FRand();
+	if (Roll < 0.3f)
+	{
+		const int32 T = FMath::Clamp(Exp - 1 - FMath::RandRange(0, 2), 1, 16);
+		G->MisKind = TEXT("top"); G->MisV = T; G->MisText = FString::Printf(TEXT("Termine dans le top %d"), T); G->MisGain = R1(1.2f + (Exp - T) * 0.35f);
+	}
+	else if (Roll < 0.48f)
+	{
+		const int32 Gn = 3 + FMath::RandRange(0, 2);
+		G->MisKind = TEXT("gain"); G->MisV = Gn; G->MisText = FString::Printf(TEXT("Gagne au moins %d places pendant la course"), Gn); G->MisGain = R1(1.f + Gn * 0.3f);
+	}
+	else if (Roll < 0.6f) { G->MisKind = TEXT("fast"); G->MisText = TEXT("Signe le meilleur tour en course"); G->MisGain = 2.5f; }
+	else if (Roll < 0.78f && !Rival.IsEmpty())
+	{
+		G->MisKind = TEXT("beat"); G->MisWho = Rival; G->MisText = FString::Printf(TEXT("Termine devant %s"), *Display(Rival)); G->MisGain = 1.8f;
+	}
+	else if (Roll < 0.9f)
+	{
+		const int32 T = FMath::Min(10, Exp + 1);
+		G->MisKind = TEXT("both"); G->MisV = T; G->MisText = FString::Printf(TEXT("Les deux voitures dans le top %d"), T); G->MisGain = R1(2.f + (10 - T) * 0.2f);
+	}
+	else
+	{
+		const int32 T = FMath::Min(20, Exp + 3);
+		G->MisKind = TEXT("finish"); G->MisV = T; G->MisText = FString::Printf(TEXT("Termine la course sans abandon, dans le top %d"), T); G->MisGain = 1.f;
+	}
+	Season->Save();
+}
+
+void UGPMCareerSubsystem::AcceptMission()
+{
+	UGPMSaveGame* G = Save();
+	if (!G || G->MisRound != G->Round) return;
+	G->bMisAcc = true;
+	if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Season->Save();
+}
+
 TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 {
 	TArray<FString> Lines;
@@ -247,6 +324,36 @@ TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 		G->Budget = R1(G->Budget + G->DealGp[k]);
 		Lines.Add(FString::Printf(TEXT("%s : %+.1f M€"), *G->DealName[k], G->DealGp[k]));
 		if (--G->DealN[k] <= 0) { G->DealName.RemoveAt(k); G->DealGp.RemoveAt(k); G->DealN.RemoveAt(k); }
+	}
+	// mission du sponsor acceptée avant la course (checkMission d'events.js : un abandon la fait toujours échouer)
+	if (G->bMisAcc && G->MisRound == G->Round - 1)
+	{
+		const int32 MateAt = R.MatePos > 0 ? R.MatePos : 99;
+		bool bOk = !R.bDnf;
+		if (bOk)
+		{
+			if (G->MisKind == TEXT("gain")) bOk = R.Grid - R.Pos >= G->MisV;
+			else if (G->MisKind == TEXT("fast")) bOk = R.bFastest;
+			else if (G->MisKind == TEXT("beat")) bOk = R.RivalPos > R.Pos;
+			else if (G->MisKind == TEXT("both")) bOk = R.Pos <= G->MisV && MateAt <= G->MisV;
+			else bOk = R.Pos <= G->MisV;
+		}
+		if (bOk) G->Budget = R1(G->Budget + G->MisGain);
+		else G->Rep = FMath::Max(0, G->Rep - 3);
+		Lines.Add(bOk ? FString::Printf(TEXT("Mission %s réussie : +%.1f M€"), *G->MisSponsor, G->MisGain)
+			: FString::Printf(TEXT("Mission %s ratée (%s) : réputation -3"), *G->MisSponsor, *G->MisText));
+	}
+	G->bMisAcc = false;
+	// primes du contrat de l'équipier : victoire ou, à défaut, podium
+	if (R.MatePos >= 1 && R.MatePos <= 3 && (G->MateWin > 0.f || G->MatePod > 0.f))
+	{
+		const bool bMateWin = R.MatePos == 1 && G->MateWin > 0.f;
+		const float Bonus = bMateWin ? G->MateWin : G->MatePod;
+		if (Bonus > 0.f)
+		{
+			G->Budget = R1(G->Budget - Bonus);
+			Lines.Add(FString::Printf(TEXT("Prime de %s (%s) : -%.1f M€"), *G->MateName, bMateWin ? TEXT("victoire") : TEXT("podium"), Bonus));
+		}
 	}
 	G->Broken.Reset();   // nouvelle fenêtre de négociation au GP suivant
 	BuildCtx(R);
@@ -301,8 +408,12 @@ void UGPMCareerSubsystem::Intersaison()
 		News(FString::Printf(TEXT("%s, pilote de réserve, devient titulaire."), *Best.Name));
 	}
 	G->Budget = R1(G->Budget - G->MateSal);
-	// les jeunes progressent un peu, l'équipier aussi
-	G->MateSpd = FMath::Min(99.f, G->MateSpd + FMath::Max(0.f, (G->MatePot - G->MateSpd) * 0.15f));
+	// les jeunes progressent un peu, l'équipier aussi (plus vite avec l'Académie de pilotes)
+	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	const float Grow = Factory ? Factory->MateGrowth() : 1.f;
+	G->MateSpd = FMath::Min(99.f, G->MateSpd + FMath::Max(0.f, (G->MatePot - G->MateSpd) * 0.15f * Grow));
+	// chefs de pôle : salaires de la nouvelle saison, fins de contrat
+	if (Factory) Factory->RenewStaff(G->Year + 1);
 	AIMercato(3 + FMath::RandRange(0, 2));
 	ApplyIdentity();
 }
@@ -376,7 +487,8 @@ void UGPMCareerSubsystem::OpenNego(const FGPMMarketDriver& D)
 	Nego.Role = Nego.bWantN1 ? TEXT("n1") : TEXT("eq");
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	const bool bMid = Season && Season->Round() > 0 && !Season->IsOver();
-	Nego.Ask = FMath::Max(0.3f, Salary(D)) * P.Greed * (1.f + (55 - Nego.Interest) / 160.f) * (bMid ? 1.2f : 1.f);
+	const UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	Nego.Ask = FMath::Max(0.3f, Salary(D)) * P.Greed * (1.f + (55 - Nego.Interest) / 160.f) * (bMid ? 1.2f : 1.f) * (Factory ? Factory->SalaryCut() : 1.f);
 	Nego.Demand = FMath::CeilToFloat(Nego.Ask * 1.1f * 10.f) / 10.f;
 	Nego.Fee = D.Seat >= 0 ? FMath::CeilToFloat(FMath::Max(1.f, Salary(D)) * 0.8f * (bMid ? MidMult : 1.f) * 2.f) / 2.f : 0.f;
 	Nego.bOpen = true;
@@ -415,7 +527,7 @@ void UGPMCareerSubsystem::NegoDialog(const FString& Line)
 	auto Add = [&Dl, Budget, this](const FString& Txt, int32 Act, float Sal)
 	{
 		FGPMChoice C; C.Text = Txt; C.Action = Act;
-		C.bOff = Act < 4 && Sal + Nego.Fee > Budget + 1e-3f;
+		C.bOff = Act != 4 && Sal + Nego.Fee > Budget + 1e-3f;
 		if (C.bOff) C.Text += TEXT(" (budget insuffisant)");
 		Dl.Choices.Add(C);
 	};
@@ -427,6 +539,8 @@ void UGPMCareerSubsystem::NegoDialog(const FString& Line)
 		Add(FString::Printf(TEXT("Proposer %.1f M€ par saison"), R1(Nego.Demand * 0.9f)), 1, R1(Nego.Demand * 0.9f));
 		Add(FString::Printf(TEXT("Proposer %.1f M€ par saison"), R1(Nego.Demand * 0.78f)), 2, R1(Nego.Demand * 0.78f));
 		if (Nego.Role != TEXT("n2")) Add(FString::Printf(TEXT("Proposer %.1f M€ avec le statut N°2"), R1(Nego.Demand * 0.85f)), 3, R1(Nego.Demand * 0.85f));
+		Add(FString::Printf(TEXT("Proposer %.1f M€ + primes (%.1f M€ par podium, %.1f M€ par victoire)"), R1(Nego.Demand * 0.82f), PodBonus(Nego.Demand), WinBonus(Nego.Demand)), 5,
+			R1(Nego.Demand * 0.82f));
 	}
 	Add(TEXT("Quitter la négociation"), 4, 0.f);
 	if (Queue.Num()) Queue[0] = Dl; else Queue.Add(Dl);
@@ -439,14 +553,17 @@ void UGPMCareerSubsystem::NegoAct(int32 Action)
 	if (!G || !Dl) return;
 	if (Action == 4) { Dl->Chosen = 0; Dl->Result = TEXT("Tu quittes la table. L'agent garde ton numéro."); return; }
 	if (Action == 0) { Sign(); return; }
-	const float Offer = R1(Nego.Demand * (Action == 1 ? 0.9f : Action == 2 ? 0.78f : 0.85f));
+	const float Offer = R1(Nego.Demand * (Action == 1 ? 0.9f : Action == 2 ? 0.78f : Action == 5 ? 0.82f : 0.85f));
 	const FString Role = Action == 3 ? FString(TEXT("n2")) : Nego.Role;
 	const float RoleT = Nego.bWantN1 ? (Role == TEXT("n1") ? 0.12f : Role == TEXT("n2") ? -0.3f : 0.f) : (Role == TEXT("n1") ? 0.05f : Role == TEXT("n2") ? -0.08f : 0.f);
-	const float Score = Offer / Nego.Ask + RoleT - (Nego.bWantN1 && Role != TEXT("n1") ? 0.12f : 0.f);
+	// primes : un ambitieux ou un jeune loup y croit plus qu'un mercenaire
+	const float Pod = Action == 5 ? PodBonus(Nego.Demand) : 0.f, Win = Action == 5 ? WinBonus(Nego.Demand) : 0.f;
+	const float BonusW = Nego.Pers == TEXT("ambitieux") ? 0.9f : Nego.Pers == TEXT("jeune") ? 0.8f : Nego.Pers == TEXT("fidele") ? 0.6f : 0.4f;
+	const float Score = (Offer + (Pod + Win) * BonusW) / Nego.Ask + RoleT - (Nego.bWantN1 && Role != TEXT("n1") ? 0.12f : 0.f);
 	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (FMath::FRand() - 0.5f) * 0.04f;
 	if (Score >= Thr)
 	{
-		Nego.Demand = Offer; Nego.Role = Role;
+		Nego.Demand = Offer; Nego.Role = Role; Nego.Pod = Pod; Nego.Win = Win;
 		Sign();
 		return;
 	}
@@ -495,6 +612,7 @@ void UGPMCareerSubsystem::Sign()
 	else { G->Free.Remove(Nego.D.Name); G->Free.AddUnique(Old); }
 	G->MateName = Nego.D.Name; G->MateSpd = Nego.D.Spd; G->MateStrat = Nego.D.Strat; G->MateTyre = Nego.D.Tyre; G->MatePot = Nego.D.Pot;
 	G->MateSal = Sal; G->MateYears = Nego.Years; G->MateRole = Nego.Role; G->MateSince = G->Year;
+	G->MatePod = Nego.Pod; G->MateWin = Nego.Win;
 	G->DriverTeam.Add(Nego.D.Name, G->TeamName);
 	G->DriverPts.FindOrAdd(Nego.D.Name);
 	G->DriverPts.FindOrAdd(Old);
@@ -504,6 +622,8 @@ void UGPMCareerSubsystem::Sign()
 	Dl->bBad = false;
 	Dl->Result = FString::Printf(TEXT("%s signe pour %d saison%s (%.1f M€ par saison, statut %s). Coût immédiat : %.1f M€."), *Nego.D.Name, Nego.Years,
 		Nego.Years > 1 ? TEXT("s") : TEXT(""), Sal, RoleName(Nego.Role), Cost);
+	if (Nego.Pod > 0.f || Nego.Win > 0.f)
+		Dl->Result += FString::Printf(TEXT(" Primes : %.1f M€ par podium, %.1f M€ par victoire."), Nego.Pod, Nego.Win);
 	Nego.bOpen = false;
 	if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Season->Save();
 }

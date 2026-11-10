@@ -28,13 +28,6 @@ namespace GPMUIScreensText
 			: G == TEXT("pts") ? TEXT("marques des points") : G == TEXT("podium") ? TEXT("montes sur le podium") : TEXT("fais le meilleur tour");
 	}
 
-	FString EffectName(const FString& K)
-	{
-		return K == TEXT("vtop") ? TEXT("Vitesse de pointe") : K == TEXT("acc") ? TEXT("Accélération") : K == TEXT("mu") ? TEXT("Adhérence")
-			: K == TEXT("brake") ? TEXT("Freinage") : K == TEXT("kd") ? TEXT("Appui") : K == TEXT("steer") ? TEXT("Agilité")
-			: K == TEXT("fuel") ? TEXT("Consommation") : K == TEXT("rel") ? TEXT("Fiabilité") : K;
-	}
-
 	FString RoleName(const FString& R)
 	{
 		return R == TEXT("n1") ? TEXT("N°1") : R == TEXT("n2") ? TEXT("N°2") : TEXT("Égalité");
@@ -52,13 +45,16 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 	if (S->IsOver() && !GM->bChampShown) return ChampScreen(GM);
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
 	const UGPMSaveGame* G = S->State();
+	// mission du sponsor proposée avant les qualifications, premier relevé des courbes de performance
+	if (C && C->IsCreated() && !S->IsOver() && !GM->bGridReady) C->EnsureMission();
+	if (UGPMFactorySubsystem* F = FactorySys()) F->EnsurePerfStart();
 
 	// en-tête : saison, boutons de navigation
 	TSharedRef<SHorizontalBox> Nav = SNew(SHorizontalBox);
 	Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Button(TEXT("ACCUEIL"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->GoHome(); }, true, 0.f, 46.f, 15) ];
 	if (C && C->IsCreated())
 		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Button(TEXT("MERCATO"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->OpenMercato(); }, true, 0.f, 46.f, 15) ];
-	Nav->AddSlot().AutoWidth()[ Button(TEXT("USINE"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 46.f, 15) ];
+	Nav->AddSlot().AutoWidth()[ Button(TEXT("QG · USINE"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 46.f, 15) ];
 
 	// prochain Grand Prix
 	TSharedRef<SVerticalBox> NextBox = SNew(SVerticalBox);
@@ -151,28 +147,8 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 		Lines->AddSlot().AutoHeight()[ Form ];
 	}
 
-	// classements
-	const TArray<FGPMStanding> Drv = S->Drivers(), Tms = S->Teams();
-	TSharedRef<SVerticalBox> DrvList = SNew(SVerticalBox);
-	for (int32 k = 0; k < Drv.Num(); ++k)
-	{
-		TArray<TPair<FString, float>> Cells;
-		Cells.Emplace(FString::FromInt(k + 1), 34.f);
-		Cells.Emplace(Nm(Drv[k].Name), 0.f);
-		Cells.Emplace(Drv[k].Team, 170.f);
-		Cells.Emplace(FString::Printf(TEXT("%d"), Drv[k].Pts), 50.f);
-		DrvList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Drv[k].Color, Drv[k].bPlayer, Cells, { CText, CText, CDim, CText }) ];
-	}
-	TSharedRef<SVerticalBox> TeamList = SNew(SVerticalBox);
-	for (int32 k = 0; k < Tms.Num(); ++k)
-	{
-		TArray<TPair<FString, float>> Cells;
-		Cells.Emplace(FString::FromInt(k + 1), 34.f);
-		Cells.Emplace(Tms[k].Name, 0.f);
-		Cells.Emplace(FString::Printf(TEXT("%d"), Tms[k].Pts), 50.f);
-		TeamList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Tms[k].Color, Tms[k].bPlayer, Cells, { CText, CText, CText }) ];
-	}
-
+	SeasonTab = FMath::Clamp(SeasonTab, 0, 2);
+	TSharedRef<SWidget> Panel = SeasonTab == 1 ? CalendarPanel() : SeasonTab == 2 ? PerfPanel() : StandingsPanel();
 	const FString TeamName = C && C->Save() && C->IsCreated() ? C->Save()->TeamName : FString(TEXT("Championnat"));
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Title(FString::Printf(TEXT("SAISON %d"), S->Year()), TeamName, Nav) ]
@@ -184,22 +160,20 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 			[
 				SNew(SScrollBox)
 				+ SScrollBox::Slot()[ SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(NextBox, FLinearColor(Acc.R * 0.3f, Acc.G * 0.3f, Acc.B * 0.3f, 0.75f), 20.f) ] ]
+				+ SScrollBox::Slot()[ MissionCard() ]
 				+ SScrollBox::Slot()[ SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Board, CCardBg, 16.f) ] ]
 				+ SScrollBox::Slot()[ Card(Lines, CCardBg, 16.f) ]
 			]
-			+ SHorizontalBox::Slot().FillWidth(1.15f).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
+			+ SHorizontalBox::Slot().FillWidth(1.95f)
 			[
-				Card(SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Txt(TEXT("PILOTES"), 14, CDim, true) ]
-					+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ DrvList ] ],
-					CCardBg, 14.f)
-			]
-			+ SHorizontalBox::Slot().FillWidth(0.8f)
-			[
-				Card(SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Txt(TEXT("ÉCURIES"), 14, CDim, true) ]
-					+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ TeamList ] ],
-					CCardBg, 14.f)
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("CLASSEMENTS"), TEXT("CALENDRIER"), TEXT("PERFORMANCE") }, SeasonTab, [this](int32 k) { SeasonTab = k; }) ]
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Txt(TEXT("Tab : onglet suivant"), 13, CFaint) ]
+				]
+				+ SVerticalBox::Slot().FillHeight(1.f)[ Panel ]
 			]
 		];
 	return Page(Body, CPageBg);
@@ -242,111 +216,6 @@ TSharedRef<SWidget> FGPMUI::ChampScreen(AGPMGameMode* GM)
 				]
 			]
 		];
-}
-
-// ---------- usine : recherche ----------
-
-TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
-{
-	AGPMHUD* H = Hud.Get();
-	UGameInstance* GI = H ? H->GetGameInstance() : nullptr;
-	UGPMFactorySubsystem* F = GI ? GI->GetSubsystem<UGPMFactorySubsystem>() : nullptr;
-	UGPMSeasonSubsystem* S = SeasonSys();
-	if (!F || !S || F->Trees().Num() == 0) return SNullWidget::NullWidget;
-	TWeakObjectPtr<AGPMGameMode> WGM = GM;
-	TWeakObjectPtr<UGPMFactorySubsystem> WF = F;
-	const TArray<FGPMTree>& Trees = F->Trees();
-	SelTree = FMath::Clamp(SelTree, 0, Trees.Num() - 1);
-	SelPart = FMath::Clamp(SelPart, 0, Trees[SelTree].Parts.Num() - 1);
-	const UGPMSaveGame* G = S->State();
-	using ES = UGPMFactorySubsystem::EState;
-
-	TSharedRef<SHorizontalBox> Cols = SNew(SHorizontalBox);
-	for (int32 t = 0; t < Trees.Num(); ++t)
-	{
-		const FGPMTree& Tr = Trees[t];
-		int32 Have = 0;
-		for (const FGPMPart& P : Tr.Parts) if (F->StateOf(P) == ES::Owned) ++Have;
-		TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-		List->AddSlot().AutoHeight()[ Txt(Tr.Name.ToUpper(), 16, Tr.Color, true) ];
-		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Bar(Tr.Parts.Num() ? float(Have) / Tr.Parts.Num() : 0.f, Tr.Color, 5.f) ];
-		for (int32 k = 0; k < Tr.Parts.Num(); ++k)
-		{
-			const FGPMPart& P = Tr.Parts[k];
-			const ES St = F->StateOf(P);
-			FString InfoTxt;
-			FLinearColor InfoCol = CDim, NameCol = CText;
-			switch (St)
-			{
-			case ES::Owned: InfoTxt = TEXT("installée"); InfoCol = CGood; break;
-			case ES::Running: InfoTxt = FString::Printf(TEXT("%.0f j"), G ? G->DevLeft.FindRef(P.Tree) : 0.f); InfoCol = CGold; break;
-			case ES::Available: InfoTxt = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); InfoCol = CInfo; break;
-			case ES::TooExpensive: InfoTxt = FString::Printf(TEXT("%.1f M€"), UGPMFactorySubsystem::Price(P)); InfoCol = CBad; NameCol = CDim; break;
-			case ES::Busy: InfoTxt = TEXT("pôle occupé"); NameCol = CDim; break;
-			default: InfoTxt = TEXT("verrouillée"); InfoCol = CFaint; NameCol = CFaint; break;
-			}
-			TSharedRef<SWidget> Content = SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(P.Name, 14, NameCol, St == ES::Owned || St == ES::Running) ]
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(InfoTxt, 12, InfoCol) ];
-			List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Pick(Content, t == SelTree && k == SelPart, [this, t, k]() { SelTree = t; SelPart = k; }) ];
-		}
-		Cols->AddSlot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, t + 1 < Trees.Num() ? 10.f : 0.f, 0.f))
-		[
-			Card(SNew(SScrollBox) + SScrollBox::Slot()[ List ], CCardBg, 12.f)
-		];
-	}
-
-	// fiche de la pièce choisie
-	const FGPMPart& P = Trees[SelTree].Parts[SelPart];
-	const ES St = F->StateOf(P);
-	TSharedRef<SHorizontalBox> Fx = SNew(SHorizontalBox);
-	for (const TPair<FString, float>& E : P.Fx)
-	{
-		const bool bRel = E.Key == TEXT("rel");
-		const float V = bRel ? E.Value : E.Value * 100.f;
-		Fx->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
-		[
-			Chip(GPMUIScreensText::EffectName(E.Key), FString::Printf(TEXT("%+.1f%s"), V, bRel ? TEXT("") : TEXT(" %")), E.Key == TEXT("fuel") ? (V < 0.f ? CGood : CBad) : (V >= 0.f ? CGood : CBad))
-		];
-	}
-	FString StateTxt;
-	switch (St)
-	{
-	case ES::Owned: StateTxt = TEXT("Déjà installée sur la voiture."); break;
-	case ES::Running: StateTxt = TEXT("En cours de recherche."); break;
-	case ES::Available: StateTxt = TEXT("Prête à être lancée."); break;
-	case ES::TooExpensive: StateTxt = TEXT("Budget insuffisant."); break;
-	case ES::Busy: StateTxt = TEXT("Ce pôle travaille déjà sur une pièce, ou tous les ateliers sont pris."); break;
-	default: StateTxt = TEXT("Il faut d'abord les pièces précédentes de l'arbre."); break;
-	}
-	const FString PartId = P.Id;
-	TSharedRef<SWidget> Detail = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-		[
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(P.Name, 24, CText, true) ]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 8.f))[ Txt(P.Desc, 15, CDim, false, true) ]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Fx ]
-			+ SVerticalBox::Slot().AutoHeight()
-			[
-				Txt(FString::Printf(TEXT("Prix %.1f M€ · %d jours · risque d'échec %d %% · %s"), UGPMFactorySubsystem::Price(P), UGPMFactorySubsystem::Delay(P), UGPMFactorySubsystem::FailPct(P), *StateTxt), 14, CDim, false, true)
-			]
-		]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(20.f, 0.f, 0.f, 0.f))
-		[
-			Button(TEXT("LANCER LA RECHERCHE"), Acc, [WF, PartId]() { if (WF.IsValid()) WF->Start(PartId); }, St == ES::Available, 260.f, 58.f, 17)
-		];
-
-	TSharedRef<SHorizontalBox> Right = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Chip(TEXT("Budget"), FString::Printf(TEXT("%.1f M€"), F->Budget()), CGood) ]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 16.f, 0.f))[ Chip(TEXT("Ateliers"), FString::Printf(TEXT("%d / %d"), F->Running(), F->Workshops()), CText) ]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Button(TEXT("RETOUR"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Season; }, true, 150.f, 46.f, 15) ];
-
-	TSharedRef<SWidget> Body = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 16.f))[ Title(TEXT("USINE"), TEXT("Recherche et développement"), Right) ]
-		+ SVerticalBox::Slot().FillHeight(1.f).Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Cols ]
-		+ SVerticalBox::Slot().AutoHeight()[ Card(Detail, FLinearColor(Trees[SelTree].Color.R * 0.25f, Trees[SelTree].Color.G * 0.25f, Trees[SelTree].Color.B * 0.25f, 0.85f), 18.f) ];
-	return Page(Body, CPageBg);
 }
 
 // ---------- mercato ----------
@@ -709,7 +578,7 @@ TSharedRef<SWidget> FGPMUI::ResultsScreen(AGPMGameMode* GM)
 	{
 		Side->AddSlot().AutoHeight()[ Txt(TEXT("BILAN"), 13, CDim, true) ];
 		Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f))[ Txt(FString::Printf(TEXT("+%d points au championnat"), GM->LastPts), 18, CGold, true) ];
-		Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Txt(FString::Printf(TEXT("+%.1f M€ de primes"), GM->LastPrize), 16, CGood, true) ];
+		Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Txt(FString::Printf(TEXT("+%.1f M€ de primes (dont %.1f M€ des partenaires)"), GM->LastPrize, GM->LastPartner), 16, CGood, true, true) ];
 		for (const FString& L : GM->LastLines) Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 3.f))[ Txt(L, 14, CDim, false, true) ];
 	}
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)

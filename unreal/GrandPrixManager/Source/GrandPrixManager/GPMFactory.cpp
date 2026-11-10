@@ -39,7 +39,8 @@ void UGPMFactorySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		}
 		TreeList.Add(Tr);
 	}
-	UE_LOG(LogGPM, Log, TEXT("Usine : %d pôles"), TreeList.Num());
+	LoadQG();
+	UE_LOG(LogGPM, Log, TEXT("Usine : %d pôles, %d bâtiments, %d chefs"), TreeList.Num(), BuildingList.Num(), ChiefList.Num());
 }
 
 UGPMSaveGame* UGPMFactorySubsystem::Save() const
@@ -65,6 +66,60 @@ int32 UGPMFactorySubsystem::Running() const
 	return G ? G->DevPart.Num() : 0;
 }
 
+int32 UGPMFactorySubsystem::RunningIn(const FString& Tree) const
+{
+	const UGPMSaveGame* G = Save();
+	return G ? int32(G->DevPart.Contains(Tree)) + int32(G->DevPart.Contains(Tree + TEXT("+"))) : 0;
+}
+
+FString UGPMFactorySubsystem::DevKey(const FGPMPart& P) const
+{
+	// une pièce en cours est rangée sous son pôle, ou « pôle+ » pour la 2e recherche du pôle (Soufflerie niveau 3)
+	const UGPMSaveGame* G = Save();
+	if (!G) return FString();
+	if (G->DevPart.FindRef(P.Tree) == P.Id) return P.Tree;
+	const FString Second = P.Tree + TEXT("+");
+	if (G->DevPart.FindRef(Second) == P.Id) return Second;
+	return FString();
+}
+
+float UGPMFactorySubsystem::DaysLeft(const FGPMPart& P) const
+{
+	const UGPMSaveGame* G = Save();
+	const FString K = DevKey(P);
+	return G && !K.IsEmpty() ? G->DevLeft.FindRef(K) : 0.f;
+}
+
+float UGPMFactorySubsystem::DaysTotal(const FGPMPart& P) const
+{
+	const UGPMSaveGame* G = Save();
+	const FString K = DevKey(P);
+	return G && !K.IsEmpty() ? G->DevTot.FindRef(K) : 0.f;
+}
+
+int32 UGPMFactorySubsystem::Workshops() const
+{
+	const UGPMSaveGame* G = Save();
+	const int32 Base = !G ? 2 : G->Tier == TEXT("new") ? 2 : G->Tier == TEXT("top") ? 4 : 3;
+	return Base + Level(TEXT("shop"));
+}
+
+int32 UGPMFactorySubsystem::PerDept() const { return Level(TEXT("wind")) >= 3 ? 2 : 1; }
+
+float UGPMFactorySubsystem::PriceOf(const FGPMPart& P) const
+{
+	return FMath::RoundToFloat(Price(P) * (1.f - 0.1f * Level(TEXT("rd"))) * ChiefMul(P.Tree, 0) * 10.f) / 10.f;
+}
+
+int32 UGPMFactorySubsystem::DelayOf(const FGPMPart& P) const
+{
+	static const float Wind[4] = { 1.f, 0.85f, 0.75f, 0.7f };
+	return FMath::Max(5, FMath::RoundToInt(Delay(P) * Wind[FMath::Clamp(Level(TEXT("wind")), 0, 3)] * ChiefMul(P.Tree, 1)));
+}
+
+int32 UGPMFactorySubsystem::FailOf(const FGPMPart& P) const { return FMath::RoundToInt(FailPct(P) * ChiefMul(P.Tree, 2)); }
+int32 UGPMFactorySubsystem::LateOf(const FGPMPart& P) const { return FMath::RoundToInt(22.f * ChiefMul(P.Tree, 2)); }
+
 float UGPMFactorySubsystem::Budget() const { const UGPMSaveGame* G = Save(); return G ? G->Budget : 0.f; }
 
 void UGPMFactorySubsystem::AddMoney(float M)
@@ -77,7 +132,7 @@ UGPMFactorySubsystem::EState UGPMFactorySubsystem::StateOf(const FGPMPart& P) co
 	const UGPMSaveGame* G = Save();
 	if (!G) return EState::Locked;
 	if (G->Owned.Contains(P.Id)) return EState::Owned;
-	if (const FString* Cur = G->DevPart.Find(P.Tree)) { if (*Cur == P.Id) return EState::Running; }
+	if (!DevKey(P).IsEmpty()) return EState::Running;
 	for (const FString& R : P.Req) if (!G->Owned.Contains(R)) return EState::Locked;
 	if (P.ReqAny.Num())
 	{
@@ -85,8 +140,8 @@ UGPMFactorySubsystem::EState UGPMFactorySubsystem::StateOf(const FGPMPart& P) co
 		for (const FString& R : P.ReqAny) bAny |= G->Owned.Contains(R);
 		if (!bAny) return EState::Locked;
 	}
-	if (G->DevPart.Contains(P.Tree) || Running() >= Workshops()) return EState::Busy;
-	if (G->Budget < Price(P)) return EState::TooExpensive;
+	if (RunningIn(P.Tree) >= PerDept() || Running() >= Workshops()) return EState::Busy;
+	if (G->Budget < PriceOf(P)) return EState::TooExpensive;
 	return EState::Available;
 }
 
@@ -95,10 +150,12 @@ bool UGPMFactorySubsystem::Start(const FString& Id)
 	const FGPMPart* P = Part(Id);
 	UGPMSaveGame* G = Save();
 	if (!P || !G || StateOf(*P) != EState::Available) return false;
-	G->Budget = FMath::RoundToFloat((G->Budget - Price(*P)) * 10.f) / 10.f;
-	G->DevPart.Add(P->Tree, P->Id);
-	G->DevLeft.Add(P->Tree, float(Delay(*P)));
-	G->DevTot.Add(P->Tree, float(Delay(*P)));
+	const FString Key = G->DevPart.Contains(P->Tree) ? P->Tree + TEXT("+") : P->Tree;
+	const int32 Days = DelayOf(*P);
+	G->Budget = FMath::RoundToFloat((G->Budget - PriceOf(*P)) * 10.f) / 10.f;
+	G->DevPart.Add(Key, P->Id);
+	G->DevLeft.Add(Key, float(Days));
+	G->DevTot.Add(Key, float(Days));
 	Persist();
 	return true;
 }
@@ -115,16 +172,17 @@ void UGPMFactorySubsystem::Tick(int32 Days)
 		if (Left > 0.f) continue;
 		const FGPMPart* P = Part(D.Value);
 		if (!P) { Done.Add(D.Key); continue; }
-		// retard possible une fois (22 %), puis échec possible (argent perdu)
-		if (!G->Delayed.Contains(P->Id) && FMath::RandRange(0, 99) < 22)
+		// retard possible une fois (22 %, moins avec un bon chef), puis échec possible (argent perdu)
+		if (!G->Delayed.Contains(P->Id) && FMath::RandRange(0, 99) < LateOf(*P))
 		{
 			G->Delayed.Add(P->Id);
 			const int32 More = FMath::RandRange(7, 14);
 			Left += More;
+			G->DevTot.FindOrAdd(D.Key) += More;
 			G->News.Add(FString::Printf(TEXT("Retard : %s, %d jours de plus."), *P->Name, More));
 			continue;
 		}
-		if (FMath::RandRange(0, 99) < FailPct(*P)) G->News.Add(FString::Printf(TEXT("Échec : %s a cassé au banc d essai, la pièce est perdue."), *P->Name));
+		if (FMath::RandRange(0, 99) < FailOf(*P)) G->News.Add(FString::Printf(TEXT("Échec : %s a cassé au banc d'essai, la pièce est perdue."), *P->Name));
 		else { G->Owned.Add(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est montée sur la voiture."), *P->Name)); }
 		G->Delayed.Remove(P->Id);
 		Done.Add(D.Key);
@@ -149,6 +207,9 @@ FGPMUpgrades UGPMFactorySubsystem::Upgrades() const
 				else if (F.Key == TEXT("kd")) U.Kd += F.Value;
 				else if (F.Key == TEXT("steer")) U.Steer += F.Value;
 				else if (F.Key == TEXT("fuel")) U.Fuel += F.Value;
+				else if (F.Key == TEXT("tyre")) U.Tyre += F.Value;
+				else if (F.Key == TEXT("pit")) U.Pit += F.Value;
 			}
+	U.Pit += PitBonus();
 	return U;
 }

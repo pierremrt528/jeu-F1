@@ -119,6 +119,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(GM->SetupStep * 100 + GM->MercatoPage));
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
+	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
 	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
@@ -162,7 +163,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		if (!PC) return;
 		if (Dl->Chosen < 0)
 		{
-			for (int32 k = 0; k < Dl->Choices.Num() && k < 5; ++k)
+			for (int32 k = 0; k < Dl->Choices.Num() && k < 6; ++k)
 				if (AGPMGameMode::DigitPressed(PC, k + 1) && !Dl->Choices[k].bOff) { C->Choose(k); return; }
 		}
 		else if (PC->WasInputKeyJustPressed(EKeys::Enter))
@@ -180,18 +181,54 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 			const TArray<FGPMStanding> Drv = S->Drivers(), Tms = S->Teams();
 			if (!(Drv.Num() && Drv[0].bPlayer) && !(Tms.Num() && Tms[0].bPlayer)) GM->bChampShown = true;
 		}
+		// Tab : classements, calendrier, performance
+		if (PC && PC->WasInputKeyJustPressed(EKeys::Tab)) { SeasonTab = (SeasonTab + 1) % 3; Touch(); }
 	}
 	else if (GM->Phase == EP::Factory && PC)
 	{
-		const UGPMFactorySubsystem* F = H->GetGameInstance() ? H->GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>() : nullptr;
-		if (!F || F->Trees().Num() == 0) return;
-		const int32 NT = F->Trees().Num();
-		if (PC->WasInputKeyJustPressed(EKeys::Left)) { SelTree = (SelTree + NT - 1) % NT; SelPart = 0; }
-		if (PC->WasInputKeyJustPressed(EKeys::Right)) { SelTree = (SelTree + 1) % NT; SelPart = 0; }
-		SelTree = FMath::Clamp(SelTree, 0, NT - 1);
-		const int32 NP = F->Trees()[SelTree].Parts.Num();
-		if (PC->WasInputKeyJustPressed(EKeys::Up)) SelPart = FMath::Max(0, SelPart - 1);
-		if (PC->WasInputKeyJustPressed(EKeys::Down)) SelPart = FMath::Min(NP - 1, SelPart + 1);
+		// QG au clavier : Tab change d'onglet, flèches pour choisir, Entrée (ou 1-3 pour la durée d'un chef) pour agir
+		UGPMFactorySubsystem* F = FactorySys();
+		if (!F) return;
+		if (PC->WasInputKeyJustPressed(EKeys::Tab)) { QGTab = (QGTab + 1) % 3; Touch(); return; }
+		const bool bL = PC->WasInputKeyJustPressed(EKeys::Left), bR = PC->WasInputKeyJustPressed(EKeys::Right);
+		const bool bU = PC->WasInputKeyJustPressed(EKeys::Up), bD = PC->WasInputKeyJustPressed(EKeys::Down);
+		const bool bEnter = PC->WasInputKeyJustPressed(EKeys::Enter);
+		if (QGTab == 0)
+		{
+			const int32 NT = F->Trees().Num();
+			if (NT == 0) return;
+			if (bL) { SelTree = (SelTree + NT - 1) % NT; SelPart = 0; }
+			if (bR) { SelTree = (SelTree + 1) % NT; SelPart = 0; }
+			SelTree = FMath::Clamp(SelTree, 0, NT - 1);
+			const TArray<FGPMPart>& Parts = F->Trees()[SelTree].Parts;
+			if (bU) SelPart = FMath::Max(0, SelPart - 1);
+			if (bD) SelPart = FMath::Min(Parts.Num() - 1, SelPart + 1);
+			if (bEnter && Parts.IsValidIndex(SelPart) && F->StateOf(Parts[SelPart]) == UGPMFactorySubsystem::EState::Available) { F->Start(Parts[SelPart].Id); Touch(); }
+		}
+		else if (QGTab == 1)
+		{
+			const int32 NB = F->Buildings().Num();
+			if (NB == 0) return;
+			if (bU) { SelInfra = (SelInfra + NB - 1) % NB; Touch(); }
+			if (bD) { SelInfra = (SelInfra + 1) % NB; Touch(); }
+			SelInfra = FMath::Clamp(SelInfra, 0, NB - 1);
+			const FString BId = F->Buildings()[SelInfra].Id;
+			FString Why;
+			if (bEnter && F->CanBuild(BId, Why)) { F->Build(BId); Touch(); }
+		}
+		else
+		{
+			const int32 ND = UGPMFactorySubsystem::Depts().Num();
+			if (ND == 0) return;
+			if (bL || bR) { SelDept = (SelDept + (bL ? ND - 1 : 1)) % ND; SelCand = 0; Touch(); }
+			SelDept = FMath::Clamp(SelDept, 0, ND - 1);
+			const TArray<FGPMChiefOffer> Cands = F->Candidates(UGPMFactorySubsystem::Depts()[SelDept].Key);
+			if (bU && SelCand > 0) { --SelCand; Touch(); }
+			if (bD && SelCand < Cands.Num() - 1) { ++SelCand; Touch(); }
+			if (Cands.IsValidIndex(SelCand))
+				for (int32 y = 1; y <= 3; ++y)
+					if (AGPMGameMode::DigitPressed(PC, y) && F->Hire(Cands[SelCand], y)) { SelCand = 0; Touch(); break; }
+		}
 	}
 }
 

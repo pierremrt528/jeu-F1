@@ -90,6 +90,7 @@ public:
 	bool bHold = false;                    // avant le départ : freins serrés
 	/** Pièces de l'usine (carUpgrades) : multiplicateurs de la voiture du joueur. */
 	float UpVTop = 1.f, UpAcc = 1.f, UpMu = 1.f, UpBrake = 1.f, UpKd = 1.f, UpSteer = 1.f, UpFuel = 1.f;
+	float UpTyre = 1.f, UpPit = 0.f;   // usure des pneus (multiplicateur), secondes gagnées à l'arrêt (négatif)
 	bool bParked = false;                  // garée hors de la séance (qualifications)
 	bool bSCMode = false;                  // voiture de sécurité en piste : file indienne
 	float Penalty = 0.f;                   // secondes ajoutées au temps de course

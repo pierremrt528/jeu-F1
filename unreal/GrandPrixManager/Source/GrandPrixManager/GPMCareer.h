@@ -38,7 +38,7 @@ struct FGPMDialog
 /** Ce qu'il s'est passé pendant la course, pour la presse et les événements (ctx de press.js / eventCtx). */
 struct FGPMRaceCtx
 {
-	int32 Pos = 10, Grid = 10, Stops = 1, MatePos = 0;
+	int32 Pos = 10, Grid = 10, Stops = 1, MatePos = 0, RivalPos = 99;   // RivalPos : place du rival de la mission du sponsor
 	bool bDnf = false, bFastest = false, bWet = false, bSC = false, bFlat = false;
 	float Pen = 0.f;
 	FString Circuit, Winner, Rival;
@@ -69,6 +69,7 @@ struct FGPMNego
 	FString Pers, Role = TEXT("eq");
 	int32 Interest = 50, Patience = 3, Years = 2;
 	float Ask = 1.f, Demand = 1.f, Fee = 0.f;
+	float Pod = 0.f, Win = 0.f;   // primes de l'offre en cours (par podium, par victoire)
 	bool bWantN1 = false, bOpen = false;
 };
 
@@ -117,6 +118,9 @@ public:
 	TArray<TPair<FString, bool>> Objectives() const;
 	static FString ConfText(int32 C) { return C >= 75 ? TEXT("excellente") : C >= 55 ? TEXT("bonne") : C >= 35 ? TEXT("fragile") : C >= 20 ? TEXT("en crise") : TEXT("rompue"); }
 	bool IsFired() const;
+	/** Mission du sponsor pour le prochain GP (makeMission d'events.js), proposée une fois par manche. */
+	void EnsureMission();
+	void AcceptMission();
 	/** Bonus de performance pour la prochaine course (réponses à la presse, événements), puis remis à zéro. */
 	float Boost(const TCHAR* Key) const;
 	void ClearBoost();

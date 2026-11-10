@@ -275,9 +275,9 @@ int32 AGPMGameMode::SectorColour(int32 K) const
 
 bool AGPMGameMode::DigitPressed(const APlayerController* PC, int32 D)
 {
-	if (!PC || D < 1 || D > 5) return false;
-	static const FKey Top[5] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five };
-	static const FKey Pad[5] = { EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive };
-	static const FKey Azerty[5] = { EKeys::Ampersand, EKeys::E_AccentAigu, EKeys::Quote, EKeys::Apostrophe, EKeys::LeftParantheses };
+	if (!PC || D < 1 || D > 6) return false;
+	static const FKey Top[6] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
+	static const FKey Pad[6] = { EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive, EKeys::NumPadSix };
+	static const FKey Azerty[6] = { EKeys::Ampersand, EKeys::E_AccentAigu, EKeys::Quote, EKeys::Apostrophe, EKeys::LeftParantheses, EKeys::Hyphen };
 	return PC->WasInputKeyJustPressed(Top[D - 1]) || PC->WasInputKeyJustPressed(Pad[D - 1]) || PC->WasInputKeyJustPressed(Azerty[D - 1]);
 }

@@ -85,6 +85,36 @@ public:
 	UPROPERTY() int32 GridPen = 0;
 	UPROPERTY() bool bReviewed = false;
 	UPROPERTY() bool bFired = false;
+	// Installations (infra.js) : niveau de chaque bâtiment, chantier en cours (un seul à la fois)
+	UPROPERTY() TMap<FString, int32> InfraLv;
+	UPROPERTY() FString BuildId;
+	UPROPERTY() int32 BuildLeft = 0;
+	UPROPERTY() int32 BuildTot = 0;
+	// Chefs de pôle (staff.js) : chef engagé par pôle et son contrat, chefs libres, chefs des écuries rivales
+	UPROPERTY() bool bStaffInit = false;
+	UPROPERTY() TMap<FString, FString> ChiefOf;      // pôle → id du chef
+	UPROPERTY() TMap<FString, float> ChiefSal;       // pôle → salaire par saison (M€)
+	UPROPERTY() TMap<FString, int32> ChiefUntil;     // pôle → dernière saison du contrat
+	UPROPERTY() TArray<FString> ChiefFree;           // ids des chefs libres (tous pôles)
+	UPROPERTY() TArray<FString> ChiefFresh;          // nouveaux venus sur le marché depuis le dernier GP
+	UPROPERTY() TMap<FString, FString> RivalChief;   // « écurie|pôle » → id
+	UPROPERTY() TArray<FString> ChiefGen;            // chefs générés : « id|pôle|nom|origine|coût|délai|risque »
+	UPROPERTY() int32 ChiefSeq = 0;
+	// Mission du sponsor pour le prochain Grand Prix (makeMission d'events.js)
+	UPROPERTY() int32 MisRound = -1;
+	UPROPERTY() FString MisKind;
+	UPROPERTY() FString MisText;
+	UPROPERTY() FString MisWho;
+	UPROPERTY() FString MisSponsor;
+	UPROPERTY() int32 MisV = 0;
+	UPROPERTY() float MisGain = 0.f;
+	UPROPERTY() bool bMisAcc = false;
+	// Courbes de performance (season.hist) : indice de chaque écurie au départ puis après chaque GP, PerfN valeurs par relevé
+	UPROPERTY() int32 PerfN = 0;
+	UPROPERTY() TArray<float> PerfHist;
+	// Contrat de l'équipier : primes par podium et par victoire
+	UPROPERTY() float MatePod = 0.f;
+	UPROPERTY() float MateWin = 0.f;
 };
 
 /** Une ligne de classement. */
