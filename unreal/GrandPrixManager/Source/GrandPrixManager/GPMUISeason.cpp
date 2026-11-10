@@ -195,7 +195,9 @@ TSharedRef<SWidget> FGPMUI::TrackMap(const FString& CircuitId, const FLinearColo
 		const float K = FMath::Min((W - 2.f * Pad) / FMath::Max(1.f, MaxX - MinX), (H - 2.f * Pad) / FMath::Max(1.f, MaxZ - MinZ));
 		const float Ox = (W - (MaxX - MinX) * K) * 0.5f, Oz = (H - (MaxZ - MinZ) * K) * 0.5f;
 		for (int32 i = 0; i < N; i += Step) Map->MapPts.Add(FVector2f(Ox + (T->WX[i] - MinX) * K, Oz + (T->WZ[i] - MinZ) * K));
-		Map->MapPts.Add(Map->MapPts[0]);
+		// boucle fermée : copie du premier point (ajouter un élément du tableau à lui-même est interdit, il peut être déplacé)
+		const FVector2f First = Map->MapPts[0];
+		Map->MapPts.Add(First);
 	}
 	return Map;
 }
