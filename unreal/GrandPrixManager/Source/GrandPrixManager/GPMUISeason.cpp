@@ -2,6 +2,8 @@
 // de performance (perfChartHTML), carte de la mission du sponsor (missionHTML d'events.js).
 #include "GPMUI.h"
 #include "GPMHUD.h"
+#include "GPMCar.h"
+#include "GPMGameMode.h"
 #include "GPMSeason.h"
 #include "GPMCareer.h"
 #include "GPMFactory.h"
@@ -20,6 +22,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
+#include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
 
@@ -45,7 +48,60 @@ namespace GPMUISeasonCal
 		const FString Day = D.GetDay() == 1 ? FString(TEXT("1er")) : FString::FromInt(D.GetDay());
 		return Day + TEXT(" ") + MoisCourt[FMath::Clamp(D.GetMonth(), 1, 12) - 1];
 	}
+
+	/** Couleur de la place dans les classements : or, argent, bronze, puis blanc. */
+	FLinearColor PodiumCol(int32 Idx)
+	{
+		return Idx == 0 ? FLinearColor(1.f, 0.8f, 0.22f, 1.f) : Idx == 1 ? FLinearColor(0.8f, 0.83f, 0.9f, 1.f) : Idx == 2 ? FLinearColor(0.88f, 0.56f, 0.32f, 1.f) : FLinearColor(0.95f, 0.96f, 0.98f, 1.f);
+	}
+
+	/** Date d'une manche : premier GP puis les écarts du calendrier (GAPS de season.js), comme CalendarPanel. */
+	FDateTime RaceDay(UGPMDataSubsystem* Db, int32 Year, int32 Rnd)
+	{
+		TArray<int32> Gaps;
+		if (Db)
+			if (const TSharedPtr<FJsonValue> Raw = Db->GetRaw(TEXT("season"), TEXT("GAPS")))
+				for (const TSharedPtr<FJsonValue>& V : Raw->AsArray()) Gaps.Add(FMath::Max(1, int32(V->AsNumber())));
+		FDateTime When = FirstRace(Year);
+		for (int32 k = 0; k < Rnd; ++k) When += FTimespan::FromDays(double(Gaps.IsValidIndex(k) ? Gaps[k] : 14));
+		return When;
+	}
 }
+
+/** Tracé d'un circuit vu de dessus : halo de la couleur de l'écurie, trait blanc, point de la ligne de départ. */
+class SGPMTrackMap : public SLeafWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SGPMTrackMap) {}
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs) {}
+
+	TArray<FVector2f> MapPts;   // en pixels pour MapSize, remis à l'échelle à l'affichage
+	FLinearColor MapCol = FLinearColor::White;
+	FVector2D MapSize = FVector2D(200.0, 130.0);
+
+	virtual FVector2D ComputeDesiredSize(float) const override { return MapSize; }
+
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+		int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+	{
+		if (MapPts.Num() < 3) return LayerId;
+		const FVector2f Got = FVector2f(AllottedGeometry.GetLocalSize());
+		const float K = FMath::Min(Got.X / float(MapSize.X), Got.Y / float(MapSize.Y));
+		const FVector2f Off((Got.X - float(MapSize.X) * K) * 0.5f, (Got.Y - float(MapSize.Y) * K) * 0.5f);
+		TArray<FVector2f> Halo, Line;
+		for (const FVector2f& Q : MapPts) { Halo.Add(Off + Q * K); Line.Add(Off + Q * K); }
+		const FVector2f Start = Line[0];
+		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), MoveTemp(Halo), ESlateDrawEffect::None,
+			FLinearColor(MapCol.R, MapCol.G, MapCol.B, 0.32f), true, 7.f);
+		FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, AllottedGeometry.ToPaintGeometry(), MoveTemp(Line), ESlateDrawEffect::None,
+			FLinearColor(1.f, 1.f, 1.f, 0.95f), true, 2.2f);
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 2, AllottedGeometry.ToPaintGeometry(FVector2f(10.f, 10.f), FSlateLayoutTransform(Start - FVector2f(5.f, 5.f))),
+			GPMUIStyle::Rounded(40.f), ESlateDrawEffect::None, MapCol);
+		return LayerId + 3;
+	}
+};
 
 /** Courbes de performance des écuries : grille, valeurs ×100 à gauche, manches en bas, le joueur en épais par-dessus. */
 class SGPMPerfChart : public SLeafWidget
@@ -115,6 +171,124 @@ public:
 	}
 };
 
+// ---------- tracé d'un circuit et carte du prochain Grand Prix ----------
+
+TSharedRef<SWidget> FGPMUI::TrackMap(const FString& CircuitId, const FLinearColor& Col, float W, float H)
+{
+	UGPMDataSubsystem* Db = DataSys();
+	const FGPMTrackData* T = Db && !CircuitId.IsEmpty() ? Db->GetTrack(CircuitId) : nullptr;
+	TSharedRef<SGPMTrackMap> Map = SNew(SGPMTrackMap);
+	Map->MapSize = FVector2D(W, H);
+	Map->MapCol = Col;
+	const int32 N = T ? FMath::Min(T->WX.Num(), T->WZ.Num()) : 0;
+	if (N > 8)
+	{
+		// repère du jeu web, comme la mini-carte de la course : x vers la droite, z vers le bas
+		const int32 Step = FMath::Max(1, N / 240);
+		float MinX = 1e9f, MaxX = -1e9f, MinZ = 1e9f, MaxZ = -1e9f;
+		for (int32 i = 0; i < N; i += Step)
+		{
+			MinX = FMath::Min(MinX, T->WX[i]); MaxX = FMath::Max(MaxX, T->WX[i]);
+			MinZ = FMath::Min(MinZ, T->WZ[i]); MaxZ = FMath::Max(MaxZ, T->WZ[i]);
+		}
+		const float Pad = 8.f;
+		const float K = FMath::Min((W - 2.f * Pad) / FMath::Max(1.f, MaxX - MinX), (H - 2.f * Pad) / FMath::Max(1.f, MaxZ - MinZ));
+		const float Ox = (W - (MaxX - MinX) * K) * 0.5f, Oz = (H - (MaxZ - MinZ) * K) * 0.5f;
+		for (int32 i = 0; i < N; i += Step) Map->MapPts.Add(FVector2f(Ox + (T->WX[i] - MinX) * K, Oz + (T->WZ[i] - MinZ) * K));
+		Map->MapPts.Add(Map->MapPts[0]);
+	}
+	return Map;
+}
+
+TSharedRef<SWidget> FGPMUI::HeroNext(AGPMGameMode* GM)
+{
+	UGPMSeasonSubsystem* S = SeasonSys();
+	UGPMDataSubsystem* Db = DataSys();
+	TWeakObjectPtr<AGPMGameMode> WGM = GM;
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	auto Tag = [this](const FString& Label) -> TSharedRef<SWidget>
+	{
+		return SNew(SBorder).BorderImage(GPMUIStyle::Slant()).BorderBackgroundColor(FSlateColor(Acc)).Padding(FMargin(20.f, 3.f, 22.f, 3.f))
+			[ Ital(Label, 14, InkOn(Acc), 0) ];
+	};
+	auto Kicker = [](const FString& Label, const FLinearColor& Col) -> TSharedRef<SWidget>
+	{
+		return SNew(STextBlock).Text(FText::FromString(Label)).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(Col));
+	};
+	if (S && !S->IsOver())
+	{
+		const FString Id = S->CurrentCircuit();
+		const FGPMTrackData* T = Db ? Db->GetTrack(Id) : nullptr;
+		const FDateTime Day = GPMUISeasonCal::RaceDay(Db, S->Year(), S->Round());
+		const bool bHere = GM->Circuit() == T;
+		FString Info = T ? FString::Printf(TEXT("%s%s%.2f km  ·  largeur %.0f m"), *T->Type, T->Type.IsEmpty() ? TEXT("") : TEXT("  ·  "), T->WX.Num() * 2.f / 1000.f, T->Width) : FString();
+		if (bHere) Info += FString::Printf(TEXT("  ·  météo : %s"), *GM->WeatherLabel().ToLower());
+		// manche, date, nom du circuit et son tracé
+		Box->AddSlot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Top)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Tag(FString::Printf(TEXT("MANCHE %02d"), S->Round() + 1)) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))
+					[ Kicker(FString::Printf(TEXT("%s  ·  SUR %d"), *GPMUISeasonCal::FmtDate(Day).ToUpper(), S->NumRounds()), CDim) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))
+				[
+					SNew(STextBlock).Text(FText::FromString((T ? T->Name : Id).ToUpper())).Font(GPMUIStyle::Face(0, 34)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))
+				[
+					Txt(Info, 14, GM->bRainStart || GM->WxChangeAt >= 0.f ? CInfo : CDim, false, true)
+				]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(FMargin(14.f, 0.f, 0.f, 0.f))[ TrackMap(T ? Id : FString(), Bright(), 160.f, 112.f) ]
+		];
+		// format de course : Sprint (~11 min) ou Long (~22 min)
+		const int32 NLaps = bHere ? GM->LapsFor() : 0;
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 14.f, 0.f, 12.f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))[ Kicker(TEXT("FORMAT"), CDim) ]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ Tabs({ TEXT("Sprint · 11 min"), TEXT("Long · 22 min") }, GM->bLongRace ? 1 : 0, [WGM](int32 k) { if (WGM.IsValid() && !WGM->bGridReady) { WGM->bLongRace = k == 1; WGM->SaveSettings(); } }) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(14.f, 0.f, 0.f, 0.f))
+			[ Ital(NLaps > 0 ? FString::Printf(TEXT("%d TOURS"), NLaps) : FString(), 16, CText, 1) ]
+		];
+		if (!GM->bGridReady)
+		{
+			Box->AddSlot().AutoHeight()[ Button(TEXT("RÉGLAGES ET QUALIFICATIONS"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenTuning(); }, true, 0.f, 60.f, 20) ];
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LE GRAND PRIX"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->SimGrandPrix(); }, true, 0.f, 44.f, 15) ];
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("Entrée : réglages · le Grand Prix simulé saute les qualifications et la course"), 12, CFaint, false, true) ];
+		}
+		else
+		{
+			AGPMHUD* HudP = Hud.Get();
+			AGPMCar* MeCar = HudP ? Cast<AGPMCar>(HudP->GetOwningPawn()) : nullptr;
+			const int32 MyGrid = MeCar ? GM->QOrder.IndexOfByKey(MeCar) : INDEX_NONE;
+			Box->AddSlot().AutoHeight()[ Button(TEXT("STRATÉGIE ET DÉPART"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenPrerace(); }, true, 0.f, 60.f, 20) ];
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LA COURSE"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Go(true); }, true, 0.f, 44.f, 15) ];
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(MyGrid >= 0 ? FString::Printf(TEXT("Qualifications faites : tu pars en P%d"), MyGrid + 1) : FString(TEXT("Qualifications faites")), 12, CFaint) ];
+		}
+	}
+	else
+	{
+		Box->AddSlot().AutoHeight()[ SNew(SHorizontalBox) + SHorizontalBox::Slot().AutoWidth()[ Tag(TEXT("SAISON TERMINÉE")) ] ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 14.f))[ Ital(TEXT("PLACE À L'INTERSAISON"), 30, CText) ];
+		Box->AddSlot().AutoHeight()[ Button(TEXT("SAISON SUIVANTE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->Continue(); }, true, 0.f, 60.f, 22) ];
+	}
+	return SNew(SOverlay)
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.018f, 0.022f, 0.042f, 0.88f)) ]
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(Acc.R, Acc.G, Acc.B, 0.3f)) ]
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top)[ SNew(SBox).WidthOverride(300.f).HeightOverride(220.f)[ Layer(GPMUIStyle::Glow(), FLinearColor(Acc.R, Acc.G, Acc.B, 0.22f)) ] ]
+		+ SOverlay::Slot().VAlign(VAlign_Top)[ SNew(SBox).HeightOverride(3.f)[ Layer(GPMUIStyle::Ramp(0), Acc) ] ]
+		+ SOverlay::Slot().Padding(FMargin(22.f, 18.f, 22.f, 18.f))[ Box ];
+}
+
 // ---------- classements ----------
 
 TSharedRef<SWidget> FGPMUI::StandingsPanel()
@@ -130,7 +304,7 @@ TSharedRef<SWidget> FGPMUI::StandingsPanel()
 		Cells.Emplace(Nm(Drv[k].Name), 0.f);
 		Cells.Emplace(Drv[k].Team, 170.f);
 		Cells.Emplace(FString::Printf(TEXT("%d"), Drv[k].Pts), 50.f);
-		DrvList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Drv[k].Color, Drv[k].bPlayer, Cells, { CText, CText, CDim, CText }) ];
+		DrvList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Drv[k].Color, Drv[k].bPlayer, Cells, { GPMUISeasonCal::PodiumCol(k), CText, CDim, CText }) ];
 	}
 	TSharedRef<SVerticalBox> TeamList = SNew(SVerticalBox);
 	for (int32 k = 0; k < Tms.Num(); ++k)
@@ -139,7 +313,7 @@ TSharedRef<SWidget> FGPMUI::StandingsPanel()
 		Cells.Emplace(FString::FromInt(k + 1), 34.f);
 		Cells.Emplace(Tms[k].Name, 0.f);
 		Cells.Emplace(FString::Printf(TEXT("%d"), Tms[k].Pts), 50.f);
-		TeamList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Tms[k].Color, Tms[k].bPlayer, Cells, { CText, CText, CText }) ];
+		TeamList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Tms[k].Color, Tms[k].bPlayer, Cells, { GPMUISeasonCal::PodiumCol(k), CText, CText }) ];
 	}
 	return SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().FillWidth(1.15f).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
@@ -360,8 +534,14 @@ TSharedRef<SWidget> FGPMUI::MissionCard()
 	const UGPMSaveGame* G = C ? C->Save() : nullptr;
 	if (!G || !S || !C->IsCreated() || S->IsOver() || G->MisRound != G->Round || G->MisKind.IsEmpty()) return SNullWidget::NullWidget;
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("MISSION DU SPONSOR · %s"), *G->MisSponsor.ToUpper()), 13, CGold, true) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(G->MisText, 18, CText, true, true) ]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("MISSION DU SPONSOR  ·  %s"), *G->MisSponsor.ToUpper()))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(CGold))
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))
+		[
+			SNew(STextBlock).Text(FText::FromString(G->MisText)).Font(GPMUIStyle::Face(1, 18)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true)
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
 		[ Txt(FString::Printf(TEXT("Prime +%.1f M€ si tu réussis · en cas d'échec : réputation -3"), G->MisGain), 13, CDim, false, true) ];
 	if (G->bMisAcc) Box->AddSlot().AutoHeight()[ Txt(TEXT("Mission acceptée : le sponsor compte sur toi."), 15, CGood, true) ];
@@ -370,5 +550,12 @@ TSharedRef<SWidget> FGPMUI::MissionCard()
 		[
 			Button(TEXT("ACCEPTER LA MISSION"), FLinearColor(0.72f, 0.55f, 0.1f, 1.f), [this]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->AcceptMission(); }, true, 0.f, 44.f, 15)
 		];
-	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Box, FLinearColor(0.3f, 0.23f, 0.04f, 0.6f), 16.f) ];
+	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+		[
+			SNew(SOverlay)
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.03f, 0.028f, 0.02f, 0.82f)) ]
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(0.72f, 0.55f, 0.1f, 0.3f)) ]
+			+ SOverlay::Slot().HAlign(HAlign_Left)[ SNew(SBox).WidthOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), CGold) ] ]
+			+ SOverlay::Slot().Padding(FMargin(18.f, 14.f, 16.f, 14.f))[ Box ]
+		];
 }

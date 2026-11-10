@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 #include "Widgets/SWidget.h"
+#include "Fonts/SlateFontInfo.h"
 
 class AGPMHUD;
 class AGPMGameMode;
@@ -18,6 +19,15 @@ namespace GPMUIStyle
 	const FSlateBrush* Rounded(float Radius);
 	FLinearColor Lift(const FLinearColor& C, float K);
 	const FButtonStyle* ButtonOf(const FLinearColor& C, bool bOutline);
+	// Formes générées au lancement (masques blancs teintés par la bordure) : charte « course » des écrans
+	const FSlateBrush* Slant();            // parallélogramme penché, bouts fixes (boutons, étiquettes, badges)
+	const FSlateBrush* Tick();             // trait penché étiré (accents des titres, couleur d'écurie)
+	const FSlateBrush* Ramp(int32 Dir);    // dégradé : 0 opaque à gauche, 1 opaque en bas, 2 opaque à droite, 3 opaque en haut
+	const FSlateBrush* Glow();             // halo rond
+	const FButtonStyle* SlantOf(const FLinearColor& C, const FLinearColor& Hover);
+	/** Polices : 0 très gras italique (titres), 1 gras italique, 2 étiquette condensée espacée, 3 fin. */
+	FSlateFontInfo Face(int32 Kind, int32 Size);
+	FString Abbr(const FString& TeamName);   // sigle de 3 lettres de l'écurie (badge)
 }
 
 /** Couleurs communes des écrans (thème sombre ; l'accent suit la couleur principale de l'écurie). */
@@ -92,6 +102,17 @@ private:
 	TSharedRef<SWidget> Page(const TSharedRef<SWidget>& Body, const FLinearColor& Bg) const;
 	TSharedRef<SWidget> Row(const FLinearColor& TeamCol, bool bMe, const TArray<TPair<FString, float>>& Cells, const TArray<FLinearColor>& Colors) const;
 	TSharedRef<SWidget> Tabs(const TArray<FString>& Labels, int32 Sel, TFunction<void(int32)> OnPick);
+	// --- charte « course » : textes penchés, formes obliques, dégradés ---
+	TSharedRef<SWidget> Ital(const FString& S, int32 Size, const FLinearColor& Col, int32 Kind = 0, bool bCenter = false) const;
+	TSharedRef<SWidget> Layer(const FSlateBrush* Brush, const FLinearColor& Col) const;
+	TSharedRef<SWidget> Ticks(const FLinearColor& Col, int32 Count, float W, float H) const;
+	TSharedRef<SWidget> Keycap(const FString& Key, const FString& What) const;
+	TSharedRef<SWidget> StatBlock(const FString& Label, const FString& Value, const FString& Sub, const FLinearColor& Col, float Frac = -1.f) const;
+	TSharedRef<SWidget> Hit(const TSharedRef<SWidget>& Content, const FLinearColor& Bg, const FLinearColor& Hover, TFunction<void()> OnClick, bool bEnabled, float MinW, float Height, const FMargin& Pad);
+	TSharedRef<SWidget> MenuTile(const FString& Num, const FString& Label, const FString& Sub, const FLinearColor& Col, TFunction<void()> OnClick, bool bPrimary);
+	TSharedRef<SWidget> TrackMap(const FString& CircuitId, const FLinearColor& Col, float W, float H);
+	TSharedRef<SWidget> HeroNext(AGPMGameMode* GM);
+	FLinearColor Bright() const;   // accent assez clair pour du texte sur fond sombre
 
 	// --- écrans ---
 	TSharedRef<SWidget> HomeScreen(AGPMGameMode* GM);

@@ -10,6 +10,7 @@
 #include "Engine/GameInstance.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
+#include "Widgets/SOverlay.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -40,7 +41,6 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 {
 	UGPMSeasonSubsystem* S = SeasonSys();
 	UGPMCareerSubsystem* C = CareerSys();
-	UGPMDataSubsystem* Data = DataSys();
 	if (!S) return SNullWidget::NullWidget;
 	if (S->IsOver() && !GM->bChampShown) return ChampScreen(GM);
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
@@ -49,83 +49,28 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 	if (C && C->IsCreated() && !S->IsOver() && !GM->bGridReady) C->EnsureMission();
 	if (UGPMFactorySubsystem* F = FactorySys()) F->EnsurePerfStart();
 
-	// en-tête : saison, boutons de navigation
-	TSharedRef<SHorizontalBox> Nav = SNew(SHorizontalBox);
-	Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Button(TEXT("ACCUEIL"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->GoHome(); }, true, 0.f, 46.f, 15) ];
-	if (C && C->IsCreated())
-		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Button(TEXT("MERCATO"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->OpenMercato(); }, true, 0.f, 46.f, 15) ];
-	Nav->AddSlot().AutoWidth()[ Button(TEXT("QG · USINE"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 46.f, 15) ];
-
-	// prochain Grand Prix
-	TSharedRef<SVerticalBox> NextBox = SNew(SVerticalBox);
-	if (!S->IsOver())
-	{
-		const FGPMTrackData* T = Data ? Data->GetTrack(S->CurrentCircuit()) : nullptr;
-		NextBox->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("PROCHAIN GRAND PRIX · %d / %d"), S->Round() + 1, S->NumRounds()), 14, CDim, true) ];
-		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 2.f))[ Txt(T ? T->Name : S->CurrentCircuit(), 30, CText, true, true) ];
-		if (T) NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
-		[
-			Txt(GM->Circuit() == T ? FString::Printf(TEXT("%.2f km · largeur %.0f m · météo : %s"), T->WX.Num() * 2.f / 1000.f, T->Width, *GM->WeatherLabel().ToLower())
-				: FString::Printf(TEXT("%.2f km · largeur %.0f m"), T->WX.Num() * 2.f / 1000.f, T->Width), 15, GM->bRainStart || GM->WxChangeAt >= 0.f ? CInfo : CDim)
-		];
-		// format de course : Sprint (~11 min) ou Long (~22 min)
-		const int32 NLaps = GM->Circuit() == T ? GM->LapsFor() : 0;
-		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
-			[ Button(TEXT("Sprint · 11 min"), !GM->bLongRace ? Acc2 : CNeutral, [WGM]() { if (WGM.IsValid()) { WGM->bLongRace = false; WGM->SaveSettings(); } }, !GM->bGridReady || !GM->bLongRace, 0.f, 40.f, 14) ]
-			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
-			[ Button(TEXT("Long · 22 min"), GM->bLongRace ? Acc2 : CNeutral, [WGM]() { if (WGM.IsValid()) { WGM->bLongRace = true; WGM->SaveSettings(); } }, !GM->bGridReady || GM->bLongRace, 0.f, 40.f, 14) ]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(NLaps > 0 ? FString::Printf(TEXT("%d tours"), NLaps) : FString(), 15, CDim, true) ]
-		];
-		if (!GM->bGridReady)
-		{
-			NextBox->AddSlot().AutoHeight()[ Button(TEXT("RÉGLAGES ET QUALIFICATIONS"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenTuning(); }, true, 0.f, 60.f, 20) ];
-			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LE GRAND PRIX"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->SimGrandPrix(); }, true, 0.f, 46.f, 15) ];
-			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("Entrée : réglages · le Grand Prix simulé saute les qualifications et la course"), 13, CFaint, false, true) ];
-		}
-		else
-		{
-			AGPMHUD* HudP = Hud.Get();
-			AGPMCar* MeCar = HudP ? Cast<AGPMCar>(HudP->GetOwningPawn()) : nullptr;
-			const int32 MyGrid = MeCar ? GM->QOrder.IndexOfByKey(MeCar) : INDEX_NONE;
-			NextBox->AddSlot().AutoHeight()[ Button(TEXT("STRATÉGIE ET DÉPART"), Acc, [WGM]() { if (WGM.IsValid()) WGM->OpenPrerace(); }, true, 0.f, 60.f, 20) ];
-			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Button(TEXT("SIMULER LA COURSE"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Go(true); }, true, 0.f, 46.f, 15) ];
-			NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(MyGrid >= 0 ? FString::Printf(TEXT("Qualifications faites : tu pars en P%d"), MyGrid + 1) : FString(TEXT("Qualifications faites")), 13, CFaint) ];
-		}
-	}
-	else
-	{
-		NextBox->AddSlot().AutoHeight()[ Txt(TEXT("SAISON TERMINÉE"), 14, CDim, true) ];
-		NextBox->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 14.f))[ Txt(TEXT("Place à l'intersaison"), 28, CText, true) ];
-		NextBox->AddSlot().AutoHeight()[ Button(TEXT("SAISON SUIVANTE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->Continue(); }, true, 0.f, 60.f, 22) ];
-	}
-
-	// direction : confiance et objectifs, bilan de la dernière course, actualités de l'usine
+	// direction : objectifs de la saison ; bilan de la dernière course, actualités de l'usine, forme récente
 	TSharedRef<SVerticalBox> Board = SNew(SVerticalBox);
-	if (C && C->Save() && C->IsCreated())
+	const bool bTeam = C && C->Save() && C->IsCreated();
+	auto Kicker = [](const FString& Label) -> TSharedRef<SWidget>
 	{
-		const int32 Conf = C->Save()->Conf;
-		const FLinearColor ConfCol = Conf < 35 ? CBad : Conf < 55 ? CGold : CGood;
-		Board->AddSlot().AutoHeight()
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(TEXT("DIRECTION"), 14, CDim, true) ]
-			+ SHorizontalBox::Slot().AutoWidth()[ Txt(FString::Printf(TEXT("confiance %d %% · %s"), Conf, *UGPMCareerSubsystem::ConfText(Conf)), 14, ConfCol, true) ]
-		];
-		Board->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Bar(Conf / 100.f, ConfCol, 6.f) ];
+		return SNew(STextBlock).Text(FText::FromString(Label)).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(CDim));
+	};
+	if (bTeam)
+	{
+		Board->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Kicker(TEXT("OBJECTIFS DE LA DIRECTION")) ];
 		for (const TPair<FString, bool>& O : C->Objectives())
 			Board->AddSlot().AutoHeight().Padding(FMargin(0.f, 3.f))
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Dot(O.Value ? CGood : FLinearColor(1.f, 1.f, 1.f, 0.2f), 12.f) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+				[
+					SNew(SBox).WidthOverride(8.f).HeightOverride(18.f)[ Layer(GPMUIStyle::Tick(), O.Value ? CGood : FLinearColor(1.f, 1.f, 1.f, 0.22f)) ]
+				]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[ Txt(O.Key, 15, O.Value ? CText : CDim, false, true) ]
 			];
 	}
 	TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox);
-	for (const FString& L : GM->LastLines) Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(L, 14, CDim, false, true) ];
-	if (G) for (int32 k = 0; k < G->News.Num() && k < 5; ++k) Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(G->News[k], 14, CGood, false, true) ];
 	const TArray<FGPMRaceResult>& Res = S->Results();
 	if (Res.Num())
 	{
@@ -133,49 +78,111 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 		for (int32 k = FMath::Max(0, Res.Num() - 6); k < Res.Num(); ++k)
 		{
 			const int32 P = Res[k].Pos;
-			const FLinearColor PC = P == 1 ? CGold : P <= 3 ? FLinearColor(0.75f, 0.78f, 0.85f) : P <= 10 ? CGood : CNeutral;
-			Form->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+			const FLinearColor PC = P == 1 ? CGold : P <= 3 ? FLinearColor(0.78f, 0.8f, 0.87f) : P <= 10 ? CGood : CNeutral;
+			Form->AddSlot().AutoWidth().Padding(FMargin(k > FMath::Max(0, Res.Num() - 6) ? -8.f : 0.f, 0.f, 0.f, 0.f))
 			[
-				SNew(SBox).WidthOverride(46.f).HeightOverride(34.f)
+				SNew(SBox).WidthOverride(58.f).HeightOverride(34.f)
 				[
-					SNew(SBorder).BorderImage(GPMUIStyle::Rounded(6.f)).BorderBackgroundColor(FSlateColor(PC)).HAlign(HAlign_Center).VAlign(VAlign_Center)
-					[ Txt(FString::Printf(TEXT("P%d"), P), 14, InkOn(PC), true) ]
+					SNew(SBorder).BorderImage(GPMUIStyle::Slant()).BorderBackgroundColor(FSlateColor(PC)).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.f))
+					[ Ital(FString::Printf(TEXT("P%d"), P), 15, InkOn(PC), 0) ]
 				]
 			];
 		}
-		Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 4.f))[ Txt(TEXT("TES DERNIERS GRANDS PRIX"), 13, CDim, true) ];
-		Lines->AddSlot().AutoHeight()[ Form ];
+		Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Kicker(TEXT("TES DERNIERS GRANDS PRIX")) ];
+		Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Form ];
 	}
+	if (GM->LastLines.Num() || (G && G->News.Num())) Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 4.f))[ Kicker(TEXT("DERNIÈRES NOUVELLES")) ];
+	for (const FString& L : GM->LastLines) Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(L, 14, CDim, false, true) ];
+	if (G) for (int32 k = 0; k < G->News.Num() && k < 5; ++k) Lines->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(G->News[k], 14, CGood, false, true) ];
+
+	// chiffres clés : places au championnat, budget, direction, moral, réputation
+	TSharedRef<SHorizontalBox> Stats = SNew(SHorizontalBox);
+	if (bTeam)
+	{
+		const UGPMSaveGame* Sv = C->Save();
+		int32 MyPos = 0, MyPts = 0, TeamPos = 0, TeamPts = 0;
+		const TArray<FGPMStanding> Drv = S->Drivers(), Tms = S->Teams();
+		for (int32 k = 0; k < Drv.Num(); ++k) if (Drv[k].bPlayer) { MyPos = k + 1; MyPts = Drv[k].Pts; break; }
+		for (int32 k = 0; k < Tms.Num(); ++k) if (Tms[k].bPlayer) { TeamPos = k + 1; TeamPts = Tms[k].Pts; break; }
+		const int32 Conf = Sv->Conf;
+		const FLinearColor ConfCol = Conf < 35 ? CBad : Conf < 55 ? CGold : CGood;
+		auto Add = [&Stats](const TSharedRef<SWidget>& W, bool bLast)
+		{
+			Stats->AddSlot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, bLast ? 0.f : 8.f, 0.f))[ W ];
+		};
+		Add(StatBlock(TEXT("Pilote"), MyPos ? FString::Printf(TEXT("P%d"), MyPos) : FString(TEXT("—")), FString::Printf(TEXT("%d pts"), MyPts), MyPos == 1 ? CGold : CText), false);
+		Add(StatBlock(TEXT("Écurie"), TeamPos ? FString::Printf(TEXT("P%d"), TeamPos) : FString(TEXT("—")), FString::Printf(TEXT("%d pts"), TeamPts), TeamPos == 1 ? CGold : CText), false);
+		Add(StatBlock(TEXT("Budget"), FString::Printf(TEXT("%.1f M€"), Sv->Budget), TEXT("disponible"), Sv->Budget < 0.f ? CBad : CGood), false);
+		Add(StatBlock(TEXT("Direction"), FString::Printf(TEXT("%d %%"), Conf), UGPMCareerSubsystem::ConfText(Conf), ConfCol, Conf / 100.f), false);
+		Add(StatBlock(TEXT("Moral"), FString::FromInt(Sv->Moral), TEXT("de l'équipe"), Sv->Moral < 35 ? CBad : CText, Sv->Moral / 100.f), false);
+		Add(StatBlock(TEXT("Réputation"), FString::FromInt(Sv->Rep), TEXT("auprès des pilotes"), Bright(), Sv->Rep / 100.f), true);
+	}
+
+	// en-tête : sigle de l'écurie, saison et manche, nom de l'écurie, navigation
+	TSharedRef<SHorizontalBox> Nav = SNew(SHorizontalBox);
+	Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("ACCUEIL"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->GoHome(); }, true, 0.f, 44.f, 15) ];
+	if (bTeam)
+		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("MERCATO"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->OpenMercato(); }, true, 0.f, 44.f, 15) ];
+	Nav->AddSlot().AutoWidth()[ Button(TEXT("QG · USINE"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 44.f, 15) ];
+	const FString TeamName = bTeam ? C->Save()->TeamName : FString(TEXT("Championnat"));
+	const FString Kick = S->IsOver() ? FString::Printf(TEXT("SAISON %d  ·  TERMINÉE"), S->Year())
+		: FString::Printf(TEXT("SAISON %d  ·  GRAND PRIX %d / %d"), S->Year(), S->Round() + 1, S->NumRounds());
+	TSharedRef<SWidget> Header = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
+		[
+			SNew(SBox).WidthOverride(92.f).HeightOverride(54.f)
+			[
+				SNew(SBorder).BorderImage(GPMUIStyle::Slant()).BorderBackgroundColor(FSlateColor(Acc)).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.f))
+				[ Ital(GPMUIStyle::Abbr(TeamName), 24, InkOn(Acc)) ]
+			]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock).Text(FText::FromString(Kick)).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -5.f, 0.f, 0.f))[ Ital(TeamName.ToUpper(), 38, CText) ]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Nav ];
+
+	auto Glass = [this](const TSharedRef<SWidget>& Content) -> TSharedRef<SWidget>
+	{
+		return SNew(SOverlay)
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.02f, 0.025f, 0.045f, 0.72f)) ]
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(3), FLinearColor(1.f, 1.f, 1.f, 0.04f)) ]
+			+ SOverlay::Slot().Padding(FMargin(16.f, 14.f))[ Content ];
+	};
 
 	SeasonTab = FMath::Clamp(SeasonTab, 0, 2);
 	TSharedRef<SWidget> Panel = SeasonTab == 1 ? CalendarPanel() : SeasonTab == 2 ? PerfPanel() : StandingsPanel();
-	const FString TeamName = C && C->Save() && C->IsCreated() ? C->Save()->TeamName : FString(TEXT("Championnat"));
-	TSharedRef<SWidget> Body = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Title(FString::Printf(TEXT("SAISON %d"), S->Year()), TeamName, Nav) ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 16.f))[ Chips() ]
-		+ SVerticalBox::Slot().FillHeight(1.f)
+	TSharedRef<SScrollBox> LeftCol = SNew(SScrollBox);
+	LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ HeroNext(GM) ];
+	LeftCol->AddSlot()[ MissionCard() ];
+	if (bTeam) LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Glass(Board) ];
+	if (Lines->NumSlots()) LeftCol->AddSlot()[ Glass(Lines) ];
+
+	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox);
+	Body->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Header ];
+	if (bTeam) Body->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 16.f))[ Stats ];
+	else Body->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 16.f))[ Chips() ];
+	Body->AddSlot().FillHeight(1.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(0.95f).Padding(FMargin(0.f, 0.f, 18.f, 0.f))[ LeftCol ]
+		+ SHorizontalBox::Slot().FillWidth(1.95f)
 		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().FillWidth(0.95f).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
 			[
-				SNew(SScrollBox)
-				+ SScrollBox::Slot()[ SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(NextBox, FLinearColor(Acc.R * 0.3f, Acc.G * 0.3f, Acc.B * 0.3f, 0.75f), 20.f) ] ]
-				+ SScrollBox::Slot()[ MissionCard() ]
-				+ SScrollBox::Slot()[ SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Board, CCardBg, 16.f) ] ]
-				+ SScrollBox::Slot()[ Card(Lines, CCardBg, 16.f) ]
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("CLASSEMENTS"), TEXT("CALENDRIER"), TEXT("PERFORMANCE") }, SeasonTab, [this](int32 k) { SeasonTab = k; }) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Keycap(TEXT("TAB"), TEXT("onglet suivant")) ]
 			]
-			+ SHorizontalBox::Slot().FillWidth(1.95f)
-			[
-				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("CLASSEMENTS"), TEXT("CALENDRIER"), TEXT("PERFORMANCE") }, SeasonTab, [this](int32 k) { SeasonTab = k; }) ]
-					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Txt(TEXT("Tab : onglet suivant"), 13, CFaint) ]
-				]
-				+ SVerticalBox::Slot().FillHeight(1.f)[ Panel ]
-			]
-		];
+			+ SVerticalBox::Slot().FillHeight(1.f)[ Panel ]
+		]
+	];
 	return Page(Body, CPageBg);
 }
 

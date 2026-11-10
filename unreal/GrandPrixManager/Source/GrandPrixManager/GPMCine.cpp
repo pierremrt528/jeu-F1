@@ -68,11 +68,12 @@ void AGPMGameMode::UpdateCine(float Dt)
 	if (bRoomOn && Showroom)
 	{
 		// atelier : plans calculés dans le repère de la pièce ; les plans des écrans glissent doucement de l'un à l'autre
-		const int32 Shot = Cine == ECine::Welcome ? 2 : Cine == ECine::Meet ? 3 : Cine == ECine::Sign ? 4 : (Phase == EPhase::Setup || Phase == EPhase::Tuning) ? 0 : 1;
+		const int32 Shot = Cine == ECine::Welcome ? 2 : Cine == ECine::Meet ? 3 : Cine == ECine::Sign ? 4 : Phase == EPhase::Home ? 5
+			: (Phase == EPhase::Setup || Phase == EPhase::Tuning) ? 0 : 1;
 		FVector Eye, Look;
 		float Fov = 62.f;
 		Showroom->Camera(Shot, CineT, Eye, Look, Fov);
-		if (Shot > 1 || RoomShot < 0 || Dt <= 0.f) { RoomEye = Eye; RoomLook = Look; RoomFov = Fov; }
+		if ((Shot >= 2 && Shot <= 4) || RoomShot < 0 || Dt <= 0.f) { RoomEye = Eye; RoomLook = Look; RoomFov = Fov; }
 		else
 		{
 			RoomEye = FMath::VInterpTo(RoomEye, Eye, Dt, 2.2f);
@@ -189,7 +190,7 @@ bool AGPMGameMode::RoomWanted() const
 	if (!Showroom) return false;
 	if (RoomCine()) return true;
 	if (Cine != ECine::Menu) return false;
-	return Phase == EPhase::Setup || Phase == EPhase::Tuning || Phase == EPhase::Factory || Phase == EPhase::Mercato || (Phase == EPhase::Press && bNegoFromMercato);
+	return Phase == EPhase::Home || Phase == EPhase::Setup || Phase == EPhase::Tuning || Phase == EPhase::Factory || Phase == EPhase::Mercato || (Phase == EPhase::Press && bNegoFromMercato);
 }
 
 void AGPMGameMode::UpdateRoom()

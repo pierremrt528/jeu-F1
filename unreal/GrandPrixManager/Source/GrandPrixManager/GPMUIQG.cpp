@@ -44,10 +44,16 @@ TSharedRef<SWidget> FGPMUI::Tabs(const TArray<FString>& Labels, int32 Sel, TFunc
 {
 	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox);
 	for (int32 k = 0; k < Labels.Num(); ++k)
-		Box->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+	{
+		// onglets penchés accolés : l'onglet choisi prend la couleur de l'écurie, les autres restent en verre fumé
+		const bool bOn = k == Sel;
+		const FLinearColor Bg = bOn ? Acc : FLinearColor(1.f, 1.f, 1.f, 0.07f);
+		Box->AddSlot().AutoWidth().Padding(FMargin(k ? -14.f : 0.f, 0.f, 0.f, 0.f))
 		[
-			Button(Labels[k], k == Sel ? Acc : CNeutral, [OnPick, k]() { if (OnPick) OnPick(k); }, true, 0.f, 42.f, 14)
+			Hit(SNew(SBox).HAlign(HAlign_Center)[ Ital(Labels[k], 14, bOn ? InkOn(Acc) : CDim, 1, true) ],
+				Bg, bOn ? GPMUIStyle::Lift(Acc, 1.15f) : FLinearColor(1.f, 1.f, 1.f, 0.16f), [OnPick, k]() { if (OnPick) OnPick(k); }, true, 0.f, 40.f, FMargin(28.f, 2.f))
 		];
+	}
 	return Box;
 }
 

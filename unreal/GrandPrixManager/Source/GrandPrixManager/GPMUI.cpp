@@ -25,6 +25,8 @@
 #include "Styling/SlateTypes.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Brushes/SlateColorBrush.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
 
 using namespace GPMUIColor;
 
@@ -62,6 +64,128 @@ namespace GPMUIStyle
 		St->SetPressedPadding(FMargin(0.f));
 		Cache.Add(Key, St);
 		return St.Get();
+	}
+
+	/** Masque blanc généré au lancement (l'alpha donne la forme, la couleur vient de la teinte du pinceau). */
+	UTexture2D* MakeMask(int32 W, int32 H, TFunctionRef<float(float, float)> AlphaAt)
+	{
+		TArray<FColor> Px;
+		Px.SetNumUninitialized(W * H);
+		for (int32 Py = 0; Py < H; ++Py)
+			for (int32 Qx = 0; Qx < W; ++Qx)
+			{
+				const float A = FMath::Clamp(AlphaAt(float(Qx) + 0.5f, float(Py) + 0.5f), 0.f, 1.f);
+				Px[Py * W + Qx] = FColor(255, 255, 255, uint8(FMath::RoundToInt(A * 255.f)));
+			}
+		UTexture2D* Tex = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
+		if (!Tex || !Tex->GetPlatformData() || Tex->GetPlatformData()->Mips.Num() == 0) return nullptr;
+		Tex->Filter = TF_Bilinear;
+		Tex->AddressX = TA_Clamp;
+		Tex->AddressY = TA_Clamp;
+		FTexture2DMipMap& Mip = Tex->GetPlatformData()->Mips[0];
+		void* Dst = Mip.BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Dst, Px.GetData(), Px.Num() * sizeof(FColor));
+		Mip.BulkData.Unlock();
+		Tex->UpdateResource();
+		Tex->AddToRoot();
+		return Tex;
+	}
+
+	FSlateBrush MaskBrush(UTexture2D* Tex, float W, float H, bool bBox, const FMargin& Margin)
+	{
+		FSlateBrush B;
+		if (Tex) B.SetResourceObject(Tex);
+		B.ImageSize = FVector2D(W, H);
+		B.DrawAs = Tex ? (bBox ? ESlateBrushDrawType::Box : ESlateBrushDrawType::Image) : ESlateBrushDrawType::NoDrawType;
+		B.Margin = Margin;
+		B.Tiling = ESlateBrushTileType::NoTile;
+		return B;
+	}
+
+	/** Parallélogramme penché vers la droite (le haut décalé de Lean pixels), bords lissés. */
+	float SlantAlpha(float Qx, float Py, float W, float H, float Lean)
+	{
+		const float V = Py / H;
+		const float XL = Lean * (1.f - V), XR = W - Lean * V;
+		return FMath::Clamp(Qx - XL + 0.5f, 0.f, 1.f) * FMath::Clamp(XR - Qx + 0.5f, 0.f, 1.f);
+	}
+
+	const FSlateBrush* Slant()
+	{
+		static FSlateBrush B = MaskBrush(MakeMask(128, 64, [](float Qx, float Py) { return SlantAlpha(Qx, Py, 128.f, 64.f, 20.f); }),
+			128.f, 64.f, true, FMargin(22.f / 128.f, 0.f, 22.f / 128.f, 0.f));
+		return &B;
+	}
+
+	const FSlateBrush* Tick()
+	{
+		static FSlateBrush B = MaskBrush(MakeMask(32, 64, [](float Qx, float Py) { return SlantAlpha(Qx, Py, 32.f, 64.f, 14.f); }), 32.f, 64.f, false, FMargin(0.f));
+		return &B;
+	}
+
+	const FSlateBrush* Ramp(int32 Dir)
+	{
+		auto Fall = [](float U) { return 1.f - FMath::SmoothStep(0.f, 1.f, U); };
+		static FSlateBrush R0 = MaskBrush(MakeMask(256, 4, [Fall](float Qx, float) { return Fall(Qx / 256.f); }), 256.f, 4.f, false, FMargin(0.f));
+		static FSlateBrush R1 = MaskBrush(MakeMask(4, 256, [Fall](float, float Py) { return Fall(1.f - Py / 256.f); }), 4.f, 256.f, false, FMargin(0.f));
+		static FSlateBrush R2 = MaskBrush(MakeMask(256, 4, [Fall](float Qx, float) { return Fall(1.f - Qx / 256.f); }), 256.f, 4.f, false, FMargin(0.f));
+		static FSlateBrush R3 = MaskBrush(MakeMask(4, 256, [Fall](float, float Py) { return Fall(Py / 256.f); }), 4.f, 256.f, false, FMargin(0.f));
+		return Dir == 1 ? &R1 : Dir == 2 ? &R2 : Dir == 3 ? &R3 : &R0;
+	}
+
+	const FSlateBrush* Glow()
+	{
+		static FSlateBrush B = MaskBrush(MakeMask(128, 128, [](float Qx, float Py)
+		{
+			const float D = FMath::Min(1.f, FVector2f(Qx - 64.f, Py - 64.f).Size() / 64.f);
+			return FMath::Square(1.f - FMath::SmoothStep(0.f, 1.f, D));
+		}), 128.f, 128.f, false, FMargin(0.f));
+		return &B;
+	}
+
+	/** Bouton penché d'une couleur, avec sa couleur de survol (en cache, comme ButtonOf). */
+	const FButtonStyle* SlantOf(const FLinearColor& C, const FLinearColor& Hover)
+	{
+		static TMap<uint64, TSharedPtr<FButtonStyle>> Cache;
+		const uint64 Key = (uint64(C.ToFColor(false).DWColor()) << 32) | uint64(Hover.ToFColor(false).DWColor());
+		if (const TSharedPtr<FButtonStyle>* Found = Cache.Find(Key)) return Found->Get();
+		auto Tinted = [](const FLinearColor& Tint) { FSlateBrush B = *Slant(); B.TintColor = FSlateColor(Tint); return B; };
+		TSharedPtr<FButtonStyle> St = MakeShared<FButtonStyle>();
+		St->SetNormal(Tinted(C));
+		St->SetHovered(Tinted(Hover));
+		St->SetPressed(Tinted(Lift(C, 0.8f)));
+		St->SetDisabled(Tinted(FLinearColor(0.13f, 0.14f, 0.17f, 0.8f)));
+		St->SetNormalPadding(FMargin(0.f));
+		St->SetPressedPadding(FMargin(0.f));
+		Cache.Add(Key, St);
+		return St.Get();
+	}
+
+	FString Abbr(const FString& Name)
+	{
+		// sigle de 3 lettres : initiales des mots, complétées par les lettres du dernier mot (ou les 3 premières d'un seul mot)
+		TArray<FString> Words;
+		Name.ParseIntoArrayWS(Words);
+		FString Out, Rest;
+		for (const FString& Wd : Words)
+		{
+			FString Letters;
+			for (TCHAR Ch : Wd) if (FChar::IsAlpha(Ch)) Letters.AppendChar(Ch);
+			if (Letters.IsEmpty()) continue;
+			if (Out.Len() < 3) Out.AppendChar(Letters[0]);
+			Rest = Letters.Mid(1);
+		}
+		if (Out.Len() == 1) Out += Rest.Left(2);
+		else if (Out.Len() == 2) Out += Rest.Left(1);
+		return Out.IsEmpty() ? FString(TEXT("GPM")) : Out.ToUpper();
+	}
+
+	FSlateFontInfo Face(int32 Kind, int32 Size)
+	{
+		static const FName Names[4] = { FName("BlackItalic"), FName("BoldItalic"), FName("BoldCondensed"), FName("Light") };
+		FSlateFontInfo F = FCoreStyle::GetDefaultFontStyle(Names[FMath::Clamp(Kind, 0, 3)], Size);
+		if (Kind == 2) F.LetterSpacing = 140;
+		return F;
 	}
 }
 
@@ -327,25 +451,32 @@ TSharedRef<SWidget> FGPMUI::Card(const TSharedRef<SWidget>& Content, const FLine
 
 TSharedRef<SWidget> FGPMUI::Button(const FString& Label, const FLinearColor& Col, TFunction<void()> OnClick, bool bEnabled, float MinW, float Height, int32 Size)
 {
+	// bouton penché : libellé gras italique, s'éclaircit au survol
+	return Hit(SNew(SBox).HAlign(HAlign_Center)[ Ital(Label, Size, bEnabled ? InkOn(Col) : CFaint, 1, true) ],
+		Col, GPMUIStyle::Lift(Col, 1.22f), OnClick, bEnabled, MinW, Height, FMargin(Label.Len() <= 2 ? 12.f : 26.f, 2.f));
+}
+
+TSharedRef<SWidget> FGPMUI::Hit(const TSharedRef<SWidget>& Content, const FLinearColor& Bg, const FLinearColor& Hover, TFunction<void()> OnClick, bool bEnabled, float MinW, float Height, const FMargin& Pad)
+{
 	TWeakPtr<FGPMUI> Self = AsShared();
 	return SNew(SBox)
 		.MinDesiredWidth(MinW)
-		.HeightOverride(Height)
+		.HeightOverride(Height > 0.f ? FOptionalSize(Height) : FOptionalSize())
 		[
 			SNew(SButton)
-			.ButtonStyle(GPMUIStyle::ButtonOf(Col, false))
+			.ButtonStyle(GPMUIStyle::SlantOf(Bg, Hover))
 			.IsFocusable(false)
 			.IsEnabled(bEnabled)
-			.HAlign(HAlign_Center)
+			.HAlign(HAlign_Fill)
 			.VAlign(VAlign_Center)
-			.ContentPadding(FMargin(18.f, 4.f))
+			.ContentPadding(Pad)
 			.OnClicked_Lambda([Self, OnClick]()
 			{
 				if (TSharedPtr<FGPMUI> Me = Self.Pin()) { Me->Click(); if (OnClick) OnClick(); Me->Touch(); }
 				return FReply::Handled();
 			})
 			[
-				Txt(Label, Size, bEnabled ? InkOn(Col) : CFaint, true)
+				Content
 			]
 		];
 }
@@ -379,18 +510,18 @@ TSharedRef<SWidget> FGPMUI::Pick(const TSharedRef<SWidget>& Content, bool bSel, 
 TSharedRef<SWidget> FGPMUI::Chip(const FString& Label, const FString& Value, const FLinearColor& Col) const
 {
 	return SNew(SBorder)
-		.BorderImage(GPMUIStyle::Rounded(40.f))
+		.BorderImage(GPMUIStyle::Slant())
 		.BorderBackgroundColor(FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.08f)))
-		.Padding(FMargin(14.f, 6.f))
+		.Padding(FMargin(22.f, 6.f))
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
 			[
-				Txt(Label, 13, CDim)
+				SNew(STextBlock).Text(FText::FromString(Label.ToUpper())).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
-				Txt(Value, 16, Col, true)
+				Ital(Value, 16, Col, 1)
 			]
 		];
 }
@@ -434,18 +565,18 @@ TSharedRef<SWidget> FGPMUI::Bar(float Frac, const FLinearColor& Col, float Heigh
 TSharedRef<SWidget> FGPMUI::Title(const FString& Kicker, const FString& Main, const TSharedRef<SWidget>& Right) const
 {
 	return SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 14.f, 0.f))
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
 		[
-			SNew(SBox).WidthOverride(6.f).HeightOverride(52.f)
-			[
-				SNew(SBorder).BorderImage(GPMUIStyle::Rounded(6.f)).BorderBackgroundColor(FSlateColor(Acc))
-			]
+			Ticks(Acc, 3, 9.f, 50.f)
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 		[
 			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(Kicker, 14, CDim, true) ]
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(Main, 32, CText, true) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock).Text(FText::FromString(Kicker.ToUpper())).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -4.f, 0.f, 0.f))[ Ital(Main, 36, CText) ]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
@@ -469,13 +600,11 @@ TSharedRef<SWidget> FGPMUI::Chips() const
 
 TSharedRef<SWidget> FGPMUI::Page(const TSharedRef<SWidget>& Body, const FLinearColor& Bg) const
 {
-	return SNew(SBorder)
-		.BorderImage(GPMUIStyle::Rounded(0.f))
-		.BorderBackgroundColor(FSlateColor(Bg))
-		.Padding(FMargin(36.f, 26.f))
-		[
-			Body
-		];
+	// fond de l'écran, filet aux couleurs de l'écurie en haut qui s'efface vers la droite
+	return SNew(SOverlay)
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), Bg) ]
+		+ SOverlay::Slot().VAlign(VAlign_Top)[ SNew(SBox).HeightOverride(4.f)[ Layer(GPMUIStyle::Ramp(0), Acc) ] ]
+		+ SOverlay::Slot().Padding(FMargin(36.f, 26.f))[ Body ];
 }
 
 TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TArray<TPair<FString, float>>& Cells, const TArray<FLinearColor>& Colors) const
@@ -483,15 +612,13 @@ TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TAr
 	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
 		[
-			SNew(SBox).WidthOverride(5.f).HeightOverride(22.f)
-			[
-				SNew(SBorder).BorderImage(GPMUIStyle::Rounded(6.f)).BorderBackgroundColor(FSlateColor(TeamCol))
-			]
+			SNew(SBox).WidthOverride(9.f).HeightOverride(24.f)[ Layer(GPMUIStyle::Tick(), TeamCol) ]
 		];
 	for (int32 k = 0; k < Cells.Num(); ++k)
 	{
 		const FLinearColor Col = Colors.IsValidIndex(k) ? Colors[k] : CText;
-		TSharedRef<SWidget> Cell = Txt(Cells[k].Key, 16, bMe ? CGold : Col, bMe || k == 0);
+		// première colonne (place) en gras italique, comme sur un tableau de chronométrage
+		TSharedRef<SWidget> Cell = k == 0 ? Ital(Cells[k].Key, 17, bMe ? FLinearColor::White : Col, 0) : Txt(Cells[k].Key, 16, bMe ? FLinearColor::White : Col, bMe);
 		if (Cells[k].Value > 0.f)
 			Box->AddSlot().AutoWidth().VAlign(VAlign_Center)
 			[
@@ -501,60 +628,265 @@ TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TAr
 		else
 			Box->AddSlot().FillWidth(1.f).VAlign(VAlign_Center)[ Cell ];
 	}
+	TSharedRef<SOverlay> Ov = SNew(SOverlay) + SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(1.f, 1.f, 1.f, bMe ? 0.07f : 0.035f)) ];
+	if (bMe) Ov->AddSlot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(Acc.R, Acc.G, Acc.B, 0.62f)) ];
+	Ov->AddSlot().Padding(FMargin(10.f, 5.f))[ Box ];
+	return Ov;
+}
+
+// ---------- charte « course » ----------
+
+FLinearColor FGPMUI::Bright() const
+{
+	// accent lisible sur fond sombre : une couleur trop foncée est éclaircie
+	FLinearColor C = Acc;
+	for (int32 k = 0; k < 4 && C.GetLuminance() < 0.22f; ++k) C = GPMUIStyle::Lift(C, 1.45f);
+	return C;
+}
+
+TSharedRef<SWidget> FGPMUI::Ital(const FString& S, int32 Size, const FLinearColor& Col, int32 Kind, bool bCenter) const
+{
+	return SNew(STextBlock)
+		.Text(FText::FromString(S))
+		.Font(GPMUIStyle::Face(Kind, Size))
+		.ColorAndOpacity(FSlateColor(Col))
+		.Justification(bCenter ? ETextJustify::Center : ETextJustify::Left);
+}
+
+TSharedRef<SWidget> FGPMUI::Layer(const FSlateBrush* Brush, const FLinearColor& Col) const
+{
 	return SNew(SBorder)
-		.BorderImage(GPMUIStyle::Rounded(6.f))
-		.BorderBackgroundColor(FSlateColor(bMe ? FLinearColor(Acc.R, Acc.G, Acc.B, 0.28f) : FLinearColor(1.f, 1.f, 1.f, 0.035f)))
-		.Padding(FMargin(10.f, 5.f))
+		.BorderImage(Brush)
+		.BorderBackgroundColor(FSlateColor(Col))
+		.Padding(FMargin(0.f))
+		.Visibility(EVisibility::HitTestInvisible);
+}
+
+TSharedRef<SWidget> FGPMUI::Ticks(const FLinearColor& Col, int32 Count, float W, float H) const
+{
+	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox);
+	for (int32 k = 0; k < Count; ++k)
+		Box->AddSlot().AutoWidth().Padding(FMargin(k ? -1.f : 0.f, 0.f, 0.f, 0.f))
 		[
-			Box
+			SNew(SBox).WidthOverride(W).HeightOverride(H)[ Layer(GPMUIStyle::Tick(), FLinearColor(Col.R, Col.G, Col.B, 1.f - 0.32f * k)) ]
 		];
+	return Box;
+}
+
+TSharedRef<SWidget> FGPMUI::Keycap(const FString& Key, const FString& What) const
+{
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 7.f, 0.f))
+		[
+			SNew(SBorder)
+			.BorderImage(GPMUIStyle::Rounded(6.f))
+			.BorderBackgroundColor(FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.14f)))
+			.Padding(FMargin(8.f, 2.f))
+			[
+				SNew(STextBlock).Text(FText::FromString(Key)).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(CText))
+			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			Txt(What, 13, CDim)
+		];
+}
+
+TSharedRef<SWidget> FGPMUI::StatBlock(const FString& Label, const FString& Value, const FString& Sub, const FLinearColor& Col, float Frac) const
+{
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(STextBlock).Text(FText::FromString(Label.ToUpper())).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -2.f, 0.f, 0.f))[ Ital(Value, 28, Col) ];
+	if (!Sub.IsEmpty()) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, -2.f, 0.f, 0.f))[ Txt(Sub, 12, CFaint) ];
+	if (Frac >= 0.f) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 5.f, 0.f, 0.f))[ Bar(Frac, Col, 4.f) ];
+	return SNew(SOverlay)
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.02f, 0.025f, 0.045f, 0.7f)) ]
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(3), FLinearColor(1.f, 1.f, 1.f, 0.05f)) ]
+		+ SOverlay::Slot().HAlign(HAlign_Left)[ SNew(SBox).WidthOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), Col) ] ]
+		+ SOverlay::Slot().Padding(FMargin(14.f, 8.f, 12.f, 9.f))[ Box ];
+}
+
+TSharedRef<SWidget> FGPMUI::MenuTile(const FString& Num, const FString& Label, const FString& Sub, const FLinearColor& Col, TFunction<void()> OnClick, bool bPrimary)
+{
+	// grande entrée du menu : numéro, libellé penché, sous-titre ; la couleur de l'écurie apparaît au survol
+	const FLinearColor Bg = bPrimary ? Col : FLinearColor(0.03f, 0.035f, 0.06f, 0.78f);
+	const FLinearColor Hover = bPrimary ? GPMUIStyle::Lift(Col, 1.18f) : FLinearColor(Col.R * 0.5f, Col.G * 0.5f, Col.B * 0.5f, 0.92f);
+	const FLinearColor Ink = bPrimary ? InkOn(Col) : CText;
+	const FLinearColor Soft(Ink.R, Ink.G, Ink.B, 0.66f);
+	TSharedRef<SWidget> Content = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 18.f, 0.f))
+		[
+			SNew(SBox).WidthOverride(44.f)[ Ital(Num, 22, bPrimary ? Soft : Bright(), 0) ]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ Ital(Label, bPrimary ? 26 : 22, Ink, 0) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -2.f, 0.f, 0.f))[ Txt(Sub, 13, Soft) ]
+		]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))
+		[
+			Ital(TEXT("›"), 34, bPrimary ? Ink : Soft, 1)
+		];
+	return Hit(Content, Bg, Hover, OnClick, true, 0.f, bPrimary ? 86.f : 70.f, FMargin(34.f, 4.f, 30.f, 4.f));
 }
 
 // ---------- accueil ----------
 
 TSharedRef<SWidget> FGPMUI::HomeScreen(AGPMGameMode* GM)
 {
+	// accueil : la voiture de l'écurie dans l'atelier à droite, logo et grandes entrées numérotées à gauche
 	UGPMCareerSubsystem* C = CareerSys();
 	UGPMSeasonSubsystem* S = SeasonSys();
+	UGPMDataSubsystem* Data = DataSys();
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
+	const UGPMSaveGame* Sv = C ? C->Save() : nullptr;
+	const bool bHasCareer = C && C->IsCreated() && S && Sv;
+	const FLinearColor Shade(0.006f, 0.008f, 0.018f, 0.92f);
+
 	TSharedRef<SVerticalBox> Menu = SNew(SVerticalBox);
-	auto Add = [&Menu](const TSharedRef<SWidget>& W, float Gap) { Menu->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, Gap))[ W ]; };
-
-	Add(Txt(TEXT("GRAND PRIX"), 64, CText, true), 0.f);
-	Add(Txt(TEXT("MANAGER"), 64, Acc, true), 6.f);
-	Add(Txt(TEXT("Course de monoplaces et gestion d'écurie"), 18, CDim), 36.f);
-
-	if (C && C->IsCreated() && S && C->Save())
+	int32 NumTile = 0;
+	auto Add = [&Menu, &NumTile, this](const FString& Label, const FString& Sub, const FLinearColor& Col, TFunction<void()> OnClick, bool bPrimary)
 	{
-		const FString Sub = FString::Printf(TEXT("%s · saison %d · GP %d / %d"), *C->Save()->TeamName, S->Year(), FMath::Min(S->Round() + 1, S->NumRounds()), S->NumRounds());
-		Add(Button(TEXT("CONTINUER LA CARRIÈRE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->ContinueCareer(); }, true, 460.f, 64.f, 22), 4.f);
-		Add(Txt(Sub, 15, CDim), 16.f);
+		Menu->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+		[
+			SNew(SBox).WidthOverride(540.f)[ MenuTile(FString::Printf(TEXT("%02d"), ++NumTile), Label, Sub, Col, MoveTemp(OnClick), bPrimary) ]
+		];
+	};
+	if (bHasCareer)
+	{
+		Add(TEXT("CONTINUER"), FString::Printf(TEXT("%s · Grand Prix %d / %d"), *Sv->TeamName, FMath::Min(S->Round() + 1, S->NumRounds()), S->NumRounds()), Acc,
+			[this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->ContinueCareer(); }, true);
 		if (bConfirmNew)
-			Add(Button(TEXT("CONFIRMER : EFFACER LA CARRIÈRE"), FLinearColor(0.6f, 0.1f, 0.1f), [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->NewCareer(); }, true, 460.f), 12.f);
+			Add(TEXT("EFFACER ET RECOMMENCER"), TEXT("Confirme : la carrière en cours sera perdue"), FLinearColor(0.62f, 0.08f, 0.08f, 1.f),
+				[this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->NewCareer(); }, true);
 		else
-			Add(Button(TEXT("NOUVELLE CARRIÈRE"), CNeutral, [this]() { bConfirmNew = true; }, true, 460.f), 12.f);
+			Add(TEXT("NOUVELLE CARRIÈRE"), TEXT("Repartir de zéro avec une autre écurie"), Acc, [this]() { bConfirmNew = true; }, false);
 	}
 	else
-		Add(Button(TEXT("CARRIÈRE : CRÉER TON ÉCURIE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->NewCareer(); }, true, 460.f, 64.f, 22), 12.f);
-	Add(Button(TEXT("COURSE SOLO"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Solo; }, true, 460.f), 12.f);
-	Add(Button(TEXT("RÉGLAGES"), CNeutral, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Settings; }, true, 460.f), 30.f);
-	Add(Txt(TEXT("Univers 100 % fictif : écuries, pilotes et circuits inventés."), 13, CFaint), 0.f);
+		Add(TEXT("CARRIÈRE"), TEXT("Crée ton écurie, développe ta voiture et vise le titre"), Acc, [WGM]() { if (WGM.IsValid()) WGM->NewCareer(); }, true);
+	Add(TEXT("COURSE SOLO"), TEXT("Un Grand Prix sur le circuit de ton choix"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Solo; }, false);
+	Add(TEXT("RÉGLAGES"), TEXT("Graphismes, son, aides au pilotage, niveau des IA"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Settings; }, false);
 
-	return SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth()
+	// logo : deux lignes en très gras italique serrées l'une contre l'autre
+	const FString Kick = bHasCareer ? FString::Printf(TEXT("SAISON %d  ·  %s"), S->Year(), *Sv->TeamName.ToUpper()) : FString(TEXT("NOUVELLE SAISON"));
+	TSharedRef<SWidget> Logo = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
 		[
-			SNew(SBorder)
-			.BorderImage(GPMUIStyle::Rounded(0.f))
-			.BorderBackgroundColor(FSlateColor(FLinearColor(0.01f, 0.012f, 0.025f, 0.82f)))
-			.Padding(FMargin(70.f, 50.f))
-			.VAlign(VAlign_Center)
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))[ Ticks(Acc, 3, 8.f, 22.f) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
-				Menu
+				SNew(STextBlock).Text(FText::FromString(Kick)).Font(GPMUIStyle::Face(2, 14)).ColorAndOpacity(FSlateColor(Bright()))
 			]
 		]
-		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Bottom).HAlign(HAlign_Right).Padding(FMargin(30.f))
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))[ Ital(TEXT("GRAND PRIX"), 74, CText) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -27.f, 0.f, 0.f))[ Ital(TEXT("MANAGER"), 74, Bright()) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(6.f, -4.f, 0.f, 0.f))
 		[
-			Card(Txt(TEXT("Clavier : flèches ou ZQSD pour conduire · C caméra · B stand · P pause · Entrée valider · Échap retour"), 14, CDim), FLinearColor(0.f, 0.f, 0.f, 0.55f), 12.f)
+			SNew(STextBlock).Text(FText::FromString(TEXT("COURSE DE MONOPLACES  ·  GESTION D'ÉCURIE"))).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(CDim))
+		];
+
+	TSharedRef<SHorizontalBox> Keys = SNew(SHorizontalBox);
+	const TCHAR* const KeyList[][2] = { { TEXT("ZQSD"), TEXT("conduire") }, { TEXT("C"), TEXT("caméra") }, { TEXT("B"), TEXT("stand") }, { TEXT("P"), TEXT("pause") },
+		{ TEXT("ENTRÉE"), TEXT("valider") }, { TEXT("ÉCHAP"), TEXT("retour") } };
+	for (const auto& Kc : KeyList) Keys->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 16.f, 0.f))[ Keycap(Kc[0], Kc[1]) ];
+
+	TSharedRef<SWidget> Left = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()[ Logo ]
+		+ SVerticalBox::Slot().FillHeight(1.f).VAlign(VAlign_Center).Padding(FMargin(0.f, 26.f, 0.f, 20.f))[ Menu ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Keys ]
+		+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Univers 100 % fictif : écuries, pilotes et circuits inventés."), 12, CFaint) ];
+
+	// carte de la carrière en bas à droite : écurie, places au championnat, prochain Grand Prix et son tracé
+	TSharedRef<SWidget> Right = SNullWidget::NullWidget;
+	if (bHasCareer)
+	{
+		int32 MyPos = 0, MyPts = 0, TeamPos = 0, TeamPts = 0;
+		const TArray<FGPMStanding> Drv = S->Drivers(), Tms = S->Teams();
+		for (int32 k = 0; k < Drv.Num(); ++k) if (Drv[k].bPlayer) { MyPos = k + 1; MyPts = Drv[k].Pts; break; }
+		for (int32 k = 0; k < Tms.Num(); ++k) if (Tms[k].bPlayer) { TeamPos = k + 1; TeamPts = Tms[k].Pts; break; }
+		const FString NextId = S->IsOver() ? FString() : S->CurrentCircuit();
+		const FGPMTrackData* T = Data && !NextId.IsEmpty() ? Data->GetTrack(NextId) : nullptr;
+		auto Mini = [this](const FString& Label, const FString& Value, const FString& Sub) -> TSharedRef<SWidget>
+		{
+			return SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(Label)).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim)) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -3.f, 0.f, 0.f))[ Ital(Value, 30, CText) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -3.f, 0.f, 0.f))[ Txt(Sub, 12, CFaint) ];
+		};
+		TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 14.f, 0.f))
+				[
+					SNew(SBox).WidthOverride(76.f).HeightOverride(40.f)
+					[
+						SNew(SBorder).BorderImage(GPMUIStyle::Slant()).BorderBackgroundColor(FSlateColor(Acc)).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.f))
+						[ Ital(GPMUIStyle::Abbr(Sv->TeamName), 18, InkOn(Acc)) ]
+					]
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(TEXT("TON ÉCURIE"))).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim)) ]
+					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -3.f, 0.f, 0.f))[ Ital(Sv->TeamName, 24, CText) ]
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ Mini(TEXT("PILOTE"), MyPos ? FString::Printf(TEXT("P%d"), MyPos) : FString(TEXT("—")), FString::Printf(TEXT("%d pts"), MyPts)) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ Mini(TEXT("ÉCURIE"), TeamPos ? FString::Printf(TEXT("P%d"), TeamPos) : FString(TEXT("—")), FString::Printf(TEXT("%d pts"), TeamPts)) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ Mini(TEXT("BUDGET"), FString::Printf(TEXT("%.1f"), Sv->Budget), TEXT("M€")) ]
+			];
+		if (T)
+			Box->AddSlot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("PROCHAIN GRAND PRIX · %d / %d"), S->Round() + 1, S->NumRounds())))
+						.Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(Bright()))
+					]
+					+ SVerticalBox::Slot().AutoHeight()[ Ital(T->Name.ToUpper(), 20, CText) ]
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("%s%s%.2f km"), *T->Type, T->Type.IsEmpty() ? TEXT("") : TEXT(" · "), T->WX.Num() * 2.f / 1000.f), 12, CDim) ]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))[ TrackMap(NextId, Bright(), 130.f, 86.f) ]
+			];
+		Right = SNew(SBox).WidthOverride(430.f)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.015f, 0.02f, 0.04f, 0.8f)) ]
+				+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(Acc.R, Acc.G, Acc.B, 0.22f)) ]
+				+ SOverlay::Slot().VAlign(VAlign_Top)[ SNew(SBox).HeightOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), Acc) ] ]
+				+ SOverlay::Slot().Padding(FMargin(22.f, 18.f, 22.f, 16.f))[ Box ]
+			];
+	}
+
+	return SNew(SOverlay)
+		// ombre à gauche derrière le menu, la voiture reste bien visible à droite ; voile en bas pour la lisibilité
+		+ SOverlay::Slot()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.36f)[ Layer(GPMUIStyle::Rounded(0.f), Shade) ]
+			+ SHorizontalBox::Slot().FillWidth(0.34f)[ Layer(GPMUIStyle::Ramp(0), Shade) ]
+			+ SHorizontalBox::Slot().FillWidth(0.3f)[ SNew(SSpacer) ]
+		]
+		+ SOverlay::Slot().VAlign(VAlign_Bottom)[ SNew(SBox).HeightOverride(260.f)[ Layer(GPMUIStyle::Ramp(1), FLinearColor(0.f, 0.f, 0.01f, 0.78f)) ] ]
+		+ SOverlay::Slot().VAlign(VAlign_Top)[ SNew(SBox).HeightOverride(5.f)[ Layer(GPMUIStyle::Ramp(0), Acc) ] ]
+		+ SOverlay::Slot()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(76.f, 52.f, 40.f, 30.f))[ Left ]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Bottom).HAlign(HAlign_Right).Padding(FMargin(30.f, 30.f, 44.f, 40.f))[ Right ]
 		];
 }
 

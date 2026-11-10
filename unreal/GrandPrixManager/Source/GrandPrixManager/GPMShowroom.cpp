@@ -635,6 +635,16 @@ void AGPMShowroom::Camera(int32 Shot, float T, FVector& Eye, FVector& Look, floa
 		Fov = 55.f;
 		break;
 	}
+	case 5:
+	{
+		// accueil : plan bas de trois quarts, la voiture dans la moitié droite (le menu occupe la gauche), lent balancement
+		const float A = 0.35f + 0.22f * FMath::Sin(T * 0.06f);
+		Eye = O + FVector(FMath::Cos(A) * 1080.f, FMath::Sin(A) * 1080.f, 150.f);
+		const FVector F = (CarC - Eye).GetSafeNormal2D(), Right(-F.Y, F.X, 0.f);
+		Look = CarC - Right * 280.f - FVector(0, 0, 25.f);
+		Fov = 56.f;
+		break;
+	}
 	default:
 	{
 		// signature : profil serré sur la poignée de main, puis recul pour la photo devant la voiture
