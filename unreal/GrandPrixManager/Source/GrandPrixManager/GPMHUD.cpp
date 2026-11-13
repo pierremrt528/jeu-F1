@@ -12,11 +12,15 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "GameFramework/PlayerController.h"
+#include "CanvasItem.h"
+#include "Engine/Texture.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
+#include "Rendering/SlateRenderer.h"
 
 namespace
 {
 	const FLinearColor HudPanel(0.f, 0.f, 0.f, 0.45f);
-	const FLinearColor HudAccent(0.85f, 0.12f, 0.12f, 1.f);
 }
 
 AGPMHUD::AGPMHUD()
@@ -37,7 +41,7 @@ void AGPMHUD::Layout(float W, float H)
 	Brake = { FVector2D(W - M * 2 - B * 2, Y), FVector2D(B, B), TEXT("FREIN") };
 	Box = { FVector2D((W - B * 1.3f) / 2, H - M - B * 0.5f), FVector2D(B * 1.3f, B * 0.5f), TEXT("STAND") };
 	// radio du muret : 3 boutons à gauche, au-dessus des flèches
-	for (int32 k = 0; k < 3; ++k) RadioBtn[k] = { FVector2D(M, H * 0.47f + k * 32.f * Scale), FVector2D(112.f * Scale, 28.f * Scale), nullptr };
+	for (int32 k = 0; k < 3; ++k) RadioBtn[k] = { FVector2D(M, H * 0.5f + k * 30.f * Scale), FVector2D(152.f * Scale, 27.f * Scale), nullptr };
 }
 
 void AGPMHUD::ReadTouches(AGPMCar* Car)
@@ -78,10 +82,59 @@ void AGPMHUD::ReadTouches(AGPMCar* Car)
 
 void AGPMHUD::DrawButton(const FButton& B, bool bDown)
 {
-	DrawRect(bDown ? FLinearColor(1, 1, 1, 0.35f) : FLinearColor(1, 1, 1, 0.12f), B.Pos.X, B.Pos.Y, B.Size.X, B.Size.Y);
-	float TW, TH;
-	GetTextSize(B.Label, TW, TH, GEngine->GetMediumFont(), Scale * 1.2f);
-	DrawText(B.Label, FLinearColor(1, 1, 1, 0.85f), B.Pos.X + (B.Size.X - TW) / 2, B.Pos.Y + (B.Size.Y - TH) / 2, GEngine->GetMediumFont(), Scale * 1.2f);
+	DrawRect(bDown ? FLinearColor(1, 1, 1, 0.32f) : FLinearColor(0.02f, 0.025f, 0.045f, 0.45f), B.Pos.X, B.Pos.Y, B.Size.X, B.Size.Y);
+	DrawRect(FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, bDown ? 1.f : 0.6f), B.Pos.X, B.Pos.Y + B.Size.Y - 3.f * Scale, B.Size.X, 3.f * Scale);
+	const FVector2D Sz = InkSize(B.Label, 0, 16.f);
+	Ink(B.Label, B.Pos.X + (B.Size.X - Sz.X) / 2, B.Pos.Y + (B.Size.Y - Sz.Y) / 2, 0, 16.f, FLinearColor(1, 1, 1, 0.9f));
+}
+
+// ---------- charte des écrans dans le HUD ----------
+
+void AGPMHUD::Slab(float X, float Y, float W, float H, FLinearColor Col)
+{
+	UTexture* Tex = GPMUIStyle::MaskTex(0);
+	if (!Tex) { DrawRect(Col, X, Y, W, H); return; }
+	// bouts penchés à leur proportion (la texture fait 64 × 24, 10 pixels de bout), milieu étiré
+	const float Cap = FMath::Min(W * 0.5f, H * 10.f / 24.f), Cu = 10.f / 64.f;
+	DrawTexture(Tex, X, Y, Cap, H, 0.f, 0.f, Cu, 1.f, Col);
+	if (W > 2.f * Cap) DrawTexture(Tex, X + Cap, Y, W - 2.f * Cap, H, Cu, 0.f, 1.f - 2.f * Cu, 1.f, Col);
+	DrawTexture(Tex, X + W - Cap, Y, Cap, H, 1.f - Cu, 0.f, Cu, 1.f, Col);
+}
+
+void AGPMHUD::Paint(int32 Which, float X, float Y, float W, float H, FLinearColor Col)
+{
+	if (UTexture* Tex = GPMUIStyle::MaskTex(Which)) DrawTexture(Tex, X, Y, W, H, 0.f, 0.f, 1.f, 1.f, Col);
+	else if (Which != 3) DrawRect(Col, X, Y, W, H);
+}
+
+FVector2D AGPMHUD::InkSize(const FString& Text, int32 Kind, float Size) const
+{
+	FSlateFontInfo F = GPMUIStyle::Face(Kind, 10);
+	F.Size = Size * Scale;
+	if (!FSlateApplication::IsInitialized() || !FSlateApplication::Get().GetRenderer()) return FVector2D(Text.Len() * F.Size * 0.75f, F.Size * 1.4f);
+	return FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, F, 1.f);
+}
+
+void AGPMHUD::Ink(const FString& Text, float X, float Y, int32 Kind, float Size, FLinearColor Col, float Align)
+{
+	if (!Canvas || Text.IsEmpty()) return;
+	FSlateFontInfo F = GPMUIStyle::Face(Kind, 10);
+	F.Size = Size * Scale;
+	const float Px = Align > 0.f ? X - InkSize(Text, Kind, Size).X * Align : X;
+	FCanvasTextItem Item(FVector2D(Px, Y), FText::FromString(Text), F, Col);
+	Canvas->DrawItem(Item);
+}
+
+void AGPMHUD::TyreIcon(TCHAR Tyre, float Cx, float Cy, float Rad)
+{
+	const FLinearColor Col = Tyre == 'S' ? FLinearColor(1.f, 0.2f, 0.2f) : Tyre == 'H' ? FLinearColor(0.92f, 0.92f, 0.92f) : Tyre == 'W' ? FLinearColor(0.2f, 0.55f, 1.f)
+		: Tyre == 'I' ? FLinearColor(0.25f, 0.85f, 0.35f) : FLinearColor(1.f, 0.85f, 0.15f);
+	Paint(4, Cx - Rad, Cy - Rad, Rad * 2.f, Rad * 2.f, FLinearColor(0.02f, 0.02f, 0.03f, 1.f));
+	Paint(4, Cx - Rad * 0.86f, Cy - Rad * 0.86f, Rad * 1.72f, Rad * 1.72f, Col);
+	Paint(4, Cx - Rad * 0.56f, Cy - Rad * 0.56f, Rad * 1.12f, Rad * 1.12f, FLinearColor(0.06f, 0.06f, 0.07f, 1.f));
+	const FString L = Tyre == 'S' ? TEXT("S") : Tyre == 'H' ? TEXT("H") : Tyre == 'W' ? TEXT("W") : Tyre == 'I' ? TEXT("I") : TEXT("M");
+	const FVector2D Sz = InkSize(L, 0, Rad / Scale * 0.95f);
+	Ink(L, Cx - Sz.X * 0.5f, Cy - Sz.Y * 0.5f, 0, Rad / Scale * 0.95f, Col);
 }
 
 FString AGPMHUD::Chrono(float S) const
@@ -100,18 +153,35 @@ void AGPMHUD::DrawMiniMap(AGPMCar* Car, FVector2D O, float Size)
 	for (int32 i = 0; i < T->WX.Num(); i += 8) { MinX = FMath::Min(MinX, T->WX[i]); MaxX = FMath::Max(MaxX, T->WX[i]); MinZ = FMath::Min(MinZ, T->WZ[i]); MaxZ = FMath::Max(MaxZ, T->WZ[i]); }
 	const float K = Size / FMath::Max(MaxX - MinX, MaxZ - MinZ);
 	auto P = [&](float X, float Z) { return FVector2D(O.X + (X - MinX) * K + (Size - (MaxX - MinX) * K) / 2, O.Y + (Z - MinZ) * K + (Size - (MaxZ - MinZ) * K) / 2); };
-	DrawRect(HudPanel, O.X - 6 * Scale, O.Y - 6 * Scale, Size + 12 * Scale, Size + 12 * Scale);
+	// fond en verre fumé avec un filet de la couleur de l'écurie, halo sous le tracé
+	DrawRect(HudPanel, O.X - 8 * Scale, O.Y - 8 * Scale, Size + 16 * Scale, Size + 16 * Scale);
+	DrawRect(HudAcc, O.X - 8 * Scale, O.Y - 8 * Scale, Size + 16 * Scale, 2.f * Scale);
 	const int32 N = T->WX.Num(), Step = 8;
 	for (int32 i = 0; i < N; i += Step)
 	{
 		const int32 j = (i + Step) % N;
 		const FVector2D A = P(T->WX[i], T->WZ[i]), B = P(T->WX[j], T->WZ[j]);
-		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(1, 1, 1, 0.8f), 2.f * Scale);
+		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, 0.35f), 6.f * Scale);
 	}
+	for (int32 i = 0; i < N; i += Step)
+	{
+		const int32 j = (i + Step) % N;
+		const FVector2D A = P(T->WX[i], T->WZ[i]), B = P(T->WX[j], T->WZ[j]);
+		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(1, 1, 1, 0.92f), 2.f * Scale);
+	}
+	// ligne de départ, voitures (couleur de l'écurie), le joueur en grand avec un liseré blanc
+	const FVector2D S0 = P(T->WX[0], T->WZ[0]);
+	DrawRect(FLinearColor::White, S0.X - 1.5f * Scale, S0.Y - 4.f * Scale, 3.f * Scale, 8.f * Scale);
 	for (const AGPMCar* Other : Car->Field)
-		if (Other && Other != Car) { const FVector2D Q = P(Other->X, Other->Z); DrawRect(FLinearColor(1, 1, 1, 0.9f), Q.X - 2 * Scale, Q.Y - 2 * Scale, 4 * Scale, 4 * Scale); }
+		if (Other && Other != Car)
+		{
+			const FVector2D Q = P(Other->X, Other->Z);
+			Paint(4, Q.X - 3.f * Scale, Q.Y - 3.f * Scale, 6.f * Scale, 6.f * Scale, Other->TeamColor);
+		}
 	const FVector2D C = P(Car->X, Car->Z);
-	DrawRect(HudAccent, C.X - 4 * Scale, C.Y - 4 * Scale, 8 * Scale, 8 * Scale);
+	Paint(3, C.X - 9.f * Scale, C.Y - 9.f * Scale, 18.f * Scale, 18.f * Scale, FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, 0.7f));
+	Paint(4, C.X - 5.f * Scale, C.Y - 5.f * Scale, 10.f * Scale, 10.f * Scale, FLinearColor::White);
+	Paint(4, C.X - 3.5f * Scale, C.Y - 3.5f * Scale, 7.f * Scale, 7.f * Scale, HudAcc);
 }
 
 void AGPMHUD::DrawCentered(const FString& Text, FLinearColor Color, float W, float Y, UFont* Font, float S)
@@ -121,13 +191,30 @@ void AGPMHUD::DrawCentered(const FString& Text, FLinearColor Color, float W, flo
 	DrawText(Text, Color, (W - TW) / 2, Y, Font, S);
 }
 
-// Feux de départ : 5 colonnes qui s'allument en rouge une par une, puis s'éteignent toutes au départ
+// Feux de départ : portique sombre de 5 blocs, deux feux ronds par bloc qui s'allument en rouge un bloc après l'autre
+// (halo autour des feux allumés), puis s'éteignent tous au départ
 void AGPMHUD::DrawLights(int32 On, float W)
 {
-	const float R = 26.f * Scale, Sp = 14.f * Scale, Total = 5 * R * 2 + 4 * Sp, X0 = (W - Total) / 2, Y0 = 92.f * Scale;
-	DrawRect(FLinearColor(0.02f, 0.02f, 0.02f, 0.85f), X0 - Sp, Y0 - Sp, Total + 2 * Sp, R * 2 + 2 * Sp);
+	const float R = 15.f * Scale, PodW = R * 2.f + 12.f * Scale, PodH = R * 4.f + 20.f * Scale, Sp = 10.f * Scale;
+	const float Total = 5 * PodW + 4 * Sp, X0 = (W - Total) / 2, Y0 = 70.f * Scale;
+	// poutre du portique et ses bandes jaunes et noires
+	DrawRect(FLinearColor(0.03f, 0.03f, 0.035f, 0.95f), X0 - 26.f * Scale, Y0 - 16.f * Scale, Total + 52.f * Scale, 12.f * Scale);
+	for (int32 k = 0; k < 14; ++k)
+		Paint(1, X0 - 26.f * Scale + k * (Total + 52.f * Scale) / 14.f, Y0 - 16.f * Scale, 7.f * Scale, 12.f * Scale, FLinearColor(1.f, 0.78f, 0.05f, 0.9f));
 	for (int32 k = 0; k < 5; ++k)
-		DrawRect(k < On ? FLinearColor(1.f, 0.05f, 0.05f) : FLinearColor(0.15f, 0.04f, 0.04f), X0 + k * (R * 2 + Sp), Y0, R * 2, R * 2);
+	{
+		const float PX = X0 + k * (PodW + Sp);
+		DrawRect(FLinearColor(0.015f, 0.015f, 0.02f, 0.96f), PX, Y0, PodW, PodH);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.08f), PX, Y0, PodW, 2.f * Scale);
+		for (int32 Row = 0; Row < 2; ++Row)
+		{
+			const float Cx = PX + PodW / 2, Cy = Y0 + 10.f * Scale + R + Row * (R * 2.f + 4.f * Scale);
+			const bool bLit = k < On;
+			if (bLit) Paint(3, Cx - R * 2.6f, Cy - R * 2.6f, R * 5.2f, R * 5.2f, FLinearColor(1.f, 0.08f, 0.04f, 0.55f));
+			Paint(4, Cx - R, Cy - R, R * 2.f, R * 2.f, bLit ? FLinearColor(1.f, 0.12f, 0.08f) : FLinearColor(0.16f, 0.05f, 0.05f));
+			if (bLit) Paint(4, Cx - R * 0.45f, Cy - R * 0.6f, R * 0.7f, R * 0.7f, FLinearColor(1.f, 0.75f, 0.65f, 0.8f));
+		}
+	}
 }
 
 FString AGPMHUD::Gap(float S) const
@@ -143,10 +230,10 @@ bool AGPMHUD::Clicked(float X, float Y, float BW, float BH)
 
 void AGPMHUD::DrawBtn(const FString& Label, float X, float Y, float BW, float BH, FLinearColor Col)
 {
-	DrawRect(Col, X, Y, BW, BH);
-	float TW, TH;
-	GetTextSize(Label, TW, TH, GEngine->GetMediumFont(), Scale);
-	DrawText(Label, FLinearColor::White, X + (BW - TW) / 2, Y + (BH - TH) / 2, GEngine->GetMediumFont(), Scale);
+	// bouton penché, comme dans les écrans de gestion
+	Slab(X, Y, BW, BH, Col);
+	const FVector2D Sz = InkSize(Label, 1, 12.f);
+	Ink(Label, X + (BW - Sz.X) / 2, Y + (BH - Sz.Y) / 2, 1, 12.f, Col.GetLuminance() > 0.55f ? FLinearColor(0.04f, 0.05f, 0.08f) : FLinearColor::White);
 }
 
 void AGPMHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)

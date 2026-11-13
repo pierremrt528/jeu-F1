@@ -114,12 +114,22 @@ void AGPMGameMode::SetupWorld()
 		PP->bUnbound = true;
 		FPostProcessSettings& S = PP->Settings;
 		S.bOverride_BloomIntensity = true; S.BloomIntensity = 0.35f;
-		S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.25f;
-		S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f);
+		S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.32f;
 		S.bOverride_AutoExposureBias = true; S.AutoExposureBias = 0.3f;
-		S.bOverride_ColorContrast = true; S.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
 		S.bOverride_LensFlareIntensity = true; S.LensFlareIntensity = 0.25f;
+		// étalonnage « retransmission » : plus de contraste, couleurs moins criardes, lumière légèrement chaude,
+		// ombres un peu bleutées
+		S.bOverride_ColorSaturation = true; S.ColorSaturation = FVector4(1.f, 1.f, 1.f, 1.f);
+		S.bOverride_ColorContrast = true; S.ColorContrast = FVector4(1.1f, 1.1f, 1.1f, 1.f);
+		S.bOverride_SceneColorTint = true; S.SceneColorTint = FLinearColor(1.f, 0.985f, 0.955f);
+		S.bOverride_ColorGainShadows = true; S.ColorGainShadows = FVector4(0.96f, 0.99f, 1.05f, 1.f);
+		S.bOverride_ColorSaturationHighlights = true; S.ColorSaturationHighlights = FVector4(0.92f, 0.92f, 0.92f, 1.f);
+		// flou de vitesse léger : le décor file sur les côtés à haute vitesse
+		S.bOverride_MotionBlurAmount = true; S.MotionBlurAmount = 0.3f;
+		S.bOverride_MotionBlurMax = true; S.MotionBlurMax = 1.2f;
 	}
+	// image un peu plus nette (le lissage des bords adoucit les lignes fines : vibreurs, grillages, lignes blanches)
+	if (IConsoleVariable* Sharpen = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Tonemapper.Sharpen"))) Sharpen->Set(0.5f, ECVF_SetByCode);
 }
 
 // Ambiance du circuit (thème de data.js) : direction du soleil, brouillard, puis le décor

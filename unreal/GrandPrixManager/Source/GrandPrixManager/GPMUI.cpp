@@ -143,6 +143,21 @@ namespace GPMUIStyle
 		return &B;
 	}
 
+	const FSlateBrush* Disc()
+	{
+		static FSlateBrush B = MaskBrush(MakeMask(48, 48, [](float Qx, float Py) { return 23.f - FVector2f(Qx - 24.f, Py - 24.f).Size() + 0.5f; }),
+			48.f, 48.f, false, FMargin(0.f));
+		return &B;
+	}
+
+	UTexture* MaskTex(int32 Which)
+	{
+		// bandeau penché du HUD : petite texture (les bandeaux font 14 à 40 pixels de haut, sans mipmaps)
+		static FSlateBrush Small = MaskBrush(MakeMask(64, 24, [](float Qx, float Py) { return SlantAlpha(Qx, Py, 64.f, 24.f, 9.f); }), 64.f, 24.f, false, FMargin(0.f));
+		const FSlateBrush* B = Which == 1 ? Tick() : Which == 2 ? Ramp(0) : Which == 3 ? Glow() : Which == 4 ? Disc() : Which == 5 ? Ramp(1) : &Small;
+		return B ? Cast<UTexture>(B->GetResourceObject()) : nullptr;
+	}
+
 	/** Bouton penché d'une couleur, avec sa couleur de survol (en cache, comme ButtonOf). */
 	const FButtonStyle* SlantOf(const FLinearColor& C, const FLinearColor& Hover)
 	{

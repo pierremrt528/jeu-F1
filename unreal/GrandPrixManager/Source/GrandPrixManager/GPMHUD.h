@@ -67,6 +67,17 @@ private:
 	bool bRadioDown[3] = { false, false, false };
 	bool bRadioWas[3] = { false, false, false };
 
+	// Charte des écrans dans le HUD : bandeaux penchés, masques (dégradé, halo, disque), police de l'interface
+	void Slab(float X, float Y, float W, float H, FLinearColor Col);
+	/** Masque de GPMUIStyle::MaskTex (1 trait penché, 2 dégradé, 3 halo, 4 disque, 5 dégradé vers le bas). */
+	void Paint(int32 Which, float X, float Y, float W, float H, FLinearColor Col);
+	/** Texte en police de l'interface (0 très gras italique, 1 gras italique, 2 étiquette, 3 fin) ; Align 0 gauche, 0,5 centré, 1 droite. */
+	void Ink(const FString& Text, float X, float Y, int32 Kind, float Size, FLinearColor Col, float Align = 0.f);
+	FVector2D InkSize(const FString& Text, int32 Kind, float Size) const;
+	/** Pneu : anneau de la couleur de la gomme. */
+	void TyreIcon(TCHAR Tyre, float Cx, float Cy, float Rad);
+	FLinearColor HudAcc = FLinearColor(0.85f, 0.12f, 0.12f, 1.f);   // couleur de l'écurie du joueur
+
 	FButton Left, Right, Gas, Brake, Box;
 	bool bLeft = false, bRight = false, bGas = false, bBrake = false, bBoxBtn = false, bBoxWas = false;
 	float Scale = 1.f;

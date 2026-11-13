@@ -10,6 +10,7 @@ class AGPMGameMode;
 class UGPMCareerSubsystem;
 class UGPMSeasonSubsystem;
 class SBox;
+class UTexture;
 struct FSlateBrush;
 struct FButtonStyle;
 
@@ -28,6 +29,10 @@ namespace GPMUIStyle
 	/** Polices : 0 très gras italique (titres), 1 gras italique, 2 étiquette condensée espacée, 3 fin. */
 	FSlateFontInfo Face(int32 Kind, int32 Size);
 	FString Abbr(const FString& TeamName);   // sigle de 3 lettres de l'écurie (badge)
+	const FSlateBrush* Disc();             // disque plein (voyants, icônes)
+	/** Textures des masques pour le HUD dessiné (Canvas) : 0 penché (petit, pour les bandeaux du HUD), 1 trait penché,
+	 *  2 dégradé opaque à gauche, 3 halo, 4 disque, 5 dégradé opaque en bas. */
+	UTexture* MaskTex(int32 Which);
 }
 
 /** Couleurs communes des écrans (thème sombre ; l'accent suit la couleur principale de l'écurie). */

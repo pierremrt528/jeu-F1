@@ -53,8 +53,9 @@ UMaterialInstanceDynamic* GPMArt::Surface(const FString& Kind, float Scale, UObj
 	if (!M) return nullptr;
 	// réglages par sol : photo, désaturation, teinte, relief, rugosité, reflets
 	const TCHAR* Tex = TEXT("T_Grass");
-	float Desat = 0.85f, Bump = 0.3f, Rough = 0.95f, Spec = 0.25f;
-	FLinearColor Tint(0.62f, 1.5f, 0.42f);
+	// herbe : vert plus naturel (olive, moins saturé) en gardant les nuances de la photo
+	float Desat = 0.7f, Bump = 0.3f, Rough = 0.95f, Spec = 0.25f;
+	FLinearColor Tint(0.52f, 1.f, 0.3f);
 	if (Kind == TEXT("asphalt")) { Tex = TEXT("T_Asphalt"); Desat = 0.35f; Bump = 1.f; Rough = 0.78f; Spec = 0.4f; Tint = FLinearColor(0.95f, 0.95f, 0.98f); }
 	else if (Kind == TEXT("sand")) { Tex = TEXT("T_Sand"); Desat = 0.25f; Bump = 0.25f; Rough = 0.92f; Spec = 0.3f; Tint = FLinearColor(1.25f, 1.08f, 0.85f); }
 	else if (Kind == TEXT("gravel")) { Tex = TEXT("T_Gravel"); Desat = 0.5f; Bump = 0.6f; Rough = 0.9f; Spec = 0.3f; Tint = FLinearColor(2.1f, 1.95f, 1.7f); }

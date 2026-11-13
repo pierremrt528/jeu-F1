@@ -35,8 +35,23 @@ namespace
 	const FLinearColor Grass(0.16f, 0.36f, 0.10f);
 	const FLinearColor KerbRed(0.75f, 0.06f, 0.05f);
 	const FLinearColor KerbWhite(0.92f, 0.92f, 0.92f);
-	const FLinearColor Wall(0.80f, 0.80f, 0.82f);
 	const FLinearColor Ground(0.13f, 0.30f, 0.09f);
+}
+
+namespace GPMTrackLook
+{
+	// barrières : béton sali en bas, chaperon clair, poteaux du grillage
+	const FLinearColor Dirty(0.3f, 0.3f, 0.31f);
+	const FLinearColor Cap(0.7f, 0.7f, 0.71f);
+	const FLinearColor Post(0.16f, 0.17f, 0.18f);
+	// panneaux publicitaires de marques inventées : fond et bandeau du logo
+	constexpr int32 NumAds = 8;
+	const FLinearColor AdBg[NumAds] = { FLinearColor(0.75f, 0.05f, 0.05f), FLinearColor(0.02f, 0.05f, 0.22f), FLinearColor(0.95f, 0.72f, 0.04f),
+		FLinearColor(0.03f, 0.03f, 0.035f), FLinearColor(0.04f, 0.32f, 0.12f), FLinearColor(0.92f, 0.38f, 0.03f), FLinearColor(0.9f, 0.9f, 0.9f),
+		FLinearColor(0.06f, 0.28f, 0.75f) };
+	const FLinearColor AdInk[NumAds] = { FLinearColor(0.95f, 0.95f, 0.95f), FLinearColor(0.95f, 0.78f, 0.1f), FLinearColor(0.03f, 0.03f, 0.04f),
+		FLinearColor(0.95f, 0.2f, 0.15f), FLinearColor(0.95f, 0.95f, 0.95f), FLinearColor(0.97f, 0.97f, 0.97f), FLinearColor(0.75f, 0.05f, 0.05f),
+		FLinearColor(0.95f, 0.95f, 0.95f) };
 }
 
 AGPMTrack::AGPMTrack()
@@ -122,51 +137,129 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		if (i > 0) Dist += FVector::Dist(P, Track->Points[i - 1]) / 100.f;
 		const float U = Dist / 10.f;   // UV : 1 répétition tous les 10 m
 
-		// Asphalte : 2 sommets par point (gauche = -R, droite = +R)
-		Road.Add(P - R * Half, Up, FVector2D(0, U), RoadC);
-		Road.Add(P + R * Half, Up, FVector2D(1, U), RoadC);
-		if (i > 0) { const int32 b = Road.V.Num() - 4; Road.Quad(b, b + 1, b + 2, b + 3); }
+		// Asphalte : 7 sommets en travers. Bords un peu poussiéreux (plus clairs), trajectoire idéale gommée (plus sombre,
+		// surtout dans les virages) comme sur un vrai circuit ; la couleur du sommet multiplie la photo d'asphalte.
+		{
+			const float Lim = FMath::Max(0.f, Half - 340.f);
+			const float Rc = FMath::Clamp((Track->RL.IsValidIndex(j) ? Track->RL[j] : 0.f) * 85.f, -Lim, Lim);
+			const float Bw = FMath::Clamp(Half - 80.f - FMath::Abs(Rc), 10.f, 260.f);
+			const float Cv = Track->Curvature.IsValidIndex(j) ? FMath::Abs(Track->Curvature[j]) : 0.f;
+			const float Rub = 0.8f - 0.12f * FMath::Clamp(Cv * 40.f, 0.f, 1.f);
+			const float Off[7] = { -Half, -Half + 70.f, Rc - Bw, Rc, Rc + Bw, Half - 70.f, Half };
+			const float Shade[7] = { 1.07f, 1.f, 1.f, Rub, 1.f, 1.f, 1.07f };
+			for (int32 k = 0; k < 7; ++k)
+				Road.Add(P + R * Off[k], Up, FVector2D(k / 6.f, U), FLinearColor(RoadC.R * Shade[k], RoadC.G * Shade[k], RoadC.B * Shade[k], 1.f));
+			if (i > 0) { const int32 b = Road.V.Num() - 14; for (int32 k = 0; k < 6; ++k) Road.Quad(b + k, b + k + 1, b + 7 + k, b + 8 + k); }
+		}
 
-		// Herbe de chaque côté, du bord de la piste jusqu'au mur (légèrement plus basse)
+		// Herbe de chaque côté, du bord de la piste jusqu'au mur (légèrement plus basse), bandes de tonte tous les 10 m
 		const float DL = WallDist(Track->WallLeft, j), DR = WallDist(Track->WallRight, j);
 		const FVector Low = -Up * 3.f;
-		const FLinearColor GrassC = bArt ? ((i / 5) % 2 ? FLinearColor(0.86f, 0.86f, 0.86f) : FLinearColor::White)
-			: ((i / 5) % 2 ? Grass : Grass * 1.18f);   // bandes de tonte tous les 10 m
+		const FLinearColor GrassC = bArt ? ((i / 5) % 2 ? FLinearColor(0.8f, 0.8f, 0.8f) : FLinearColor::White)
+			: ((i / 5) % 2 ? Grass : Grass * 1.18f);
 		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), GrassC);
 		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), GrassC);
 		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), GrassC);
 		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), GrassC);
 		if (i > 0) { const int32 b = Green.V.Num() - 8; Green.Quad(b, b + 1, b + 4, b + 5); Green.Quad(b + 2, b + 3, b + 6, b + 7); }
-
-		// Murs : faces tournées vers la piste, gauche et droite
-		const FVector WLb = P - R * DL, WRb = P + R * DR;
-		Walls.Add(WLb, R, FVector2D(0, U), Wall);
-		Walls.Add(WLb + Up * WallH, R, FVector2D(1, U), Wall);
-		const int32 PK = Track->PitK(j);
-		const bool bPitOpen = PK >= Track->PitE0 && PK <= Track->PitX1;   // mur droit ouvert le long de la voie des stands
-		Walls.Add(WRb + Up * (bPitOpen ? 0.f : WallH), -R, FVector2D(0, U), Wall);
-		Walls.Add(WRb, -R, FVector2D(1, U), Wall);
-		if (i > 0) { const int32 b = Walls.V.Num() - 8; Walls.Quad(b, b + 1, b + 4, b + 5); Walls.Quad(b + 2, b + 3, b + 6, b + 7); }
 	}
 
-	// Vibreurs : quads séparés là où la courbure dépasse le seuil, rouge et blanc alternés tous les 2 points (4 m)
+	// Murs : barrière de béton (soubassement sali, bandeau publicitaire de marques inventées, chaperon clair),
+	// grillage de sécurité au-dessus avec ses poteaux tous les 6 m. Un panneau tous les 24 m.
+	UMaterialInstanceDynamic* FenceM = bArt ? GPMArt::Make(TEXT("M_GPM_Fence"), this) : nullptr;
+	FSection Fence;
+	const float FenceH = 420.f;
+	for (int32 i = 0; i < N; ++i)
+	{
+		const int32 j = (i + 1) % N;
+		const int32 PKi = Track->PitK(i), PKj = Track->PitK(j);
+		const bool bPitOpen = (PKi >= Track->PitE0 && PKi <= Track->PitX1) || (PKj >= Track->PitE0 && PKj <= Track->PitX1);   // mur droit ouvert le long des stands
+		for (int32 Sd = 0; Sd < 2; ++Sd)
+		{
+			if (Sd == 1 && bPitOpen) continue;
+			const float Side = Sd ? 1.f : -1.f;
+			const TArray<float>& WD = Sd ? Track->WallRight : Track->WallLeft;
+			const FVector Ri = Right(i) * Side, Rj = Right(j) * Side;
+			const FVector Wi = Track->Points[i] + Ri * WallDist(WD, i), Wj = Track->Points[j] + Rj * WallDist(WD, j);
+			const FVector Nf = -(Ri + Rj).GetSafeNormal();   // face tournée vers la piste
+			const int32 Brand = (i / 12 + Sd * 3) % GPMTrackLook::NumAds;
+			const bool bLogo = (i % 12) >= 3 && (i % 12) <= 8;
+			auto Band = [&](FSection& S, float Z0, float Z1, const FLinearColor& Col, float Out, float U0, float U1)
+			{
+				const FVector Oi = Wi + Nf * Out, Oj = Wj + Nf * Out;
+				const int32 a = S.Add(Oi + Up * Z0, Nf, FVector2D(U0, Z0 / 100.f), Col);
+				S.Add(Oi + Up * Z1, Nf, FVector2D(U0, Z1 / 100.f), Col);
+				S.Add(Oj + Up * Z0, Nf, FVector2D(U1, Z0 / 100.f), Col);
+				S.Add(Oj + Up * Z1, Nf, FVector2D(U1, Z1 / 100.f), Col);
+				S.Quad(a, a + 1, a + 2, a + 3);
+			};
+			Band(Walls, 0.f, 16.f, GPMTrackLook::Dirty, 0.f, 0.f, 1.f);
+			Band(Walls, 16.f, 38.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+			Band(Walls, 38.f, 66.f, bLogo ? GPMTrackLook::AdInk[Brand] : GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+			Band(Walls, 66.f, 88.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+			Band(Walls, 88.f, WallH, GPMTrackLook::Cap, 0.f, 0.f, 1.f);
+			// chaperon : dessus de la barrière (30 cm de large)
+			{
+				const FVector Ti = Wi + Up * WallH, Tj = Wj + Up * WallH;
+				const int32 a = Walls.Add(Ti, Up, FVector2D(0, 0), GPMTrackLook::Cap);
+				Walls.Add(Ti - Nf * 30.f, Up, FVector2D(1, 0), GPMTrackLook::Cap);
+				Walls.Add(Tj, Up, FVector2D(0, 1), GPMTrackLook::Cap);
+				Walls.Add(Tj - Nf * 30.f, Up, FVector2D(1, 1), GPMTrackLook::Cap);
+				Walls.Quad(a, a + 1, a + 2, a + 3);
+			}
+			if (!FenceM) continue;
+			// grillage (mailles calculées par le matériau, UV en mètres) et sa lisse du haut
+			Band(Fence, WallH, FenceH, FLinearColor::White, -10.f, i * 2.f, (i + 1) * 2.f);
+			Band(Walls, FenceH - 6.f, FenceH, GPMTrackLook::Post, -8.f, 0.f, 1.f);
+			if (i % 3 == 0)
+			{
+				const FVector Tg = (Wj - Wi).GetSafeNormal() * 4.f, Base = Wi - Nf * 8.f + Up * WallH;
+				const int32 a = Walls.Add(Base - Tg, Nf, FVector2D(0, 0), GPMTrackLook::Post);
+				Walls.Add(Base - Tg + Up * (FenceH - WallH + 8.f), Nf, FVector2D(0, 1), GPMTrackLook::Post);
+				Walls.Add(Base + Tg, Nf, FVector2D(1, 0), GPMTrackLook::Post);
+				Walls.Add(Base + Tg + Up * (FenceH - WallH + 8.f), Nf, FVector2D(1, 1), GPMTrackLook::Post);
+				Walls.Quad(a, a + 1, a + 2, a + 3);
+			}
+		}
+	}
+
+	// Vibreurs : rouge et blanc alternés tous les 2 m là où la courbure dépasse le seuil, avec un léger dévers
+	// (1 cm au bord de la piste, 6 cm à l'extérieur) et un petit rebord, pour accrocher la lumière
 	for (int32 i = 0; i < N; ++i)
 	{
 		if (!Kerb(i)) continue;
 		const int32 j = (i + 1) % N;
-		const FLinearColor C = (i / 2) % 2 ? KerbRed : KerbWhite;
-		const FVector Lift = Up * 2.f;
+		const FLinearColor C = i % 2 ? KerbRed : KerbWhite;
 		for (float Side : { -1.f, 1.f })
 		{
-			const FVector A0 = Track->Points[i] + Right(i) * Side * Half + Lift, A1 = Track->Points[i] + Right(i) * Side * (Half + KerbW) + Lift;
-			const FVector B0 = Track->Points[j] + Right(j) * Side * Half + Lift, B1 = Track->Points[j] + Right(j) * Side * (Half + KerbW) + Lift;
-			const int32 a = Kerbs.Add(Side < 0 ? A1 : A0, Up, FVector2D(0, 0), C);
-			Kerbs.Add(Side < 0 ? A0 : A1, Up, FVector2D(1, 0), C);
-			Kerbs.Add(Side < 0 ? B1 : B0, Up, FVector2D(0, 1), C);
-			Kerbs.Add(Side < 0 ? B0 : B1, Up, FVector2D(1, 1), C);
+			const FVector Ri = Right(i) * Side, Rj = Right(j) * Side;
+			const FVector Nrm = (Up - (Ri + Rj).GetSafeNormal() * 0.045f).GetSafeNormal();
+			const FVector A0 = Track->Points[i] + Ri * Half + Up * 1.f, A1 = Track->Points[i] + Ri * (Half + KerbW) + Up * 6.f;
+			const FVector B0 = Track->Points[j] + Rj * Half + Up * 1.f, B1 = Track->Points[j] + Rj * (Half + KerbW) + Up * 6.f;
+			const int32 a = Kerbs.Add(A0, Nrm, FVector2D(0, 0), C);
+			Kerbs.Add(A1, Nrm, FVector2D(1, 0), C);
+			Kerbs.Add(B0, Nrm, FVector2D(0, 1), C);
+			Kerbs.Add(B1, Nrm, FVector2D(1, 1), C);
 			Kerbs.Quad(a, a + 1, a + 2, a + 3);
+			const FVector Ro = (Ri + Rj).GetSafeNormal();
+			const int32 e = Kerbs.Add(A1, Ro, FVector2D(0, 0), C);
+			Kerbs.Add(A1 - Up * 10.f, Ro, FVector2D(1, 0), C);
+			Kerbs.Add(B1, Ro, FVector2D(0, 1), C);
+			Kerbs.Add(B1 - Up * 10.f, Ro, FVector2D(1, 1), C);
+			Kerbs.Quad(e, e + 1, e + 2, e + 3);
 		}
 	}
+
+	// Lignes blanches peintes au bord de la piste (limites de piste), sur tout le tour
+	for (float Side : { -1.f, 1.f })
+		for (int32 i = 0; i <= N; ++i)
+		{
+			const int32 j = i % N;
+			const FVector P = Track->Points[j] + Up * 1.5f, R = Right(j) * Side;
+			Start.Add(P + R * (Half - 24.f), Up, FVector2D(0, i), KerbWhite);
+			Start.Add(P + R * (Half - 10.f), Up, FVector2D(1, i), KerbWhite);
+			if (i > 0) { const int32 b = Start.V.Num() - 4; Start.Quad(b, b + 1, b + 2, b + 3); }
+		}
 
 	// Voie des stands : bande d'asphalte de 8 m qui s'écarte de la piste (côté droit), plus des marques blanches aux boxes
 	for (int32 K = Track->PitE0; K <= Track->PitX1; ++K)
@@ -224,7 +317,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 			if (FVector::DotProduct(FVector::CrossProduct(B - A, C - A), S.N[S.I[k]]) > 0.f) Swap(S.I[k + 1], S.I[k + 2]);
 		}
 	};
-	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start, &Pit }) FixWinding(*S);
+	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start, &Pit, &Fence }) FixWinding(*S);
 
 	const TArray<FProcMeshTangent> NoTangents;
 	auto Make = [&](int32 Index, FSection& S, UMaterialInterface* M, bool bCollide)
@@ -239,6 +332,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	Make(4, Floor, bArt ? FloorM : GrassMaterial.Get(), true);
 	Make(5, Start, bArt ? KerbM : KerbMaterial.Get(), false);
 	Make(6, Pit, bArt ? RoadM : AsphaltMaterial.Get(), false);
+	if (FenceM && Fence.V.Num()) Make(7, Fence, FenceM, false);
 
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s construit : %d points, %d triangles"), *Track->Name, N,
 		(Road.I.Num() + Kerbs.I.Num() + Green.I.Num() + Walls.I.Num() + 6) / 3);

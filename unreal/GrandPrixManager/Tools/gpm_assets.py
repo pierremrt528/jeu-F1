@@ -5,7 +5,7 @@ import os
 import traceback
 import unreal
 
-VERSION = 2
+VERSION = 3
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(TOOLS)
 TEX_SRC = os.path.join(TOOLS, "Textures")
@@ -298,6 +298,45 @@ def make_clouds(tex, alpha):
     finish(mat)
 
 
+def make_fence():
+    """Grillage de sécurité au-dessus des murs : mailles carrées calculées (sans texture, UV en mètres), qui se fondent
+    en voile gris au loin pour éviter le moiré."""
+    mat = material("M_GPM_Fence")
+    setp(mat, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    setp(mat, "two_sided", True)
+    uv = node(mat, unreal.MaterialExpressionTextureCoordinate, -1500, 0, u_tiling=12.5, v_tiling=12.5)
+    fr = node(mat, unreal.MaterialExpressionFrac, -1350, 0)
+    link(uv, "", fr, "")
+    centred = node(mat, unreal.MaterialExpressionAdd, -1200, 0)
+    link(fr, "", centred, "A")
+    centred.set_editor_property("const_b", -0.5)
+    ab = node(mat, unreal.MaterialExpressionAbs, -1050, 0)
+    link(centred, "", ab, "")
+    mr = node(mat, unreal.MaterialExpressionComponentMask, -900, -60, r=True, g=False, b=False, a=False)
+    link(ab, "", mr, "")
+    mg = node(mat, unreal.MaterialExpressionComponentMask, -900, 60, r=False, g=True, b=False, a=False)
+    link(ab, "", mg, "")
+    mx = node(mat, unreal.MaterialExpressionMax, -750, 0)
+    link(mr, "", mx, "A")
+    link(mg, "", mx, "B")
+    edge = node(mat, unreal.MaterialExpressionAdd, -600, 0)
+    link(mx, "", edge, "A")
+    edge.set_editor_property("const_b", -0.38)
+    wire = mul(mat, edge, "", const(mat, 9.0, -600, 120), "", -450, 0)
+    wsat = node(mat, unreal.MaterialExpressionSaturate, -300, 0)
+    link(wire, "", wsat, "")
+    depth = node(mat, unreal.MaterialExpressionPixelDepth, -750, 260)
+    far = mul(mat, depth, "", const(mat, 1.0 / 2500.0, -750, 360), "", -600, 280)
+    fsat = node(mat, unreal.MaterialExpressionSaturate, -450, 280)
+    link(far, "", fsat, "")
+    op = lerp(mat, wsat, "", None, "", fsat, "", -150, 100, const_b=0.3)
+    output(mul(mat, op, "", scalar(mat, "Opacity", 0.85, -300, 400), "", 0, 150), "", MP.MP_OPACITY)
+    output(vector(mat, "Color", (0.16, 0.17, 0.18), -150, -200), "", MP.MP_BASE_COLOR)
+    output(scalar(mat, "Rough", 0.5, -150, -80), "", MP.MP_ROUGHNESS)
+    output(const(mat, 0.6, -150, -20), "", MP.MP_METALLIC)
+    finish(mat)
+
+
 def main():
     log("version %d, projet %s" % (VERSION, PROJECT))
     textures = {}
@@ -315,7 +354,7 @@ def main():
         except Exception:
             fail("texture %s : %s" % (asset_name, traceback.format_exc()))
     for fn, args in [(make_lit, ()), (make_ground, (textures.get("T_Asphalt"), textures.get("T_Asphalt_N"))), (make_inst, ()),
-                     (make_sky, ()), (make_clouds, (textures.get("T_Clouds"), textures.get("T_CloudsA")))]:
+                     (make_sky, ()), (make_clouds, (textures.get("T_Clouds"), textures.get("T_CloudsA"))), (make_fence, ())]:
         try:
             fn(*args)
         except Exception:
