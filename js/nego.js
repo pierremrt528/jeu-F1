@@ -4,6 +4,7 @@
 // Pour un pilote d'une écurie rivale, il faut d'abord s'entendre avec l'écurie sur une indemnité de
 // transfert. Signature avec une petite cinématique. Fenêtre modale #nego.
 import { initials } from './ui.js';
+import { sendMail } from './mail.js';
 import { startScene } from './cine.js';
 import { setCast } from './showroom.js';
 import { SKINS, HAIR_COLS } from './pilot3d.js';
@@ -143,6 +144,10 @@ function talks(sub, ctx, cb) {
   if (store.win !== ctx.win) { store.win = ctx.win; store.st = {}; }
   store.st = store.st || {};
   const p = profile(sub, ctx), drv = sub.kind === 'drv';
+  const broke = club => sendMail({ tag: 'mercato', from: club || (drv && !sub.sponsor ? `Agent de ${sub.name}` : sub.name), subject: `Discussions rompues : ${sub.name}`,
+    body: club ? `${club} met fin aux discussions sur le transfert de ${sub.name}.` : `${drv ? 'Mon client' : 'Je'} ne donne${drv ? '' : 's'} pas suite pour le moment.`, });
+  const signedMail = k => sendMail({ tag: 'mercato', from: drv ? 'Cellule recrutement' : 'Ressources humaines', subject: `${sub.cur ? 'Prolongation' : 'Contrat signé'} : ${sub.name}`,
+    body: `${sub.name} ${sub.cur ? 'prolonge chez' : 'rejoint'} ${ctx.team}.<br>Salaire : <b>${k.sal} M€</b> par saison · ${k.years} saison${k.years > 1 ? 's' : ''}${drv && k.role ? ` · statut ${ROLES[k.role] || k.role}` : ''}${k.bonus ? ` · prime à la signature ${k.bonus} M€` : ''}${k.win ? ` · ${k.win} M€ par victoire` : ''}${k.pod ? ` · ${k.pod} M€ par podium` : ''}${k.clause ? ` · clause libératoire ${k.clause} M€` : ''}` });
   let st = store.st[sub.key];
   const say = (who, t) => { st.log.push([who, t]); if (st.log.length > 12) st.log.shift(); };
   const ask = () => askOf(p, st.int, ctx), thr = () => thrOf(p, st.int, ctx);
@@ -231,20 +236,20 @@ function talks(sub, ctx, cb) {
     if (s >= T) { st.deal = { ...o }; st.counter = null; say('a', any(V.yes, sub.key)); }
     else if (s < 0.75 * T) {
       st.pat -= 2; st.int = Math.max(5, st.int - 8);
-      if (st.pat <= 0) { st.off = true; say('a', V.off); } else say('a', any(V.low, sub.key));
+      if (st.pat <= 0) { st.off = true; say('a', V.off); broke(); } else say('a', any(V.low, sub.key));
     } else {
       st.pat -= 1;
-      if (st.pat <= 0) { st.off = true; say('a', V.off); } else counter();
+      if (st.pat <= 0) { st.off = true; say('a', V.off); broke(); } else counter();
     }
   }
   function offerFee() {
     const c = st.club;
     say('m', `Je propose ${fmtM(fee)} M€ d’indemnité.`);
     if (fee >= c.min - 1e-6) { c.ok = true; st.fee = fee; say('c', TXT.club.yes(sub.club)); open(); o = { ...st.dem }; }
-    else if (fee < 0.6 * c.f0) { c.pat -= 2; if (c.pat <= 0) { st.off = true; say('c', TXT.club.off(sub.club)); } else say('c', TXT.club.low(sub.name)); }
+    else if (fee < 0.6 * c.f0) { c.pat -= 2; if (c.pat <= 0) { st.off = true; say('c', TXT.club.off(sub.club)); broke(sub.club); } else say('c', TXT.club.low(sub.name)); }
     else {
       c.pat -= 1;
-      if (c.pat <= 0) { st.off = true; say('c', TXT.club.off(sub.club)); }
+      if (c.pat <= 0) { st.off = true; say('c', TXT.club.off(sub.club)); broke(sub.club); }
       else { c.ask = Math.max(up(c.min, fstep), up((fee + c.ask) / 2, fstep)); fee = c.ask; say('c', any(TXT.club.counter, sub.key)(c.ask)); }
     }
   }
@@ -265,7 +270,7 @@ function talks(sub, ctx, cb) {
     // signature : poignée de main et photo devant la voiture (3D), puis la carte du contrat
     const s = el.querySelector('#nSign'); if (s) s.onclick = () => {
       const k = { ...st.deal, clause: drv ? r1(CLAUSES[st.deal.cl || 'none'][1] * st.deal.sal) : 0 };
-      const card = () => signing(sub, k, ctx, () => { st.done = true; ctx.save?.(); close(); cb.done(k, st.fee || 0); });
+      const card = () => signing(sub, k, ctx, () => { signedMail(k); st.done = true; ctx.save?.(); close(); cb.done(k, st.fee || 0); });
       close(); setCast(castOf(sub));
       startScene('sign', { top: sub.cur ? 'Prolongation' : 'Signature officielle', name: sub.name, sub: `${sub.cur ? 'prolonge chez' : 'rejoint'} ${ctx.team} · photo devant la voiture` }, card);
     };

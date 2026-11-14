@@ -2,6 +2,7 @@
 // réponses à choix avec bonus/malus (moral, budget, réputation, performance à la prochaine course).
 import { team, applyFx, FXNAMES } from './team.js';
 import { TEAMS } from './data.js';
+import { sendMail } from './mail.js';
 
 const OUTLETS = [
   ['Claire Fontanel', 'Le Paddock', '#e5483b'], ['Hugo Marchetti', 'Vitesse Hebdo', '#3aa0ff'],
@@ -399,6 +400,7 @@ export const fxText = fx => {
 // Écran : une question à la fois ; onDone appelé à la fin
 export function runPress(el, questions, onDone) {
   let k = 0;
+  const log = [];
   const step = () => {
     const q = questions[k];
     el.querySelector('#pressBody').innerHTML = `
@@ -408,6 +410,7 @@ export function runPress(el, questions, onDone) {
     el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
       const fx = q.answers[+b.dataset.a][1];
       applyFx(fx);
+      log.push(`<b>${q.who[0]}</b> (${q.who[1]}) : « ${q.text} »<br>↳ ${q.answers[+b.dataset.a][0]}${fxText(fx) ? `<br><small>${fxText(fx)}</small>` : ''}`);
       el.querySelectorAll('[data-a]').forEach(x => { x.disabled = true; if (x !== b) x.classList.add('off'); });
       b.classList.add('chosen');
       b.insertAdjacentHTML('beforeend', `<div class="pfx">${fxText(fx)}</div>`);
@@ -416,6 +419,7 @@ export function runPress(el, questions, onDone) {
     });
   };
   const finish = () => {
+    if (log.length) sendMail({ tag: 'presse', from: 'Service de presse', subject: `Revue de presse : ${log.length} question${log.length > 1 ? 's' : ''} après la course`, body: log.join('<br><br>') + (team.boostTxt ? `<br><br>Pour la prochaine course : <b>${team.boostTxt}</b>` : '') });
     el.querySelector('#pressBody').innerHTML = `<p class="pend">Fin de la conférence de presse.</p>` +
       (team.boostTxt ? `<p class="pend">Pour la prochaine course : <b>${team.boostTxt}</b></p>` : '') +
       `<button class="main" id="pressDone">Continuer</button>`;
