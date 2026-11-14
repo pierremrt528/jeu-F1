@@ -1,4 +1,5 @@
 #include "GPMHUD.h"
+#include "GrandPrixManager.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
 #include "GPMSeason.h"
@@ -20,7 +21,8 @@
 
 namespace
 {
-	const FLinearColor HudPanel(0.f, 0.f, 0.f, 0.45f);
+	const FLinearColor HudPanel(0.0030f, 0.0040f, 0.0070f, 0.88f);   // #0A0D14 de la charte
+	const FLinearColor HudDim(0.254f, 0.296f, 0.392f, 1.f);          // #8A94A8
 }
 
 AGPMHUD::AGPMHUD()
@@ -40,8 +42,9 @@ void AGPMHUD::Layout(float W, float H)
 	Gas = { FVector2D(W - M - B, Y - B * 0.35f), FVector2D(B, B * 1.35f), TEXT("GAZ") };
 	Brake = { FVector2D(W - M * 2 - B * 2, Y), FVector2D(B, B), TEXT("FREIN") };
 	Box = { FVector2D((W - B * 1.3f) / 2, H - M - B * 0.5f), FVector2D(B * 1.3f, B * 0.5f), TEXT("STAND") };
-	// radio du muret : 3 boutons à gauche, au-dessus des flèches
-	for (int32 k = 0; k < 3; ++k) RadioBtn[k] = { FVector2D(M, H * 0.5f + k * 30.f * Scale), FVector2D(152.f * Scale, 27.f * Scale), nullptr };
+	// radio du muret : 3 boutons dans la colonne de droite, sous le chrono et les écarts
+	const float RW = 176.f * Scale;
+	for (int32 k = 0; k < 3; ++k) RadioBtn[k] = { FVector2D(W - 10.f * Scale - RW, (142.f + k * 22.f) * Scale), FVector2D(RW, 19.f * Scale), nullptr };
 }
 
 void AGPMHUD::ReadTouches(AGPMCar* Car)
@@ -79,8 +82,8 @@ void AGPMHUD::ReadTouches(AGPMCar* Car)
 
 void AGPMHUD::DrawButton(const FButton& B, bool bDown)
 {
-	DrawRect(bDown ? FLinearColor(1, 1, 1, 0.32f) : FLinearColor(0.02f, 0.025f, 0.045f, 0.45f), B.Pos.X, B.Pos.Y, B.Size.X, B.Size.Y);
-	DrawRect(FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, bDown ? 1.f : 0.6f), B.Pos.X, B.Pos.Y + B.Size.Y - 3.f * Scale, B.Size.X, 3.f * Scale);
+	Panel(B.Pos.X, B.Pos.Y, B.Size.X, B.Size.Y, bDown ? FLinearColor(1.f, 1.f, 1.f, 0.3f) : FLinearColor(HudPanel.R, HudPanel.G, HudPanel.B, 0.5f), 10.f);
+	DrawRect(FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, bDown ? 1.f : 0.7f), B.Pos.X, B.Pos.Y + B.Size.Y - 3.f * Scale, B.Size.X, 3.f * Scale);
 	const FVector2D Sz = InkSize(B.Label, 0, 16.f);
 	Ink(B.Label, B.Pos.X + (B.Size.X - Sz.X) / 2, B.Pos.Y + (B.Size.Y - Sz.Y) / 2, 0, 16.f, FLinearColor(1, 1, 1, 0.9f));
 }
@@ -98,6 +101,15 @@ void AGPMHUD::Slab(float X, float Y, float W, float H, FLinearColor Col)
 	DrawTexture(Tex, X + W - Cap, Y, Cap, H, 1.f - Cu, 0.f, Cu, 1.f, Col);
 }
 
+void AGPMHUD::Panel(float X, float Y, float W, float H, FLinearColor Col, float Cut)
+{
+	// trois morceaux sans recouvrement (la transparence reste uniforme) : corps, bande de droite, coin en triangle
+	const float C = FMath::Min(Cut * Scale, FMath::Min(W, H) * 0.5f);
+	DrawRect(Col, X, Y, W - C, H);
+	DrawRect(Col, X + W - C, Y + C, C, H - C);
+	Paint(6, X + W - C, Y, C, C, Col);
+}
+
 void AGPMHUD::Paint(int32 Which, float X, float Y, float W, float H, FLinearColor Col)
 {
 	if (UTexture* Tex = GPMUIStyle::MaskTex(Which)) DrawTexture(Tex, X, Y, W, H, 0.f, 0.f, 1.f, 1.f, Col);
@@ -108,7 +120,14 @@ void AGPMHUD::Paint(int32 Which, float X, float Y, float W, float H, FLinearColo
 // taille en points comme dans les écrans, graisse simulée par un second passage décalé, ombre légère pour la lisibilité
 namespace GPMHudInk
 {
-	UFont* FontOf(int32 Kind) { return GEngine ? (Kind <= 1 ? GEngine->GetLargeFont() : GEngine->GetMediumFont()) : nullptr; }
+	// polices de la charte (Titillium Web, Rajdhani pour les chiffres), sinon celles du moteur
+	int32 FaceOf(int32 Kind) { return Kind == 0 ? 0 : Kind == 1 || Kind == 2 ? 1 : Kind == 4 ? 4 : 5; }
+	UFont* FontOf(int32 Kind)
+	{
+		if (UFont* F = GPMUIStyle::HudFont(FaceOf(Kind))) return F;
+		return GEngine ? (Kind <= 1 || Kind == 4 ? GEngine->GetLargeFont() : GEngine->GetMediumFont()) : nullptr;
+	}
+	bool RealFont(int32 Kind) { return GPMUIStyle::HudFont(FaceOf(Kind)) != nullptr; }
 	float ScaleOf(const UFont* F, float Px) { return Px / FMath::Max(1.f, F ? F->GetMaxCharHeight() : 16.f); }
 }
 
@@ -118,7 +137,7 @@ FVector2D AGPMHUD::InkSize(const FString& Text, int32 Kind, float Size) const
 	const UFont* F = GPMHudInk::FontOf(Kind);
 	if (!F || Text.IsEmpty()) return FVector2D(Text.Len() * Px * 0.5f, Px);
 	const float K = GPMHudInk::ScaleOf(F, Px);
-	return FVector2D(F->GetStringSize(*Text) * K + (Kind == 0 ? Px * 0.06f : 0.f), F->GetStringHeightSize(*Text) * K);
+	return FVector2D(F->GetStringSize(*Text) * K + (Kind == 0 && !GPMHudInk::RealFont(Kind) ? Px * 0.06f : 0.f), F->GetStringHeightSize(*Text) * K);
 }
 
 void AGPMHUD::Ink(const FString& Text, float X, float Y, int32 Kind, float Size, FLinearColor Col, float Align)
@@ -128,7 +147,8 @@ void AGPMHUD::Ink(const FString& Text, float X, float Y, int32 Kind, float Size,
 	if (!F) return;
 	const float Px = Size * Scale * 1.5f, K = GPMHudInk::ScaleOf(F, Px);
 	const float Sx = Align > 0.f ? X - InkSize(Text, Kind, Size).X * Align : X;
-	const float Bold = Kind == 0 ? Px * 0.06f : Kind == 1 ? Px * 0.035f : 0.f;
+	// graisse simulée seulement avec la police du moteur (les polices de la charte ont leurs vraies graisses)
+	const float Bold = GPMHudInk::RealFont(Kind) ? 0.f : Kind == 0 ? Px * 0.06f : Kind == 1 ? Px * 0.035f : 0.f;
 	FCanvasTextItem Item(FVector2D(Sx, Y), FText::FromString(Text), F, Col);
 	Item.Scale = FVector2D(K, K);
 	Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.45f * Col.A), FVector2D(1.f, 1.f) * FMath::Max(1.f, Px * 0.05f));
@@ -139,6 +159,11 @@ void AGPMHUD::Ink(const FString& Text, float X, float Y, int32 Kind, float Size,
 		Item.Position = FVector2D(Sx + Bold, Y);
 		Canvas->DrawItem(Item);
 	}
+}
+
+void AGPMHUD::InkV(const FString& Text, float X, float Y, float BoxH, int32 Kind, float Size, FLinearColor Col, float Align)
+{
+	Ink(Text, X, Y + (BoxH - InkSize(Text, Kind, Size).Y) * 0.5f, Kind, Size, Col, Align);
 }
 
 void AGPMHUD::TyreIcon(TCHAR Tyre, float Cx, float Cy, float Rad)
@@ -169,21 +194,22 @@ void AGPMHUD::DrawMiniMap(AGPMCar* Car, FVector2D O, float Size)
 	for (int32 i = 0; i < T->WX.Num(); i += 8) { MinX = FMath::Min(MinX, T->WX[i]); MaxX = FMath::Max(MaxX, T->WX[i]); MinZ = FMath::Min(MinZ, T->WZ[i]); MaxZ = FMath::Max(MaxZ, T->WZ[i]); }
 	const float K = Size / FMath::Max(MaxX - MinX, MaxZ - MinZ);
 	auto P = [&](float X, float Z) { return FVector2D(O.X + (X - MinX) * K + (Size - (MaxX - MinX) * K) / 2, O.Y + (Z - MinZ) * K + (Size - (MaxZ - MinZ) * K) / 2); };
-	// fond en verre fumé avec un filet de la couleur de l'écurie, halo sous le tracé
-	DrawRect(HudPanel, O.X - 8 * Scale, O.Y - 8 * Scale, Size + 16 * Scale, Size + 16 * Scale);
-	DrawRect(HudAcc, O.X - 8 * Scale, O.Y - 8 * Scale, Size + 16 * Scale, 2.f * Scale);
+	// panneau de la charte (coin coupé), nom du circuit et longueur en haut, tracé clair bordé de sombre
+	Panel(O.X - 8 * Scale, O.Y - 20 * Scale, Size + 16 * Scale, Size + 28 * Scale, HudPanel);
+	Ink(FString::Printf(TEXT("%s · %s KM"), *GPMUp(T->Name), *FString::Printf(TEXT("%.2f"), T->Length / 1000.f).Replace(TEXT("."), TEXT(","))),
+		O.X - 1 * Scale, O.Y - 16 * Scale, 2, 5.f, HudDim);
 	const int32 N = T->WX.Num(), Step = 8;
 	for (int32 i = 0; i < N; i += Step)
 	{
 		const int32 j = (i + Step) % N;
 		const FVector2D A = P(T->WX[i], T->WZ[i]), B = P(T->WX[j], T->WZ[j]);
-		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, 0.35f), 6.f * Scale);
+		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(0.02f, 0.025f, 0.04f, 1.f), 5.f * Scale);
 	}
 	for (int32 i = 0; i < N; i += Step)
 	{
 		const int32 j = (i + Step) % N;
 		const FVector2D A = P(T->WX[i], T->WZ[i]), B = P(T->WX[j], T->WZ[j]);
-		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(1, 1, 1, 0.92f), 2.f * Scale);
+		DrawLine(A.X, A.Y, B.X, B.Y, FLinearColor(0.75f, 0.78f, 0.84f, 1.f), 2.5f * Scale);
 	}
 	// ligne de départ, voitures (couleur de l'écurie), le joueur en grand avec un liseré blanc
 	const FVector2D S0 = P(T->WX[0], T->WZ[0]);
@@ -192,7 +218,8 @@ void AGPMHUD::DrawMiniMap(AGPMCar* Car, FVector2D O, float Size)
 		if (Other && Other != Car)
 		{
 			const FVector2D Q = P(Other->X, Other->Z);
-			Paint(4, Q.X - 3.f * Scale, Q.Y - 3.f * Scale, 6.f * Scale, 6.f * Scale, Other->TeamColor);
+			Paint(4, Q.X - 3.5f * Scale, Q.Y - 3.5f * Scale, 7.f * Scale, 7.f * Scale, FLinearColor(0.f, 0.f, 0.f, 0.8f));
+			Paint(4, Q.X - 2.6f * Scale, Q.Y - 2.6f * Scale, 5.2f * Scale, 5.2f * Scale, Other->TeamColor);
 		}
 	const FVector2D C = P(Car->X, Car->Z);
 	Paint(3, C.X - 9.f * Scale, C.Y - 9.f * Scale, 18.f * Scale, 18.f * Scale, FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, 0.7f));

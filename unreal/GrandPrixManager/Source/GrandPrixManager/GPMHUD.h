@@ -48,32 +48,65 @@ private:
 	/** Nom affiché d'un pilote (« Toi » → le nom choisi à la création). */
 	FString Nm(const FString& Driver) const;
 
-	// Course (GPMHUDRace.cpp) : tour des positions façon télé, compte-tours, pause
+	// Course (GPMHUDRace.cpp) : habillage « diffusion télé » de la maquette Figma (classement des 20 avec écarts et pneus,
+	// chrono et secteurs, écarts devant / derrière, compte-tours, pneus et essence, mini-carte, radio), pause
 	void DrawRace(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
-	void DrawTower(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
+	float DrawTower(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
+	void DrawLapPanel(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y, float PW);
+	void DrawGaps(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y, float PW);
+	void DrawTyrePanel(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y, float PW);
 	void DrawCluster(class AGPMCar* Car, float W, float H);
 	void DrawPause(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	void SetPaused(bool bPause);
 	FString Code3(const FString& Driver) const;
 	bool bShowFps = false;
-	// course complète : pluie à l'écran, radio du muret (3 boutons), secteurs des qualifications, météo
+	bool bGapLeader = false;   // classement : intervalle avec la voiture de devant (par défaut) ou écart avec le leader (touche G)
+	// course complète : pluie à l'écran, radio du muret (3 boutons), météo
 	void DrawRain(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	void DrawRadioPad(class AGPMGameMode* GM, class AGPMCar* Car);
-	void DrawRadioMsg(const FString& Msg, float W, float Y);
-	void DrawQualiPanel(class AGPMGameMode* GM, class AGPMCar* Car, float X, float Y);
+	float DrawRadioMsg(const FString& Msg, float W, float Y);
 	void DrawWeatherChip(class AGPMGameMode* GM, float RightX, float Y);
-	void DrawDamage(class AGPMCar* Car, float X, float Y, float H);
 	FButton RadioBtn[3];
 	bool bRadioDown[3] = { false, false, false };
 	bool bRadioWas[3] = { false, false, false };
 
+	// Chronométrage suivi par le HUD : points de passage (écarts en temps), secteurs de chaque voiture, delta en direct du joueur
+	struct FCarTiming
+	{
+		float Mark[128];
+		int32 MarkId[128];
+		int32 LastMark = -1;
+		int32 Sec = -1, SecLap = -1;
+		float SecAt[2] = { 0.f, 0.f };
+		float Cur[3] = { 0.f, 0.f, 0.f }, Last[3] = { 0.f, 0.f, 0.f }, PB[3] = { 0.f, 0.f, 0.f };
+		int32 CurCol[3] = { 0, 0, 0 }, LastCol[3] = { 0, 0, 0 };   // 1 meilleur de la séance, 2 record perso, 3 plus lent
+		FCarTiming() { for (int32 k = 0; k < 128; ++k) { Mark[k] = 0.f; MarkId[k] = -1; } }
+	};
+	TMap<const class AGPMCar*, FCarTiming> Timing;
+	float SesBest[3] = { 0.f, 0.f, 0.f };
+	float LastRaceTime = 0.f, FastestLap = 0.f;
+	const class AGPMCar* FastestCar = nullptr;
+	FString FastestCode;
+	TArray<float> CurProf, BestProf;   // temps du tour du joueur à 80 points du tour (delta en direct avec son meilleur tour)
+	int32 ProfLap = -1, StintStops = -1, StintLap0 = 1;
+	float StintFuel = 0.f;
+	FString AlertTxt;
+	float AlertT = 0.f;
+	void UpdateTiming(class AGPMGameMode* GM, class AGPMCar* Car, float Dt);
+	float TimeGap(const class AGPMCar* Ahead, const class AGPMCar* Behind, float PerLap, float LapEst) const;
+
+	// Panneau sombre à coin coupé en haut à droite (charte de la maquette)
+	void Panel(float X, float Y, float W, float H, FLinearColor Col, float Cut = 6.f);
+
 	// Charte des écrans dans le HUD : bandeaux penchés, masques (dégradé, halo, disque), police de l'interface
 	void Slab(float X, float Y, float W, float H, FLinearColor Col);
-	/** Masque de GPMUIStyle::MaskTex (1 trait penché, 2 dégradé, 3 halo, 4 disque, 5 dégradé vers le bas). */
+	/** Masque de GPMUIStyle::MaskTex (1 trait penché, 2 dégradé, 3 halo, 4 disque, 5 dégradé vers le bas, 6 coin coupé, 7 trapèze). */
 	void Paint(int32 Which, float X, float Y, float W, float H, FLinearColor Col);
-	/** Texte en police de l'interface (0 très gras italique, 1 gras italique, 2 étiquette, 3 fin) ; Align 0 gauche, 0,5 centré, 1 droite. */
+	/** Texte en police de l'interface (0 titre, 1 gras, 2 étiquette, 3 demi-gras, 4 chiffres Rajdhani) ; Align 0 gauche, 0,5 centré, 1 droite. */
 	void Ink(const FString& Text, float X, float Y, int32 Kind, float Size, FLinearColor Col, float Align = 0.f);
 	FVector2D InkSize(const FString& Text, int32 Kind, float Size) const;
+	/** Texte centré verticalement dans une bande de hauteur BoxH (pixels). */
+	void InkV(const FString& Text, float X, float Y, float BoxH, int32 Kind, float Size, FLinearColor Col, float Align = 0.f);
 	/** Pneu : anneau de la couleur de la gomme. */
 	void TyreIcon(TCHAR Tyre, float Cx, float Cy, float Rad);
 	FLinearColor HudAcc = FLinearColor(0.85f, 0.12f, 0.12f, 1.f);   // couleur de l'écurie du joueur

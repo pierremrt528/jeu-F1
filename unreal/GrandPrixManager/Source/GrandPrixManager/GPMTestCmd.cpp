@@ -8,6 +8,9 @@
 #include "GPMFactory.h"
 #include "GPMCar.h"
 #include "GPMTypes.h"
+#include "GPMHUD.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "HAL/IConsoleManager.h"
@@ -203,5 +206,62 @@ static FAutoConsoleCommandWithWorldAndArgs GDecorCmd(TEXT("GPM.TestDecor"), TEXT
 				St->Step++; St->T = 0.f;
 			}
 			else if (St->T >= 1.5f) { GPMTest::Capture(FString::Printf(TEXT("D%d_%d"), Idx, Spot)); St->Step++; }
+		}), 0.25f, true);
+	}));
+
+// HUD de course façon télé : course solo en pilote automatique, captures au départ, au 1er et au 2e tour, en tactile et en pause ;
+// « GPM.TestHud q » : qualifications (tour de lancement puis tour lancé)
+static FAutoConsoleCommandWithWorldAndArgs GHudCmd(TEXT("GPM.TestHud"), TEXT("Course solo en pilote automatique avec captures du HUD (Saved/Captures/H*.png) ; « q » : qualifications."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (!World) return;
+		const bool bQ = Args.Num() > 0 && Args[0] == TEXT("q");
+		TWeakObjectPtr<UWorld> W = World;
+		struct FState { int32 Step = 0; float T = 0.f; };
+		TSharedPtr<FState> St = MakeShared<FState>();
+		FTimerHandle H0;
+		World->GetTimerManager().SetTimer(H0, FTimerDelegate::CreateLambda([W, bQ]()
+		{
+			if (AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr) { GM->bSoloQuali = bQ; GM->SoloLaps = 5; GM->StartSolo(); }
+		}), 6.f, false);
+		FTimerHandle H;
+		World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W, St, bQ]()
+		{
+			AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr;
+			AGPMCar* C = GM ? GM->PlayerCar() : nullptr;
+			if (!C || !C->GetTrack()) return;
+			if (GM->Phase == AGPMGameMode::EPhase::Tuning) { GM->StartQuali(); return; }
+			if (GM->Phase == AGPMGameMode::EPhase::Prerace) { GM->Go(false); return; }
+			if (GM->Phase == AGPMGameMode::EPhase::Intro) { GM->EndCine(); return; }
+			const bool bOn = GM->Phase == AGPMGameMode::EPhase::Quali || GM->Phase == AGPMGameMode::EPhase::Lights || GM->Phase == AGPMGameMode::EPhase::Race;
+			if (!bOn) return;
+			C->bPlayerControlled = false;   // pilote automatique
+			St->T += 0.25f;
+			const int32 N = C->GetTrack()->WX.Num();
+			APlayerController* PC = W->GetFirstPlayerController();
+			AGPMHUD* Hud = PC ? Cast<AGPMHUD>(PC->GetHUD()) : nullptr;
+			auto Shot = [St](const TCHAR* Name) { GPMTest::Capture(Name); St->Step++; St->T = 0.f; };
+			if (bQ)
+			{
+				if (St->Step == 0 && St->T >= 4.f) Shot(TEXT("HQ1_Lancement"));
+				else if (St->Step == 1 && C->Lap >= 1 && C->Idx > N / 2) Shot(TEXT("HQ2_TourLance"));
+				else if (St->Step == 2 && C->Lap >= 1 && C->Idx > (N * 9) / 10) Shot(TEXT("HQ3_FinDuTour"));
+				return;
+			}
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Lights && GM->LightsOn() >= 3) Shot(TEXT("H1_Feux"));
+			else if (St->Step == 1 && GM->Phase == AGPMGameMode::EPhase::Race && GM->Clock > 6.f) Shot(TEXT("H2_Depart"));
+			else if (St->Step == 2 && C->Lap >= 2 && C->Idx > N / 2)
+			{
+				UE_LOG(LogGPM, Display, TEXT("TestHud : P%d, tour %d, meilleur %.3f, dernier %.3f"), GM->PositionOf(C), C->Lap, C->BestLap, C->LastLap);
+				Shot(TEXT("H3_Tour2"));
+			}
+			else if (St->Step == 3 && C->Lap >= 3 && C->Idx > N / 3) { if (Hud) Hud->bShowTouch = true; St->Step++; St->T = 0.f; }
+			else if (St->Step == 4 && St->T >= 0.5f) Shot(TEXT("H4_Tactile"));
+			else if (St->Step == 5 && St->T >= 0.5f)
+			{
+				if (Hud) Hud->bShowTouch = false;
+				UGameplayStatics::SetGamePaused(W.Get(), true);
+				Shot(TEXT("H5_Pause"));
+			}
 		}), 0.25f, true);
 	}));

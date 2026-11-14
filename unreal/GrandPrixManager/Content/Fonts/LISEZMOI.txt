@@ -1,0 +1,5 @@
+Polices de l'interface (Google Fonts, licence SIL Open Font License 1.1, voir OFL-*.txt) :
+- Titillium Web (Accademia di Belle Arti di Urbino) : textes, titres, étiquettes.
+- Rajdhani (Indian Type Foundry) : chiffres (chronos, écarts, points, vitesse).
+Chargées au lancement depuis ce dossier (GPMUIStyle::Face pour les écrans, GPMUIStyle::HudFont pour le HUD de course) ;
+si un fichier manque, le jeu revient à la police du moteur.

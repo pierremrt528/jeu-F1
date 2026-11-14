@@ -686,11 +686,15 @@ TSharedRef<SWidget> FGPMUI::InboxPanel()
 		++NShown;
 		const bool bOpen = k == SelMail;
 		const FLinearColor Col = Tags[T].Col;
-		const FLinearColor Bg = bOpen ? FLinearColor(Col.R, Col.G, Col.B, 0.26f) : FLinearColor(1.f, 1.f, 1.f, M.bRead ? 0.035f : 0.09f);
+		// maquette : fond plus clair et pastille de la couleur du type pour un message non lu, trait discret une fois lu
+		const FLinearColor Bg = bOpen ? FLinearColor(Col.R, Col.G, Col.B, 0.26f) : M.bRead ? CPanel : CCardHi;
+		TSharedRef<SWidget> Mark = M.bRead
+			? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(3.f).HeightOverride(30.f)[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(Col.R, Col.G, Col.B, 0.35f)) ])
+			: Dot(Col, 10.f);
 		TSharedRef<SWidget> Row = SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))
 			[
-				SNew(SBox).WidthOverride(7.f).HeightOverride(34.f)[ Layer(GPMUIStyle::Tick(), M.bRead ? FLinearColor(Col.R, Col.G, Col.B, 0.35f) : Col) ]
+				SNew(SBox).WidthOverride(10.f).HAlign(HAlign_Center).VAlign(VAlign_Center)[ Mark ]
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
@@ -702,7 +706,7 @@ TSharedRef<SWidget> FGPMUI::InboxPanel()
 				]
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(M.Subject)).Font(FCoreStyle::GetDefaultFontStyle(M.bRead ? "Regular" : "Bold", 14))
+					SNew(STextBlock).Text(FText::FromString(M.Subject)).Font(GPMUIStyle::Face(M.bRead ? 3 : 1, 14))
 						.ColorAndOpacity(FSlateColor(M.bRead ? CDim : CText)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 				]
 			]

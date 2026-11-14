@@ -13,6 +13,7 @@ class SBox;
 class UTexture;
 struct FSlateBrush;
 struct FButtonStyle;
+class UFont;
 
 /** Pinceaux arrondis et styles de boutons partagés (GPMUI.cpp). */
 namespace GPMUIStyle
@@ -26,32 +27,40 @@ namespace GPMUIStyle
 	const FSlateBrush* Ramp(int32 Dir);    // dégradé : 0 opaque à gauche, 1 opaque en bas, 2 opaque à droite, 3 opaque en haut
 	const FSlateBrush* Glow();             // halo rond
 	const FButtonStyle* SlantOf(const FLinearColor& C, const FLinearColor& Hover);
-	/** Polices : 0 très gras italique (titres), 1 gras italique, 2 étiquette condensée espacée, 3 fin. */
+	/** Polices (Content/Fonts, repli sur celle du moteur) : 0 titres (Titillium Web Black), 1 gras, 2 étiquette espacée,
+	 *  3 texte courant, 4 chiffres (Rajdhani Bold : chronos, écarts, points), 5 demi-gras. */
 	FSlateFontInfo Face(int32 Kind, int32 Size);
+	/** Même police pour le HUD de course dessiné (Canvas) ; nullptr si le fichier manque. */
+	UFont* HudFont(int32 Kind);
+	/** Panneau à coin coupé en haut à droite (charte « diffusion télé »). */
+	const FSlateBrush* Cut();
 	FString Abbr(const FString& TeamName);   // sigle de 3 lettres de l'écurie (badge)
 	const FSlateBrush* Disc();             // disque plein (voyants, icônes)
 	/** Textures des masques pour le HUD dessiné (Canvas) : 0 penché (petit, pour les bandeaux du HUD), 1 trait penché,
-	 *  2 dégradé opaque à gauche, 3 halo, 4 disque, 5 dégradé opaque en bas. */
+	 *  2 dégradé opaque à gauche, 3 halo, 4 disque, 5 dégradé opaque en bas, 6 coin coupé (triangle), 7 trapèze. */
 	UTexture* MaskTex(int32 Which);
 }
 
 /** Couleurs communes des écrans (thème sombre ; l'accent suit la couleur principale de l'écurie). */
 namespace GPMUIColor
 {
-	inline const FLinearColor CPageBg(0.012f, 0.016f, 0.03f, 0.9f);
-	inline const FLinearColor CRoomBg(0.012f, 0.016f, 0.03f, 0.74f);   // écrans devant l'atelier 3D : la voiture se devine derrière
-	inline const FLinearColor CPanel(0.04f, 0.05f, 0.08f, 0.94f);
-	inline const FLinearColor CCardBg(1.f, 1.f, 1.f, 0.06f);
-	inline const FLinearColor CCardHi(1.f, 1.f, 1.f, 0.11f);
-	inline const FLinearColor CText(0.95f, 0.96f, 0.98f, 1.f);
-	inline const FLinearColor CDim(0.72f, 0.75f, 0.82f, 1.f);
-	inline const FLinearColor CFaint(0.5f, 0.53f, 0.6f, 1.f);
-	inline const FLinearColor CGold(1.f, 0.8f, 0.22f, 1.f);
-	inline const FLinearColor CGood(0.35f, 0.9f, 0.5f, 1.f);
-	inline const FLinearColor CBad(1.f, 0.38f, 0.3f, 1.f);
-	inline const FLinearColor CInfo(0.45f, 0.75f, 1.f, 1.f);
-	inline const FLinearColor CPurple(0.72f, 0.42f, 1.f, 1.f);
-	inline const FLinearColor CNeutral(0.2f, 0.23f, 0.3f, 1.f);
+	// charte de la maquette (Figma « Grand Prix Manager — Interface ») : fond #0A0D14, panneaux #121722 / #1B2230,
+	// trait #2A3344, texte #F2F4F8 / #8A94A8 ; chronos violet #A24BFF, vert #2BD66B, jaune #FFC81A (valeurs linéaires)
+	inline const FLinearColor CPageBg(0.0030f, 0.0040f, 0.0070f, 0.94f);
+	inline const FLinearColor CRoomBg(0.0030f, 0.0040f, 0.0070f, 0.78f);   // écrans devant l'atelier 3D : la voiture se devine derrière
+	inline const FLinearColor CPanel(0.0060f, 0.0086f, 0.0160f, 0.95f);
+	inline const FLinearColor CCardBg(0.0110f, 0.0160f, 0.0296f, 0.92f);
+	inline const FLinearColor CCardHi(0.0232f, 0.0331f, 0.0578f, 0.95f);
+	inline const FLinearColor CLine(0.0232f, 0.0331f, 0.0578f, 1.f);
+	inline const FLinearColor CText(0.8879f, 0.9047f, 0.9387f, 1.f);
+	inline const FLinearColor CDim(0.2542f, 0.2961f, 0.3916f, 1.f);
+	inline const FLinearColor CFaint(0.17f, 0.2f, 0.27f, 1.f);
+	inline const FLinearColor CGold(1.f, 0.5776f, 0.0103f, 1.f);
+	inline const FLinearColor CGood(0.0242f, 0.6724f, 0.1470f, 1.f);
+	inline const FLinearColor CBad(1.f, 0.0437f, 0.0296f, 1.f);
+	inline const FLinearColor CInfo(0.0742f, 0.2016f, 1.f, 1.f);
+	inline const FLinearColor CPurple(0.3613f, 0.0704f, 1.f, 1.f);
+	inline const FLinearColor CNeutral(0.0110f, 0.0160f, 0.0296f, 1.f);
 }
 
 /**

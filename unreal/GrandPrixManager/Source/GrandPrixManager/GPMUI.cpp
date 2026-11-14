@@ -28,6 +28,11 @@
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
+#include "Engine/Font.h"
+#include "Fonts/CompositeFont.h"
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
+#include "UObject/Package.h"
 
 using namespace GPMUIColor;
 
@@ -155,7 +160,15 @@ namespace GPMUIStyle
 	{
 		// bandeau penché du HUD : petite texture (les bandeaux font 14 à 40 pixels de haut, sans mipmaps)
 		static FSlateBrush Small = MaskBrush(MakeMask(64, 24, [](float Qx, float Py) { return SlantAlpha(Qx, Py, 64.f, 24.f, 9.f); }), 64.f, 24.f, false, FMargin(0.f));
-		const FSlateBrush* B = Which == 1 ? Tick() : Which == 2 ? Ramp(0) : Which == 3 ? Glow() : Which == 4 ? Disc() : Which == 5 ? Ramp(1) : &Small;
+		// coin coupé (triangle plein en bas à gauche du carré) et trapèze (compte-tours), pour la charte de la maquette
+		static FSlateBrush Corner = MaskBrush(MakeMask(32, 32, [](float Qx, float Py) { return Py - Qx + 0.5f; }), 32.f, 32.f, false, FMargin(0.f));
+		static FSlateBrush Trap = MaskBrush(MakeMask(256, 64, [](float Qx, float Py)
+		{
+			const float In = 14.f * (1.f - Py / 64.f);
+			return FMath::Min(Qx - In, 256.f - In - Qx) + 0.5f;
+		}), 256.f, 64.f, false, FMargin(0.f));
+		const FSlateBrush* B = Which == 1 ? Tick() : Which == 2 ? Ramp(0) : Which == 3 ? Glow() : Which == 4 ? Disc() : Which == 5 ? Ramp(1)
+			: Which == 6 ? &Corner : Which == 7 ? &Trap : &Small;
 		return B ? Cast<UTexture>(B->GetResourceObject()) : nullptr;
 	}
 
@@ -196,12 +209,72 @@ namespace GPMUIStyle
 		return Out.IsEmpty() ? FString(TEXT("GPM")) : GPMUp(Out);
 	}
 
+	// polices de la charte, chargées une fois depuis Content/Fonts (une seule police composite par fichier :
+	// le cache de glyphes de Slate est partagé par tous les textes)
+	const TCHAR* FontFile(int32 Kind)
+	{
+		static const TCHAR* Files[6] = { TEXT("TitilliumWeb-Black.ttf"), TEXT("TitilliumWeb-Bold.ttf"), TEXT("TitilliumWeb-Bold.ttf"),
+			TEXT("TitilliumWeb-Regular.ttf"), TEXT("Rajdhani-Bold.ttf"), TEXT("TitilliumWeb-SemiBold.ttf") };
+		return Files[FMath::Clamp(Kind, 0, 5)];
+	}
+
+	FString FontPath(int32 Kind)
+	{
+		return FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("Fonts") / FontFile(Kind));
+	}
+
 	FSlateFontInfo Face(int32 Kind, int32 Size)
 	{
-		static const FName Names[4] = { FName("BlackItalic"), FName("BoldItalic"), FName("BoldCondensed"), FName("Light") };
-		FSlateFontInfo F = FCoreStyle::GetDefaultFontStyle(Names[FMath::Clamp(Kind, 0, 3)], Size);
-		if (Kind == 2) F.LetterSpacing = 140;
+		Kind = FMath::Clamp(Kind, 0, 5);
+		static TOptional<FSlateFontInfo> Loaded[6];
+		static bool bTried[6] = { false, false, false, false, false, false };
+		if (!bTried[Kind])
+		{
+			bTried[Kind] = true;
+			const FString Path = FontPath(Kind);
+			if (IFileManager::Get().FileExists(*Path)) Loaded[Kind] = FSlateFontInfo(Path, 16.f);
+			else UE_LOG(LogGPM, Warning, TEXT("Police introuvable : %s (police du moteur à la place)"), *Path);
+		}
+		FSlateFontInfo F;
+		if (Loaded[Kind].IsSet()) { F = Loaded[Kind].GetValue(); F.Size = Size; }
+		else
+		{
+			static const FName Names[6] = { FName("Black"), FName("Bold"), FName("BoldCondensed"), FName("Regular"), FName("Bold"), FName("Bold") };
+			F = FCoreStyle::GetDefaultFontStyle(Names[Kind], Size);
+		}
+		if (Kind == 2) F.LetterSpacing = 120;
 		return F;
+	}
+
+	UFont* HudFont(int32 Kind)
+	{
+		Kind = FMath::Clamp(Kind, 0, 5);
+		static UFont* Fonts[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		static bool bTried[6] = { false, false, false, false, false, false };
+		if (!bTried[Kind])
+		{
+			bTried[Kind] = true;
+			const FString Path = FontPath(Kind);
+			if (IFileManager::Get().FileExists(*Path))
+			{
+				// police « Runtime » : dessinée par le cache de polices de Slate, comme les polices du moteur
+				UFont* F = NewObject<UFont>(GetTransientPackage(), NAME_None, RF_Transient);
+				F->FontCacheType = EFontCacheType::Runtime;
+				F->LegacyFontSize = 24;
+				F->CompositeFont.DefaultTypeface.AppendFont(TEXT("Regular"), Path, EFontHinting::Default, EFontLoadingPolicy::LazyLoad);
+				F->AddToRoot();
+				Fonts[Kind] = F;
+			}
+		}
+		return Fonts[Kind];
+	}
+
+	const FSlateBrush* Cut()
+	{
+		// coin coupé de 18 px en haut à droite, le reste étiré (marges de la boîte : le coin garde sa taille)
+		static FSlateBrush B = MaskBrush(MakeMask(64, 64, [](float Qx, float Py) { return FMath::Clamp((Qx - Py) < 46.f ? 1.f : 46.5f - (Qx - Py), 0.f, 1.f); }),
+			64.f, 64.f, true, FMargin(0.f, 20.f / 64.f, 20.f / 64.f, 0.f));
+		return &B;
 	}
 }
 
@@ -456,7 +529,7 @@ TSharedRef<SWidget> FGPMUI::Txt(const FString& S, int32 Size, const FLinearColor
 {
 	return SNew(STextBlock)
 		.Text(FText::FromString(S))
-		.Font(FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size))
+		.Font(GPMUIStyle::Face(bBold ? 5 : 3, Size))
 		.ColorAndOpacity(FSlateColor(Col))
 		.AutoWrapText(bWrap)
 		.Justification(bCenter ? ETextJustify::Center : ETextJustify::Left);
@@ -465,7 +538,7 @@ TSharedRef<SWidget> FGPMUI::Txt(const FString& S, int32 Size, const FLinearColor
 TSharedRef<SWidget> FGPMUI::Card(const TSharedRef<SWidget>& Content, const FLinearColor& Bg, float Pad) const
 {
 	return SNew(SBorder)
-		.BorderImage(GPMUIStyle::Rounded(12.f))
+		.BorderImage(GPMUIStyle::Cut())
 		.BorderBackgroundColor(FSlateColor(Bg))
 		.Padding(FMargin(Pad))
 		[
@@ -633,16 +706,35 @@ TSharedRef<SWidget> FGPMUI::Page(const TSharedRef<SWidget>& Body, const FLinearC
 
 TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TArray<TPair<FString, float>>& Cells, const TArray<FLinearColor>& Colors) const
 {
-	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
-		[
-			SNew(SBox).WidthOverride(9.f).HeightOverride(24.f)[ Layer(GPMUIStyle::Tick(), TeamCol) ]
-		];
-	for (int32 k = 0; k < Cells.Num(); ++k)
+	// ligne de classement façon télé (maquette) : place dans un carré (blanc pour le podium), trait de l'écurie, colonnes ;
+	// la ligne du joueur est à la couleur de son écurie
+	const int32 Place = Cells.Num() ? FCString::Atoi(*Cells[0].Key) : 0;
+	const FLinearColor Fg = bMe ? InkOn(Acc) : CText;
+	const FLinearColor PosBg = bMe ? GPMUIStyle::Lift(Acc, 1.35f) : Place >= 1 && Place <= 3 ? CText : CCardHi;
+	TSharedRef<SHorizontalBox> Box = SNew(SHorizontalBox);
+	if (Cells.Num())
 	{
-		const FLinearColor Col = Colors.IsValidIndex(k) ? Colors[k] : CText;
-		// première colonne (place) en gras italique, comme sur un tableau de chronométrage
-		TSharedRef<SWidget> Cell = k == 0 ? Ital(Cells[k].Key, 17, bMe ? FLinearColor::White : Col, 0) : Txt(Cells[k].Key, 16, bMe ? FLinearColor::White : Col, bMe);
+		Box->AddSlot().AutoWidth()
+		[
+			SNew(SBox).WidthOverride(FMath::Max(28.f, Cells[0].Value - 4.f)).HeightOverride(30.f)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), PosBg) ]
+				+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Cells[0].Key)).Font(GPMUIStyle::Face(4, 17)).ColorAndOpacity(InkOn(PosBg))
+				]
+			]
+		];
+		Box->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f, 10.f, 0.f))
+		[
+			SNew(SBox).WidthOverride(3.f).HeightOverride(18.f)[ Layer(GPMUIStyle::Rounded(0.f), TeamCol) ]
+		];
+	}
+	for (int32 k = 1; k < Cells.Num(); ++k)
+	{
+		const FLinearColor Col = bMe ? Fg : Colors.IsValidIndex(k) ? Colors[k] : CText;
+		TSharedRef<SWidget> Cell = Txt(Cells[k].Key, 16, Col, bMe || k == 1);
 		if (Cells[k].Value > 0.f)
 			Box->AddSlot().AutoWidth().VAlign(VAlign_Center)
 			[
@@ -652,10 +744,9 @@ TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TAr
 		else
 			Box->AddSlot().FillWidth(1.f).VAlign(VAlign_Center)[ Cell ];
 	}
-	TSharedRef<SOverlay> Ov = SNew(SOverlay) + SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(1.f, 1.f, 1.f, bMe ? 0.07f : 0.035f)) ];
-	if (bMe) Ov->AddSlot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(Acc.R, Acc.G, Acc.B, 0.62f)) ];
-	Ov->AddSlot().Padding(FMargin(10.f, 5.f))[ Box ];
-	return Ov;
+	return SNew(SOverlay)
+		+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), bMe ? FLinearColor(Acc.R, Acc.G, Acc.B, 0.94f) : CPanel) ]
+		+ SOverlay::Slot().Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Box ];
 }
 
 // ---------- charte « course » ----------
