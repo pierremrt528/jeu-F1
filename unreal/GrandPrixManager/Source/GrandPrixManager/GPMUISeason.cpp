@@ -22,6 +22,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
@@ -559,5 +560,172 @@ TSharedRef<SWidget> FGPMUI::MissionCard()
 			+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(0.72f, 0.55f, 0.1f, 0.3f)) ]
 			+ SOverlay::Slot().HAlign(HAlign_Left)[ SNew(SBox).WidthOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), CGold) ] ]
 			+ SOverlay::Slot().Padding(FMargin(18.f, 14.f, 16.f, 14.f))[ Box ]
+		];
+}
+
+// ---------- boîte mail (mail.js) ----------
+
+namespace GPMUIMailTags
+{
+	struct FTagInfo { const TCHAR* Id; const TCHAR* Name; FLinearColor Col; };
+	const FTagInfo Tags[] = {
+		{ TEXT("direction"), TEXT("DIRECTION"), FLinearColor(1.f, 0.85f, 0.3f) },
+		{ TEXT("presse"), TEXT("PRESSE"), FLinearColor(1.f, 0.69f, 0.18f) },
+		{ TEXT("mercato"), TEXT("MERCATO"), FLinearColor(0.13f, 0.83f, 0.77f) },
+		{ TEXT("evenement"), TEXT("ÉVÉNEMENTS"), FLinearColor(1.f, 0.24f, 0.18f) },
+		{ TEXT("reglement"), TEXT("RÈGLEMENT"), FLinearColor(0.69f, 0.42f, 1.f) },
+		{ TEXT("sponsor"), TEXT("SPONSORS"), FLinearColor(0.31f, 0.82f, 0.48f) },
+		{ TEXT("usine"), TEXT("USINE"), FLinearColor(0.44f, 0.66f, 1.f) },
+		{ TEXT("equipe"), TEXT("ÉQUIPE"), FLinearColor(0.55f, 0.59f, 0.64f) },
+	};
+	constexpr int32 NumTags = UE_ARRAY_COUNT(Tags);
+	int32 IndexOf(const FString& Id)
+	{
+		for (int32 k = 0; k < NumTags; ++k) if (Id == Tags[k].Id) return k;
+		return NumTags - 1;
+	}
+	FString When(const FGPMMail& M, int32 CurYear)
+	{
+		const FString W = M.Round <= 0 ? FString(TEXT("Pré-saison")) : FString::Printf(TEXT("Après le GP %d"), M.Round);
+		return M.Year == CurYear ? W : FString::Printf(TEXT("%s · %d"), *W, M.Year);
+	}
+}
+
+TSharedRef<SWidget> FGPMUI::InboxPanel()
+{
+	using namespace GPMUIMailTags;
+	UGPMCareerSubsystem* Cs = CareerSys();
+	UGPMSaveGame* G = Cs ? Cs->Save() : nullptr;
+	if (!G) return SNullWidget::NullWidget;
+	const TArray<FGPMMail>& Box = G->Mail;
+	// un nouveau message décale la liste : on referme le message ouvert
+	if (MailN != Box.Num()) { MailN = Box.Num(); SelMail = -1; }
+	if (!Box.IsValidIndex(SelMail)) SelMail = -1;
+	const int32 NUnread = Cs->Unread();
+	// filtres : tous, non lus, puis les types présents
+	TArray<int32> Present;
+	for (int32 t = 0; t < NumTags; ++t) for (const FGPMMail& M : Box) if (IndexOf(M.Tag) == t) { Present.Add(t); break; }
+	if (MailFilt >= 2 && !Present.Contains(MailFilt - 2)) MailFilt = 0;
+	TSharedRef<SWrapBox> Filters = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(4.f, 4.f));
+	auto AddFilter = [this, &Filters](int32 F, const FString& Label, const FLinearColor& Col)
+	{
+		const bool bOn = MailFilt == F;
+		Filters->AddSlot()[ Hit(Ital(Label, 12, bOn ? InkOn(Col) : CDim, 1, true), bOn ? Col : FLinearColor(1.f, 1.f, 1.f, 0.07f),
+			bOn ? GPMUIStyle::Lift(Col, 1.15f) : FLinearColor(1.f, 1.f, 1.f, 0.16f), [this, F]() { MailFilt = F; SelMail = -1; }, true, 0.f, 32.f, FMargin(18.f, 1.f)) ];
+	};
+	AddFilter(0, TEXT("TOUS"), Acc);
+	AddFilter(1, NUnread ? FString::Printf(TEXT("NON LUS (%d)"), NUnread) : FString(TEXT("NON LUS")), Acc);
+	for (int32 t : Present) AddFilter(t + 2, Tags[t].Name, Tags[t].Col);
+
+	TSharedRef<SScrollBox> List = SNew(SScrollBox);
+	int32 NShown = 0;
+	for (int32 k = 0; k < Box.Num(); ++k)
+	{
+		const FGPMMail& M = Box[k];
+		const int32 T = IndexOf(M.Tag);
+		if ((MailFilt == 1 && M.bRead) || (MailFilt >= 2 && T != MailFilt - 2)) continue;
+		++NShown;
+		const bool bOpen = k == SelMail;
+		const FLinearColor Col = Tags[T].Col;
+		const FLinearColor Bg = bOpen ? FLinearColor(Col.R, Col.G, Col.B, 0.26f) : FLinearColor(1.f, 1.f, 1.f, M.bRead ? 0.035f : 0.09f);
+		TSharedRef<SWidget> Row = SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+			[
+				SNew(SBox).WidthOverride(7.f).HeightOverride(34.f)[ Layer(GPMUIStyle::Tick(), M.bRead ? FLinearColor(Col.R, Col.G, Col.B, 0.35f) : Col) ]
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), Tags[T].Name, *M.From))).Font(GPMUIStyle::Face(2, 10))
+						.ColorAndOpacity(FSlateColor(M.bRead ? CFaint : Col)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(M.Subject)).Font(FCoreStyle::GetDefaultFontStyle(M.bRead ? "Regular" : "Bold", 14))
+						.ColorAndOpacity(FSlateColor(M.bRead ? CDim : CText)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f, 0.f, 0.f))
+			[
+				Txt(When(M, G->Year), 11, CFaint)
+			];
+		List->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 4.f))
+		[
+			Hit(Row, Bg, FLinearColor(Col.R, Col.G, Col.B, 0.18f), [this, k]()
+			{
+				SelMail = k;
+				if (UGPMCareerSubsystem* C2 = CareerSys())
+					if (UGPMSaveGame* G2 = C2->Save())
+						if (G2->Mail.IsValidIndex(k) && !G2->Mail[k].bRead)
+						{
+							G2->Mail[k].bRead = true;
+							if (UGPMSeasonSubsystem* S2 = SeasonSys()) S2->Save();
+						}
+			}, true, 0.f, 58.f, FMargin(16.f, 4.f, 22.f, 4.f))
+		];
+	}
+	if (!NShown)
+		List->AddSlot()[ Txt(Box.Num() ? TEXT("Aucun message dans cette catégorie.") : TEXT("Pas encore de message. Les nouvelles de l'écurie arriveront ici après chaque Grand Prix."), 14, CDim, false, true) ];
+
+	// message ouvert
+	TSharedRef<SWidget> Reader = SNullWidget::NullWidget;
+	if (Box.IsValidIndex(SelMail))
+	{
+		const FGPMMail& M = Box[SelMail];
+		const int32 T = IndexOf(M.Tag);
+		Reader = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), Tags[T].Name, *When(M, G->Year).ToUpper()))).Font(GPMUIStyle::Face(2, 12))
+					.ColorAndOpacity(FSlateColor(Tags[T].Col))
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))
+			[
+				SNew(STextBlock).Text(FText::FromString(M.Subject)).Font(GPMUIStyle::Face(1, 22)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true)
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 8.f))[ Txt(FString::Printf(TEXT("De : %s"), *M.From), 13, CDim) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+			[
+				SNew(SBox).HeightOverride(3.f)[ Layer(GPMUIStyle::Ramp(0), Tags[T].Col) ]
+			]
+			+ SVerticalBox::Slot().FillHeight(1.f)
+			[
+				SNew(SScrollBox) + SScrollBox::Slot()[ Txt(M.Body, 15, CText, false, true) ]
+			];
+	}
+	else
+		Reader = SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+			[ Txt(Box.Num() ? TEXT("Choisis un message.") : TEXT("Boîte vide."), 15, CDim, false, true, true) ];
+
+	TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+		[
+			Txt(NUnread ? FString::Printf(TEXT("%d non lu%s · %d message%s"), NUnread, NUnread > 1 ? TEXT("s") : TEXT(""), Box.Num(), Box.Num() > 1 ? TEXT("s") : TEXT(""))
+				: FString::Printf(TEXT("Tout est lu · %d message%s"), Box.Num(), Box.Num() > 1 ? TEXT("s") : TEXT("")), 13, CDim)
+		];
+	if (NUnread)
+		Top->AddSlot().AutoWidth()[ Button(TEXT("TOUT MARQUER LU"), CNeutral, [this]()
+		{
+			if (UGPMCareerSubsystem* C2 = CareerSys())
+				if (UGPMSaveGame* G2 = C2->Save())
+				{
+					for (FGPMMail& M2 : G2->Mail) M2.bRead = true;
+					if (UGPMSeasonSubsystem* S2 = SeasonSys()) S2->Save();
+				}
+		}, true, 0.f, 34.f, 12) ];
+
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(0.95f).Padding(FMargin(0.f, 0.f, 12.f, 0.f))
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Top ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Filters ]
+			+ SVerticalBox::Slot().FillHeight(1.f)[ List ]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.15f)
+		[
+			Card(Reader, CCardBg, 18.f)
 		];
 }

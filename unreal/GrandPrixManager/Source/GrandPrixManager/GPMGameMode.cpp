@@ -970,6 +970,7 @@ void AGPMGameMode::RecordResult()
 		for (int32 k = 0; k < Order.Num(); ++k) if (!G->MisWho.IsEmpty() && Order[k]->DriverName == G->MisWho) R.RivalPos = k + 1;
 		LastLines = Career->AfterRace(R);
 		if (!Built.IsEmpty()) LastLines.Add(Built);
+		Career->RaceMails(R, LastLines);
 	}
 	Season->Save();
 }

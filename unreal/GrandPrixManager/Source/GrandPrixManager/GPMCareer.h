@@ -125,6 +125,13 @@ public:
 	float Boost(const TCHAR* Key) const;
 	void ClearBoost();
 
+	// --- Boîte mail (mail.js) ---
+	/** Ajoute un message en tête de la boîte (150 au plus). InTag : direction, presse, mercato, evenement, reglement, sponsor, usine, equipe. */
+	void SendMail(const FString& InTag, const FString& InFrom, const FString& InSubj, const FString& InBody);
+	int32 Unread() const;
+	/** Après chaque GP : bilan de la direction et des sponsors, nouvelles de l'usine et du mercato. */
+	void RaceMails(const FGPMRaceCtx& R, const TArray<FString>& Lines);
+
 	// --- Fenêtres à choix ---
 	TArray<FGPMDialog> Queue;
 	FGPMDialog* Current() { return Queue.Num() ? &Queue[0] : nullptr; }
@@ -147,6 +154,7 @@ private:
 	TArray<FLinearColor> OutletColors;
 	TMap<FString, FString> Ctx;          // contexte des textes et des conditions
 	TSharedPtr<FJsonObject> StoryVars;
+	TArray<FString> PressLog;            // questions et réponses de la conférence de presse en cours (un seul message à la fin)
 
 	void LoadOptions();
 	void BuildCtx(const FGPMRaceCtx& R);

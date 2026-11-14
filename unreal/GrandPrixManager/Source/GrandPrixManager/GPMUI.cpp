@@ -259,6 +259,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
+	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
 	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
@@ -321,7 +322,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 			if (!(Drv.Num() && Drv[0].bPlayer) && !(Tms.Num() && Tms[0].bPlayer)) GM->bChampShown = true;
 		}
 		// Tab : classements, calendrier, performance
-		if (PC && PC->WasInputKeyJustPressed(EKeys::Tab)) { SeasonTab = (SeasonTab + 1) % 3; Touch(); }
+		if (PC && PC->WasInputKeyJustPressed(EKeys::Tab)) { SeasonTab = (SeasonTab + 1) % (C && C->IsCreated() ? 4 : 3); Touch(); }
 	}
 	else if (GM->Phase == EP::Factory && PC)
 	{
