@@ -245,7 +245,7 @@ static FAutoConsoleCommandWithWorldAndArgs GHudCmd(TEXT("GPM.TestHud"), TEXT("Co
 			{
 				if (St->Step == 0 && St->T >= 4.f) Shot(TEXT("HQ1_Lancement"));
 				else if (St->Step == 1 && C->Lap >= 1 && C->Idx > N / 2) Shot(TEXT("HQ2_TourLance"));
-				else if (St->Step == 2 && C->Lap >= 1 && C->Idx > (N * 97) / 100) Shot(TEXT("HQ3_FinDuTour"));
+				else if (St->Step == 2 && C->Lap >= 1 && C->Idx > N - 25) Shot(TEXT("HQ3_FinDuTour"));
 				return;
 			}
 			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Lights && GM->LightsOn() >= 3) Shot(TEXT("H1_Feux"));

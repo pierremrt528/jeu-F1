@@ -132,12 +132,25 @@ void AGPMHUD::UpdateTiming(AGPMGameMode* GM, AGPMCar* Car, float Dt)
 	{
 		if (!C) continue;
 		FCarTiming& Tm = Timing.FindOrAdd(C);
-		const int32 G = FMath::FloorToInt(C->Progress() / MarkLen);
+		// position continue le long du tracé (points tous les 2 m + avance projetée sur la tangente)
+		const int32 Wi = ((C->Idx % N) + N) % N;
+		const float Along = ((C->X - T->WX[Wi]) * T->TX[Wi] + (C->Z - T->WZ[Wi]) * T->TZ[Wi]) * 0.5f;
+		const float Prog = C->Progress() + FMath::Clamp(Along, -0.5f, 1.f);
+		const int32 G = FMath::FloorToInt(Prog / MarkLen);
 		if (G > Tm.LastMark)
 		{
-			// première vue (grille) : pas un vrai passage, l'écart reste estimé à la distance jusqu'au premier point franchi
+			// première vue (grille) : pas un vrai passage, l'écart reste estimé à la distance jusqu'au premier point franchi ;
+			// heure de passage remontée au point exact (distance dépassée / vitesse), plus fine que l'image
 			if (Tm.LastMark >= 0)
-				for (int32 g = FMath::Max(Tm.LastMark + 1, G - 4); g <= G; ++g) { Tm.Mark[g & 127] = C->RaceTime; Tm.MarkId[g & 127] = g; }
+			{
+				const float Spd = FMath::Max(3.f, C->V);
+				float Prev = Tm.MarkId[Tm.LastMark & 127] == Tm.LastMark ? Tm.Mark[Tm.LastMark & 127] : 0.f;
+				for (int32 g = FMath::Max(Tm.LastMark + 1, G - 4); g <= G; ++g)
+				{
+					const float At = FMath::Max(Prev, C->RaceTime - (Prog - g * MarkLen) * 2.f / Spd);
+					Tm.Mark[g & 127] = At; Tm.MarkId[g & 127] = g; Prev = At;
+				}
+			}
 			Tm.LastMark = G;
 		}
 		if (C->Lap < 1) continue;
@@ -735,7 +748,15 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (bPaused && !bLive) SetPaused(false);
 
 	if (GM && (GM->Phase == AGPMGameMode::EPhase::QualiDone || GM->Phase == AGPMGameMode::EPhase::Done)) return;
-	if (CodeField != Car->Field.Num()) BuildCodes(Car->Field);
+	{
+		// codes à 3 lettres : tout le plateau de la séance (en qualifications, les voitures des temps)
+		TArray<AGPMCar*> Cars = Car->Field;
+		if (GM && GM->Phase == AGPMGameMode::EPhase::Quali) for (const auto& E : GM->QTimes) Cars.AddUnique(E.Key);
+		Cars.AddUnique(Car);
+		bool bMissing = CodeField != Cars.Num();
+		for (int32 i = 0; i < Cars.Num() && !bMissing; ++i) bMissing = Cars[i] && !CodeMap.Contains(Cars[i]->DriverName);
+		if (bMissing) BuildCodes(Cars);
+	}
 	DrawRain(GM, Car, W, H);
 	const bool bQuali = GM && GM->Phase == AGPMGameMode::EPhase::Quali;
 	const bool bRacing = GM && (GM->Phase == AGPMGameMode::EPhase::Race || GM->Phase == AGPMGameMode::EPhase::Lights);
