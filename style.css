@@ -1190,3 +1190,28 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 .cmp .era .eraf b { font-size: 18px; color: #ffd84d; }
 .cmp .era .erak { color: #ffd84d; font-weight: 700; }
 #newCareerBtn { color: #ffb0a4; } #newCareerBtn.warn { color: #0a0c10; background: #ffd84d; font-weight: 800; }
+/* boîte mail de la carrière */
+.mlbadge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--acc); color: var(--acct, #fff); font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; vertical-align: 1px; }
+.mailbox { max-width: 900px; height: 100%; max-height: 640px; display: flex; flex-direction: column; gap: 8px; }
+.mailbox .ghead { flex-wrap: wrap; } .mlcount { color: var(--mut); font-size: 13px; } .mlcount b { color: var(--txt); }
+.mltabs { display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0; padding-bottom: 2px; } .mltabs button { white-space: nowrap; padding: 5px 10px; font-size: 13px; }
+.mlbody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, .9fr) 1.3fr; gap: 12px; }
+.mllist { overflow: auto; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.mli { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border-left: 3px solid transparent; background: rgba(255,255,255,.03); }
+.mli.new { border-left-color: var(--c); background: rgba(255,255,255,.07); } .mli.new b { color: #fff; } .mli.new b::after { content: ' ●'; color: var(--c); font-size: 10px; }
+.mli.on { background: color-mix(in srgb, var(--c) 18%, #1d222c); }
+.mli b { font-weight: 500; color: #c3cad3; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mli.new b { font-weight: 800; }
+.mlt { min-width: 0; } .mli small { color: var(--mut); font-size: 11px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mli em { font-style: normal; color: var(--mut); font-size: 11px; }
+.mlic { font-size: 18px; text-align: center; }
+.mlread { overflow: auto; min-height: 0; background: rgba(255,255,255,.03); border-radius: 8px; padding: 14px; }
+.mlread #mlList { display: none; }
+.mlhead { display: flex; gap: 10px; align-items: flex-start; border-bottom: 2px solid var(--c); padding-bottom: 10px; margin-bottom: 10px; }
+.mlhead .mlic { font-size: 26px; } .mlhead small { color: var(--c); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.mlhead h3 { margin: 2px 0; font-size: 18px; } .mlhead p { margin: 0; }
+.mltxt { font-size: 14px; line-height: 1.5; color: #dfe3e9; } .mltxt small { color: var(--mut); } .mltxt .bad { color: #ff6b5e; }
+.mlempty { padding: 16px; text-align: center; }
+@media (orientation: portrait) {
+  .mailbox { max-height: none; } .mlbody { display: block; overflow: auto; }
+  .mailbox.reading .mllist, .mailbox:not(.reading) .mlread { display: none; } .mailbox.reading .mltabs { display: none; }
+  .mlread #mlList { display: inline-block; margin-bottom: 6px; } .mllist { overflow: visible; }
+}

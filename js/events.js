@@ -9,6 +9,7 @@ import { season, saveSeason, teamStandings, nRounds } from './season.js';
 import { STORIES, EXTRA } from './stories.js';
 import { fxText } from './press.js';
 import { ROLES } from './nego.js';
+import { sendMail } from './mail.js';
 
 const r1 = v => Math.round(v * 10) / 10;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -451,6 +452,8 @@ export function showEvent(ev, onDone) {
       else { season.story = null; end = `<p class="stend">📕 Fin de l’histoire « ${SD.title} ».</p>`; }
       saveSeason();
     }
+    sendMail({ tag: 'evenement', from: SD ? `${SD.icon} ${SD.title}` : E.lite ? 'En bref' : 'Flash info', subject: SD ? `Épisode ${ev.ep || 1} : ${E.title}` : E.title,
+      body: `${E.icon} ${E.text(c, sv)}<br><br><b>Ta décision</b> : ${val(x.t, c, sv)}<br>${bad ? '⚠️ ' : ''}${out}${evFxText(fx) ? `<br><small>${evFxText(fx)}</small>` : ''}${SD ? (end ? '<br><br>📕 Fin de l’histoire.' : '<br><br>📖 À suivre…') : ''}` });
     el.querySelectorAll('[data-c]').forEach(y => { y.disabled = true; if (y !== b) y.classList.add('off'); });
     b.classList.add('chosen');
     const o = el.querySelector('.evout');
