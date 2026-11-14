@@ -109,6 +109,14 @@ public:
 	int32 PitPhase = 0;
 	float PitKf = 0.f, PitStopT = 0.f;
 	void StartPit(float StopTime);
+	/** Joueur : il prend lui-même la voie des stands et doit s'arrêter dans le carré de son écurie (pitManual de strategy.js). */
+	void StartManualPit();
+	bool InSlot() const;
+	bool bPitManual = false, bPitMissed = false, bPitWarned = false;
+	bool bTestDrive = false;               // tests (GPM.TestStand) : conduite automatique jusqu'au carré
+	void TestDrive();
+	float PitO = 0.f, PitHd = 0.f;
+	int32 PitMsg = 0;                      // message du muret à dire : 1 arrêt dans le carré, 2 repartir, 3 carré dépassé, 4 ressorti sans arrêt
 	static float TyreGrip(TCHAR T);
 	static float TyreWpl(TCHAR T);
 	static float LifeGrip(float R);
@@ -165,6 +173,9 @@ private:
 	void ReadKeyboard(float Dt);
 	void Step(float Dt);
 	void PitStep(float Dt);
+	void PitManual(float Dt);
+	void PlaceInLane(float Hd);
+	void PitService();
 	void UpdateTransform();
 	UStaticMeshComponent* AddPart(const TCHAR* Name, const TCHAR* Shape, FVector Loc, FVector Scale, bool bAccent);
 

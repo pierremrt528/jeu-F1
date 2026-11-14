@@ -649,7 +649,6 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	RadioT -= DeltaSeconds;
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
-		if (PC->WasInputKeyJustPressed(EKeys::B)) ToggleBox();
 		// radio du muret : 1 (ou I) point complet, 2 (ou M) rythme, 3 (ou N) pneus du prochain arrêt
 		if (DigitPressed(PC, 1) || PC->WasInputKeyJustPressed(EKeys::I)) RadioCall(0);
 		if (DigitPressed(PC, 2) || PC->WasInputKeyJustPressed(EKeys::M)) RadioCall(1);
@@ -867,10 +866,45 @@ void AGPMGameMode::Strategy(float Dt)
 		C->RwKd = C->bRwOff ? 0.3f : 1.f - 0.45f * C->DmgR;
 		if (C == Car && !bTyreWarn && C->Wear > 0.6f && !C->PitPhase) { bTyreWarn = true; Say(TEXT("Muret : tes pneus passent sous 40 %, ils n'ont presque plus de grip.")); }
 
+		// joueur dans la voie des stands : messages du muret, puis durée de l'arrêt et ravitaillement quand il est dans son carré
+		if (C->PitMsg)
+		{
+			const int32 Msg = C->PitMsg;
+			C->PitMsg = 0;
+			if (Msg == 1)
+			{
+				const float Fix = (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
+				const float Before = C->Fuel;
+				int32 Upto = TotalLaps;
+				if (Stints.IsValidIndex(C->Stops + 2))
+				{
+					int32 Planned = 0;
+					for (int32 s = 0; s <= C->Stops + 1; ++s) Planned += Stints[s].Value;
+					Upto = FMath::Min(TotalLaps, Planned);
+				}
+				C->Fuel = FMath::Max(C->Fuel, FMath::Min(Tank, FuelFor(C, FMath::Max(1, Upto - C->Lap) + 0.3f) * 1.04f));
+				FuelWarn = 0; bTyreWarn = false; ManualTyre = 0; bTyrePicked = false;
+				C->PitStopT = FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + C->UpPit) + Fix;
+				const int32 Kg = FMath::RoundToInt(C->Fuel - Before);
+				Say(FString::Printf(TEXT("Muret : parfait ! Pneus %s%s%s…"), *TyreName(C->NextTyre), Kg > 0 ? *FString::Printf(TEXT(", +%d kg"), Kg) : TEXT(""), Fix > 0.f ? TEXT(" et réparation") : TEXT("")));
+			}
+			else if (Msg == 2) Say(TEXT("Muret : go, go, go ! Garde le limiteur jusqu'à la sortie."));
+			else if (Msg == 3) Say(TEXT("Muret : tu as dépassé ton carré ! Arrête-toi et recule (frein à l'arrêt), ou ressors sans changer."));
+			else if (Msg == 4) Say(TEXT("Muret : pas d'arrêt cette fois, on reste sur ces pneus."));
+		}
 		// décision d'arrêt avant l'entrée des stands
 		const int32 K0 = T->PitK(C->Idx);
 		const bool bZone = K0 > T->PitE0 - 30 && K0 < T->PitE0 - 10;
 		if (K0 > 200 && K0 < 210) C->bAdvised = false;   // nouveau tour : le muret peut reconseiller
+		// le joueur prend lui-même la voie des stands (à droite, à l'entrée de la voie)
+		if (!bAuto && !C->PitPhase && C->Lap >= 1 && !C->bFinished && Phase == EPhase::Race && K0 > T->PitE0 + 12 && K0 < T->PitE1
+			&& C->Lat > T->PitHalf + 1.5f && C->Lat > T->PitLatAt(K0) - 2.5f)
+		{
+			if (!C->bBox) C->NextTyre = NextStopTyre(C);
+			C->StartManualPit();
+			Say(FString::Printf(TEXT("Muret : voie des stands, limiteur ! Arrête-toi dans le carré de ton écurie (cadre jaune) : pneus %s prêts."), *TyreName(C->NextTyre)));
+			continue;
+		}
 		if (!bZone || C->PitPhase || C->Lap < 1 || Left < 1 || C->bFinished) continue;
 		// arrêt prévu par la stratégie (le joueur : celle de l'écran de stratégie, le muret l'appelle au bon tour)
 		const TArray<TPair<TCHAR, int32>>& Pl = C == Car ? Stints : C->Plan;
@@ -878,7 +912,14 @@ void AGPMGameMode::Strategy(float Dt)
 		{
 			int32 Planned = 0;
 			for (int32 s = 0; s <= C->Stops; ++s) Planned += Pl[s].Value;
-			if (C->Lap >= Planned) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
+			if (C->Lap >= Planned && bAuto) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
+			// joueur : le muret l'appelle au tour prévu, c'est à lui d'entrer dans la voie
+			else if (C->Lap >= Planned && !C->bAdvised)
+			{
+				C->bAdvised = true;
+				C->NextTyre = NextStopTyre(C);
+				Say(FString::Printf(TEXT("Muret : box, box ! Prends la voie des stands à droite : pneus %s."), *TyreName(C->NextTyre)));
+			}
 		}
 		// IA : pluie, piste sèche, crevaison, pneus à bout, aileron cassé
 		if (bAuto && !C->bBox && WantBox(C)) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
@@ -886,9 +927,9 @@ void AGPMGameMode::Strategy(float Dt)
 		if (!bAuto && !C->bBox && !C->bAdvised && WantBox(C))
 		{
 			C->bAdvised = true;
-			Say(FString::Printf(TEXT("Muret : rentre ce tour (touche B) : pneus %s%s."), *TyreName(NextStopTyre(C)), C->Dmg > 0.5f || C->DmgR > 0.5f ? TEXT(" et nouvel aileron") : TEXT("")));
+			Say(FString::Printf(TEXT("Muret : rentre ce tour, prends la voie des stands à droite : pneus %s%s."), *TyreName(NextStopTyre(C)), C->Dmg > 0.5f || C->DmgR > 0.5f ? TEXT(" et nouvel aileron") : TEXT("")));
 		}
-		if (C->bBox)
+		if (C->bBox && bAuto)
 		{
 			const float Fix = (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
 			// pièces Stands et Centre des mécaniciens : l'équipe du joueur gagne du temps à chaque arrêt

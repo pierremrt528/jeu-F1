@@ -89,7 +89,11 @@ struct FGPMTrackData
 		if (K > PitX0) return PitLat - (PitLat - PitHalf + 1) * Sm((K - PitX0) / float(PitX1 - PitX0));
 		return PitLat;
 	}
-	static float PitBox(int32 TeamIdx) { return -125.f + TeamIdx * 13.f; }   // trajectoire de course : décalage latéral (m) vers l'intérieur des virages (track.js)
+	static float PitBox(int32 TeamIdx) { return -125.f + TeamIdx * 13.f; }
+	/** Carré de l'écurie au sol, côté garages (P.slot de track.js) : de PitBox-2 à PitBox+2 (échantillons), latéral PitLat+0,6 … +3,3 m. */
+	float SlotL0() const { return PitLat + 0.6f; }
+	float SlotL1() const { return PitLat + 3.3f; }
+	float SlotLc() const { return PitLat + 1.95f; }   // trajectoire de course : décalage latéral (m) vers l'intérieur des virages (track.js)
 
 	/** Point le plus proche autour de Idx (comme locate() de track.js). */
 	int32 Locate(float X, float Z, int32 Idx) const

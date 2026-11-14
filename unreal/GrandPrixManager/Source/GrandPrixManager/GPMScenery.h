@@ -32,6 +32,22 @@ private:
 	void BuildTrees();
 	void BuildCity();
 	void BuildStands();
+
+public:
+	/** Décor modélisé dans Blender (decor.js du jeu web, Content/Data/decor.json), repère du jeu web (m). */
+	struct FDecorModel { TArray<FVector3f> P, N; TArray<uint8> K; TArray<int32> I; int32 Ad = -1; };
+	/** Une instance : position (repère web, m), angle autour de la verticale, échelle, teinte, panneau publicitaire. */
+	struct FDecorItem { float X = 0, Y = 0, Z = 0, Ry = 0, Sx = 1, Sy = 1, Sz = 1; FLinearColor Col = FLinearColor::White; int32 Ad = 0; };
+private:
+	TMap<FString, FDecorModel> DecorModels;
+	TMap<FString, TArray<FDecorItem>> DecorItems;   // instances à fusionner, par modèle
+	bool HasDecor(const TCHAR* Name) const { return DecorModels.Contains(Name); }
+	void LoadDecor();
+	/** Stands des écuries, motorhomes, panneaux, commissaires, murs de pneus, tours TV, mâts d'éclairage, passerelle. */
+	void PlaceDecor();
+	/** Fusionne les instances de chaque modèle en un maillage (couleurs par sommet). */
+	void BuildDecorMeshes();
+	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> DecorMeshes;
 	/**
 	 * Calque de formes instanciées. Avec les matériaux de Tools/gpm_assets.py, chaque instance a sa propre teinte
 	 * (entre Color et Color2, plus ou moins claire) ; Windows : bandeaux vitrés des immeubles.

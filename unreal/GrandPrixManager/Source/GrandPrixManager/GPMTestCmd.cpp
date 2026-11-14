@@ -6,6 +6,8 @@
 #include "GPMSeason.h"
 #include "GPMCareer.h"
 #include "GPMFactory.h"
+#include "GPMCar.h"
+#include "GPMTypes.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "HAL/IConsoleManager.h"
@@ -116,4 +118,90 @@ static FAutoConsoleCommandWithWorldAndArgs GTestCmd(TEXT("GPM.Test"), TEXT("Parc
 			}), St.At, false);
 		}
 		UE_LOG(LogGPM, Display, TEXT("GPM.Test : parcours lancé"));
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs GStandCmd(TEXT("GPM.TestStand"), TEXT("Course solo, voiture placée avant l'entrée des stands, arrêt dans le carré avec captures."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		if (!World) return;
+		TWeakObjectPtr<UWorld> W = World;
+		struct FState { int32 Step = 0; float T = 0.f; };
+		TSharedPtr<FState> St = MakeShared<FState>();
+		FTimerHandle H0;
+		World->GetTimerManager().SetTimer(H0, FTimerDelegate::CreateLambda([W]()
+		{
+			if (AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr) { GM->bSoloQuali = false; GM->StartSolo(); }
+		}), 6.f, false);
+		FTimerHandle H;
+		World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W, St]()
+		{
+			AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr;
+			AGPMCar* C = GM ? GM->PlayerCar() : nullptr;
+			if (!C || !C->GetTrack()) return;
+			St->T += 0.25f;
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Prerace) { GM->Go(false); return; }
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Intro) { GM->EndCine(); return; }
+			const FGPMTrackData& T = *C->GetTrack();
+			const int32 N = T.WX.Num();
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Race && GM->Clock > 2.f)
+			{
+				// avant l'entrée des stands, à droite, déjà au 1er tour
+				const int32 K = T.PitE0 - 6, i = ((K % N) + N) % N;
+				C->Idx = i; C->Lat = C->Lane = T.PitHalf + 2.5f; C->V = 28.f; C->Lap = 1;
+				C->X = T.WX[i] - T.TZ[i] * C->Lat; C->Z = T.WZ[i] + T.TX[i] * C->Lat; C->Y = T.WY[i]; C->Heading = T.H[i];
+				C->bTestDrive = true;
+				St->Step = 1; St->T = 0.f;
+				UE_LOG(LogGPM, Display, TEXT("TestStand : voiture placée (K=%d, mur droit %.1f m)"), K, T.WallRight.IsValidIndex(i) ? T.WallRight[i] : -1.f);
+			}
+			else if (St->Step == 1 && C->bPitManual) { St->Step = 2; St->T = 0.f; UE_LOG(LogGPM, Display, TEXT("TestStand : entrée dans la voie")); }
+			else if (St->Step == 1 && St->T > 25.f) { UE_LOG(LogGPM, Display, TEXT("TestStand : pas entré (Lat %.1f, K %d)"), C->Lat, T.PitK(C->Idx)); GPMTest::Capture(TEXT("S0_PasEntre")); St->Step = 9; }
+			else if (St->Step == 2 && St->T >= 2.f) { GPMTest::Capture(TEXT("S1_Voie")); St->Step = 3; }
+			else if (St->Step == 3 && C->PitPhase == 2 && C->PitStopT < 1e5f) { St->Step = 4; St->T = 0.f; UE_LOG(LogGPM, Display, TEXT("TestStand : arrêt dans le carré (%.1f s)"), C->PitStopT); }
+			else if (St->Step == 4 && St->T >= 0.5f) { GPMTest::Capture(TEXT("S2_Arret")); St->Step = 5; }
+			else if (St->Step == 5 && C->PitPhase == 3) { St->Step = 6; St->T = 0.f; }
+			else if (St->Step == 6 && St->T >= 1.5f) { GPMTest::Capture(TEXT("S3_Sortie")); St->Step = 7; }
+			else if (St->Step == 7 && C->PitPhase == 0) { UE_LOG(LogGPM, Display, TEXT("TestStand : ressorti, %d arrêt(s), pneus %s"), C->Stops, *FString::Chr(C->Tyre)); C->bTestDrive = false; St->Step = 8; }
+			else if (St->Step == 3 && St->T > 40.f) { UE_LOG(LogGPM, Display, TEXT("TestStand : pas d'arrêt (K %.1f, O %.2f, V %.1f)"), C->PitKf, C->PitO, C->V); GPMTest::Capture(TEXT("S9_Bloque")); St->Step = 9; }
+		}), 0.25f, true);
+	}));
+
+static FAutoConsoleCommandWithWorldAndArgs GDecorCmd(TEXT("GPM.TestDecor"), TEXT("Course solo sur le circuit n° <idx>, captures du décor à plusieurs endroits."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		if (!World) return;
+		const int32 Idx = Args.Num() ? FCString::Atoi(*Args[0]) : 0;
+		const int32 Extra = Args.Num() > 1 ? FCString::Atoi(*Args[1]) : -1;
+		TWeakObjectPtr<UWorld> W = World;
+		struct FState { int32 Step = 0; float T = 0.f; };
+		TSharedPtr<FState> St = MakeShared<FState>();
+		FTimerHandle H0;
+		World->GetTimerManager().SetTimer(H0, FTimerDelegate::CreateLambda([W, Idx]()
+		{
+			if (AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr) { GM->bSoloQuali = false; GM->SoloIdx = Idx; GM->StartSolo(); }
+		}), 6.f, false);
+		FTimerHandle H;
+		World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W, St, Idx, Extra]()
+		{
+			AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr;
+			AGPMCar* C = GM ? GM->PlayerCar() : nullptr;
+			if (!C || !C->GetTrack()) return;
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Prerace) { GM->Go(false); return; }
+			if (St->Step == 0 && GM->Phase == AGPMGameMode::EPhase::Intro) { GM->EndCine(); return; }
+			if (GM->Phase != AGPMGameMode::EPhase::Race || GM->Clock < 2.f) return;
+			St->T += 0.25f;
+			const FGPMTrackData& T = *C->GetTrack();
+			const int32 N = T.WX.Num();
+			const int32 Spots[4] = { Extra >= 0 ? Extra : T.PitE0 - 20, T.PitE1 + 10, N / 3, (N * 2) / 3 };
+			const int32 Spot = St->Step / 2;
+			if (Spot >= 4) return;
+			if (St->Step % 2 == 0)
+			{
+				const int32 i = ((Spots[Spot] % N) + N) % N;
+				C->Idx = i; C->Lat = C->Lane = 0.f; C->V = 0.f; C->Lap = 1;
+				C->X = T.WX[i]; C->Z = T.WZ[i]; C->Y = T.WY[i]; C->Heading = T.H[i];
+				C->bHold = true;
+				St->Step++; St->T = 0.f;
+			}
+			else if (St->T >= 1.5f) { GPMTest::Capture(FString::Printf(TEXT("D%d_%d"), Idx, Spot)); St->Step++; }
+		}), 0.25f, true);
 	}));

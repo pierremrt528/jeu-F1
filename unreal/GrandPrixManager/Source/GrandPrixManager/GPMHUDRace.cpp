@@ -414,7 +414,20 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	else if (GM && GM->NumCars() > 0)
 	{
 		DrawTower(GM, Car, M, M);
-		if (Car->PitPhase) Banner(Car->PitPhase == 2 ? TEXT("ARRÊT AU STAND") : TEXT("LIMITEUR 80 KM/H"), H * 0.24f, FLinearColor(0.02f, 0.02f, 0.04f, 0.8f), RaceYellow, 14.f);
+		if (Car->PitPhase)
+		{
+			// voie des stands : où est le carré de l'écurie ?
+			FString Msg = Car->PitPhase == 2 ? (Car->PitStopT > 1e5f ? FString(TEXT("ARRÊT AU STAND")) : FString::Printf(TEXT("PNEUS… %.1f S"), FMath::Max(0.f, Car->PitStopT)))
+				: Car->PitPhase == 3 ? FString(TEXT("SORTIE · LIMITEUR 80 KM/H")) : FString(TEXT("LIMITEUR 80 KM/H"));
+			if (Car->bPitManual && Car->PitPhase == 1 && Car->GetTrack())
+			{
+				const int32 D = FMath::RoundToInt((FGPMTrackData::PitBox(Car->TeamIdx) - Car->PitKf) * 2.f);
+				const bool bLeftOf = Car->Lat < Car->GetTrack()->SlotLc() - 0.9f;
+				Msg = Car->InSlot() ? FString(TEXT("FREINE !")) : D > 2 ? FString::Printf(TEXT("CARRÉ JAUNE DANS %d M%s"), D, bLeftOf ? TEXT(" · SERRE À DROITE") : TEXT(""))
+					: D < -2 ? FString::Printf(TEXT("RECULE DE %d M (FREIN À L'ARRÊT)"), -D) : FString(TEXT("SERRE À DROITE"));
+			}
+			Banner(Msg, H * 0.4f, FLinearColor(0.02f, 0.02f, 0.04f, 0.8f), RaceYellow, 14.f);
+		}
 		if (GM->SafetyOut()) Banner(TEXT("VOITURE DE SÉCURITÉ"), H * 0.16f, FLinearColor(1.f, 0.75f, 0.05f, 0.92f), FLinearColor(0.05f, 0.05f, 0.05f), 12.f);
 		if (GM->RadioT > 0.f) DrawRadioMsg(GM->Radio, W, M + CH + 8.f * Scale);
 		if (GM->Phase == AGPMGameMode::EPhase::Race && !Car->bFinished) DrawRadioPad(GM, Car);
@@ -455,7 +468,6 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		DrawButton(Right, bRight);
 		DrawButton(Brake, bBrake);
 		DrawButton(Gas, bGas);
-		DrawButton(Box, bBoxBtn || Car->bBox);
 	}
 	else if (GM && GM->Clock < 20.f)
 	{
@@ -476,7 +488,6 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		};
 		KeyCap(TEXT("FLÈCHES / ZQSD"), TEXT("CONDUIRE"));
 		KeyCap(TEXT("C"), TEXT("CAMÉRA"));
-		KeyCap(TEXT("B"), TEXT("STAND"));
 		KX = M; KY += 21.f * Scale;
 		KeyCap(TEXT("1 2 3"), TEXT("RADIO"));
 		KeyCap(TEXT("R"), TEXT("REPLACER"));

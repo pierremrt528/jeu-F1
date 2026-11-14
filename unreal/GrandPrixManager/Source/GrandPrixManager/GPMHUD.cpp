@@ -62,12 +62,9 @@ void AGPMHUD::ReadTouches(AGPMCar* Car)
 		bRight |= Inside(Right, X, Y);
 		bGas |= Inside(Gas, X, Y);
 		bBrake |= Inside(Brake, X, Y);
-		bBoxBtn |= Inside(Box, X, Y);
 		for (int32 k = 0; k < 3; ++k) bRadioDown[k] |= Inside(RadioBtn[k], X, Y);
 	}
-	if (bBoxBtn && !bBoxWas)
-		if (AGPMGameMode* GM = GetWorld()->GetAuthGameMode<AGPMGameMode>()) GM->ToggleBox();
-	bBoxWas = bBoxBtn;
+	// plus de bouton STAND : le joueur prend lui-même la voie des stands
 	for (int32 k = 0; k < 3; ++k)
 	{
 		if (bRadioDown[k] && !bRadioWas[k])

@@ -232,10 +232,13 @@ void AGPMScenery::Build(const FGPMTrackData* InTrack)
 		if (i % 4 == 0) Hash.FindOrAdd(CellKey(FMath::FloorToInt(P.X / HashCell), FMath::FloorToInt(P.Y / HashCell))).Add(i);
 	}
 	BaseZ -= 60.f;
+	LoadDecor();
 	BuildTerrain();
 	BuildTrees();
 	BuildCity();
 	BuildStands();
+	PlaceDecor();
+	BuildDecorMeshes();
 	TintInstances();
 	UE_LOG(LogGPM, Log, TEXT("Décor : terrain %d × %d, %d calques instanciés"), GX, GY, Instances.Num());
 }
@@ -593,6 +596,26 @@ void AGPMScenery::BuildCity()
 		const FVector P = Track->Points[i] + Rt * Side * Dist * 100.f;
 		if (NearTrack(P.X, P.Y) < Track->Width / 2.f + 18.f + Fp / 2 || InSea(P.Y - Fp * 50.f)) continue;
 		const float Hm = FMath::Lerp(Th.CityHMin, Th.CityHMax, FMath::Pow(Rnd.FRand(), 2.f));
+		if (HasDecor(TEXT("imm-verre-16")))
+		{
+			// immeuble Blender : style selon la hauteur, variante au nombre d'étages le plus proche (scenery.js)
+			const float R2 = Rnd.FRand();
+			const TCHAR* Kind = Hm > 60.f ? TEXT("verre") : Hm > 25.f ? (R2 < 0.45f ? TEXT("verre") : TEXT("logements")) : (R2 < 0.5f ? TEXT("logements") : TEXT("ancien"));
+			const TArray<int32> Fl = FString(Kind) == TEXT("verre") ? TArray<int32>{ 8, 16, 32 } : FString(Kind) == TEXT("logements") ? TArray<int32>{ 5, 10, 18 } : TArray<int32>{ 3, 5, 8 };
+			int32 F = Fl[0];
+			for (int32 f : Fl) if (FMath::Abs(FMath::Loge(f * 3.4f / Hm)) < FMath::Abs(FMath::Loge(F * 3.4f / Hm))) F = f;
+			static const uint32 Pal[] = { 0xd8d2c4, 0xb9c2cc, 0x9aa8b8, 0xe6e0d4, 0x8f9aa6, 0xc7b299, 0xa7b7c4, 0xd9c7b0 }, Glass[] = { 0xe8ecf0, 0xc9d2da, 0x9fb3c4 };
+			const uint32 Hex = FString(Kind) == TEXT("verre") ? Glass[Rnd.RandRange(0, 2)] : Pal[Rnd.RandRange(0, 7)];
+			FDecorItem It;
+			It.X = P.X / 100.f; It.Z = P.Y / 100.f; It.Y = GroundZ(P.X, P.Y) / 100.f - 1.f;
+			It.Ry = Track->H[i];
+			const float Bw = Fp, Bd = Fp * (0.7f + Rnd.FRand() * 0.6f);
+			It.Sx = Bw / 20.f; It.Sz = Bd / 20.f; It.Sy = Hm / (F * 3.4f);
+			It.Col = FLinearColor(FColor((Hex >> 16) & 255, (Hex >> 8) & 255, Hex & 255));
+			DecorItems.FindOrAdd(FString::Printf(TEXT("imm-%s-%d"), Kind, F)).Add(It);
+			++Placed;
+			continue;
+		}
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Track->TX[i], -Track->TZ[i]));
 		L[Rnd.RandRange(0, 2)]->AddInstance(FTransform(FRotator(0, Yaw, 0), FVector(P.X, P.Y, GroundZ(P.X, P.Y) + Hm * 50.f), FVector(Fp, Fp * (0.7f + Rnd.FRand() * 0.6f), Hm)));
 		++Placed;
@@ -654,7 +677,8 @@ void AGPMScenery::BuildStands()
 			}
 		}
 	}
-	// bâtiment des stands : blocs de 20 m derrière la voie des stands
+	// bâtiment des stands : blocs de 20 m derrière la voie des stands (sans les modules Blender)
+	if (!HasDecor(TEXT("garage")))
 	for (int32 K = -130; K <= -10; K += 10)
 	{
 		FVector P; float Yaw;

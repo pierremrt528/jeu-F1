@@ -251,7 +251,8 @@ void AGPMCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!Track) return;
-	if (bPlayerControlled && Cast<APlayerController>(GetController())) ReadKeyboard(DeltaSeconds);
+	if (bTestDrive) TestDrive();
+	else if (bPlayerControlled && Cast<APlayerController>(GetController())) ReadKeyboard(DeltaSeconds);
 	else DriveAI(DeltaSeconds);
 	if (bHold) { Throttle = 0.f; Brake = 1.f; }
 	if (bFinished && V > 20.f) Throttle = 0.f;   // tour de décélération

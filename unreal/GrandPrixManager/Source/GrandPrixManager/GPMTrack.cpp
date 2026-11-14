@@ -267,7 +267,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const int32 i = ((K % N) + N) % N;
 		const FVector P = Track->Points[i] + Up * 2.f, R = Right(i);
 		const float L = Track->PitLatAt(K) * 100.f;
-		const bool bMark = K >= -125 && K <= -125 + 9 * 13 && ((K + 125) % 13) == 0;   // emplacement d'un box
+		const bool bMark = false;   // emplacements : carrés des écuries ci-dessous
 		Pit.Add(P + R * (L - 400.f), Up, FVector2D(0, K / 5.f), bArt ? FLinearColor::White : bMark ? KerbWhite : Asphalt);
 		Pit.Add(P + R * (L + 400.f), Up, FVector2D(1, K / 5.f), bArt ? FLinearColor::White : bMark ? KerbWhite : Asphalt);
 		if (bArt && bMark)
@@ -282,6 +282,43 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		}
 		if (K > Track->PitE0) { const int32 b = Pit.V.Num() - 4; Pit.Quad(b, b + 1, b + 2, b + 3); }
 	}
+
+	// Carrés des écuries dans la voie des stands (P.slot de track.js) : couleur de l'écurie, cadre blanc, jaune pour le joueur
+	if (Data)
+		for (int32 t = 0; t < Data->Teams.Num(); ++t)
+		{
+			const float Kc = FGPMTrackData::PitBox(t);
+			FLinearColor TC = Data->Teams[t].Color; TC.A = 1.f;
+			const FLinearColor Frame = t == 0 ? FLinearColor(1.f, 0.85f, 0.1f) : FLinearColor::White;
+			const float E = t == 0 ? 30.f : 15.f;
+			auto Rect = [&](float KA, float KB, float LA, float LB, float Z, const FLinearColor& C)
+			{
+				for (float K = KA; K < KB - 0.01f; K += 1.f)
+				{
+					const float K2 = FMath::Min(K + 1.f, KB);
+					auto At = [&](float Kf, float Lcm)
+					{
+						const float F = FMath::Fmod(FMath::Fmod(Kf, float(N)) + N, float(N));
+						const int32 i = FMath::FloorToInt(F) % N, j = (i + 1) % N;
+						const float Fr = F - FMath::FloorToFloat(F);
+						const FVector P = FMath::Lerp(Track->Points[i], Track->Points[j], Fr);
+						const FVector R = FMath::Lerp(Right(i), Right(j), Fr).GetSafeNormal();
+						return P + R * Lcm + Up * Z;
+					};
+					const int32 q = Start.Add(At(K, LA), Up, FVector2D(0, 0), C);
+					Start.Add(At(K, LB), Up, FVector2D(1, 0), C);
+					Start.Add(At(K2, LA), Up, FVector2D(0, 1), C);
+					Start.Add(At(K2, LB), Up, FVector2D(1, 1), C);
+					Start.Quad(q, q + 1, q + 2, q + 3);
+				}
+			};
+			const float L0 = Track->SlotL0() * 100.f, L1 = Track->SlotL1() * 100.f, Ek = E / 200.f;
+			Rect(Kc - 2.f, Kc + 2.f, L0, L1, 2.6f, TC);
+			Rect(Kc - 2.f, Kc + 2.f, L0 - E, L0, 2.9f, Frame);
+			Rect(Kc - 2.f, Kc + 2.f, L1, L1 + E, 2.9f, Frame);
+			Rect(Kc - 2.f, Kc - 2.f + Ek, L0 - E, L1 + E, 2.95f, Frame);
+			Rect(Kc + 2.f - Ek, Kc + 2.f, L0 - E, L1 + E, 2.95f, Frame);
+		}
 
 	// Ligne de départ (point 0) : bande blanche de 1 m
 	{
