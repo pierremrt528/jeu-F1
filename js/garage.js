@@ -79,7 +79,7 @@ function index() {
   TREES = eraTrees(e, BASE); FTREES = eraTrees({ i: e.ni, gen: e.gen + 1 }, BASE);
   NODES = {}; TREE_OF = {};
   for (const t of [...TREES, ...FTREES]) for (const n of t.nodes) { NODES[n.id] = n; TREE_OF[n.id] = t.id; if (n.art && !ART[n.id]) ART[n.id] = ART[n.art]; }
-  setCarShape(ERAS[e.i].shape);
+  setCarShape(ERAS[e.i].shape, ERAS[e.i].id);
 }
 // prix en M€ (Centre de R&D, chef du pôle), délai en jours (Soufflerie, chef), risques d'échec et de retard (chef)
 export const price = n => Math.round(n.cost / 5 * partDiscount() * chiefMul(TREE_OF[n.id], 'cost') * 10) / 10;
@@ -284,7 +284,7 @@ export function openGarage(el, onClose, opts = {}) {
 function viewFuture(on) {
   if (on === F) return;
   F = on; const e = garage.era;
-  setCarShape(ERAS[F ? e.ni : e.i].shape); rebuildRoom();
+  setCarShape(ERAS[F ? e.ni : e.i].shape, ERAS[F ? e.ni : e.i].id); rebuildRoom();
 }
 
 function render() {

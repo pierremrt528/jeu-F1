@@ -1,4 +1,5 @@
-// Modèle 3D de monoplace (design original) : carrosserie lissée par sections (coque, nez, pontons, capot),
+// Modèle 3D de monoplace (design original). Un modèle détaillé par ère du règlement, fait dans Blender
+// (assets/cars/<id>.bin, voir tools/blender/) ; s'il n'est pas chargé, modèle procédural : carrosserie lissée par sections (coque, nez, pontons, capot),
 // ailerons à profils d'aile, halo tubulaire, suspensions, livrée par sommet. Tout est fusionné en une géométrie
 // à couleurs par sommet ; roues (pneus arrondis + flancs/jantes texturés) ; ombre douce. 3 appels de rendu par voiture.
 import * as THREE from '../lib/three.module.min.js';
@@ -96,9 +97,74 @@ function rod(a, b, r = 0.016) {
 // forme de la monoplace selon le règlement en vigueur (reglement.js) : nez, ailerons, pontons, dérive
 const SHAPE0 = { nose: 1, fwEl: 3, fwSpan: 1, pod: 1, podH: 1, fin: 1, rwW: 1, rwH: 0, beam: 1 };
 export const CAR_SHAPE = { ...SHAPE0 };
-export function setCarShape(s) { Object.assign(CAR_SHAPE, SHAPE0, s || {}); }
+let eraId = 'fondation';
+const FORCE = new URLSearchParams(location.search).get('ere');   // test : ?ere=effet-sol (toutes les voitures de cette ère)
+export function setCarShape(s, id) { Object.assign(CAR_SHAPE, SHAPE0, s || {}); eraId = FORCE || id || 'fondation'; }
+
+// ---------- modèles Blender (une monoplace par ère : ERAS[k].id dans reglement.js) ----------
+// Fichier binaire : 'GPMC', taille de l'en-tête JSON { nv, ni, ranges, meta.wheels }, positions int16 (1/8000 m),
+// normales int8, indice de palette K par sommet (0 livrée, 1 accent, 2 casque, puis PAL), indices uint16.
+const ERA_IDS = ['fondation', 'effet-sol', 'hybride', 'aero-active', 'securite'];
+const PAL = [0, 0, 0, 0x17191d, 0x08090a, 0x0d1013, 0x1f9e55, 0x5d6c7c, 0xff2a2a, 0x2a2d33, 0x1a1a1c];
+const MODELS = {};
+function parseModel(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x434d5047) return null;   // 'GPMC'
+  const hl = dv.getUint32(4, true), head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, hl)));
+  const nv = head.nv, ni = head.ni; let o = 8 + hl;
+  const qp = new Int16Array(buf, o, nv * 3); o += nv * 6;
+  const qn = new Int8Array(buf, o, nv * 3); o += nv * 3;
+  const k = new Uint8Array(buf, o, nv).slice(); o += nv; o += (4 - (nv * 10) % 4) % 4;
+  const index = new Uint16Array(buf, o, ni).slice();
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3);
+  for (let i = 0; i < nv; i++) {
+    const x = qn[i * 3], y = qn[i * 3 + 1], z = qn[i * 3 + 2], l = Math.hypot(x, y, z) || 1;
+    nor[i * 3] = x / l; nor[i * 3 + 1] = y / l; nor[i * 3 + 2] = z / l;
+    for (let a = 0; a < 3; a++) pos[i * 3 + a] = qp[i * 3 + a] / 8000;
+  }
+  // ailerons : plages de sommets (contiguës) pour les dégâts, et plages d'indices pour le morceau qui se détache
+  const ranges = {}, iranges = head.ranges || {};
+  for (const [t, [s, n]] of Object.entries(iranges)) {
+    let a = 1e9, b = -1; for (let i = s; i < s + n; i++) { a = Math.min(a, index[i]); b = Math.max(b, index[i]); }
+    ranges[t] = [a, b - a + 1];
+  }
+  const nAttr = new THREE.BufferAttribute(nor, 3), iAttr = new THREE.BufferAttribute(index, 1);
+  return { pos, nAttr, iAttr, k, ranges, iranges, wheels: head.meta?.wheels };
+}
+// chargés au démarrage ; l'atelier se reconstruit quand ils arrivent (showroom.js)
+export const modelsReady = Promise.all(ERA_IDS.map(id => fetch(`assets/cars/${id}.bin`)
+  .then(r => r.ok ? r.arrayBuffer() : null).then(b => { const m = b && parseModel(b); if (m) MODELS[id] = m; }).catch(() => {})));
+
+function modelMesh(md, color, accent, helmet) {
+  const m = mats(), n = md.k.length;
+  const hm = typeof helmet === 'object' && helmet, hf = hm && helmetFn(hm, 0, 0.84, 0.3, 0.15);
+  const col = new Float32Array(n * 3), c = new THREE.Color();
+  const fixed = [color, accent, hm ? 0 : helmet];
+  for (let i = 0; i < n; i++) {
+    const k = md.k[i];
+    c.setHex(k === 2 && hf ? hf(md.pos[i * 3], md.pos[i * 3 + 1], md.pos[i * 3 + 2]) : k < 3 ? fixed[k] : PAL[k] ?? 0);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(md.pos.slice(), 3));   // propre à chaque voiture (ailerons tordus)
+  geo.setAttribute('normal', md.nAttr);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(md.iAttr);
+  geo.computeBoundingSphere();
+  const group = new THREE.Group();
+  group.rotation.order = 'YXZ';
+  group.add(new THREE.Mesh(geo, m.body));
+  group.userData = { ranges: md.ranges, iranges: md.iranges, base: md.pos.slice() };
+  group.add(new THREE.Mesh(wheels(md.wheels), [m.tread, m.side]));
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 5.9), m.blob);
+  sh.rotation.x = -Math.PI / 2; sh.position.set(0, 0.03, 0.1); sh.renderOrder = 1;
+  group.add(sh);
+  return group;
+}
 
 export function buildCarMesh(color, accent, helmet) {
+  if (FORCE) eraId = FORCE;
+  if (MODELS[eraId]) return modelMesh(MODELS[eraId], color, accent, helmet);
   const m = mats(), S = CAR_SHAPE;
   const NZ = z => z > 2.1 ? 2.1 + (z - 2.1) * S.nose : z;   // nez plus long ou plus court
   const parts = [];
@@ -275,12 +341,14 @@ export function buildCarMesh(color, accent, helmet) {
   return group;
 }
 
-// Roues : pneu arrondi (révolution) + flancs/jantes texturés
-let WHEELS = null;
-function wheels() {
-  if (WHEELS) return WHEELS;
+// Roues : pneu arrondi (révolution) + flancs/jantes texturés ; ax = [[voie, z, rayon, largeur] avant, arrière] selon le modèle
+const WHEELS = {};
+const AX0 = [[0.83, 1.75, 0.33, 0.35], [0.8, -1.6, 0.36, 0.43]];
+function wheels(ax = AX0) {
+  const key = JSON.stringify(ax);
+  if (WHEELS[key]) return WHEELS[key];
   const treads = [], sides = [];
-  for (const [x, z, r, w] of [[0.83, 1.75, 0.33, 0.35], [-0.83, 1.75, 0.33, 0.35], [0.8, -1.6, 0.36, 0.43], [-0.8, -1.6, 0.36, 0.43]]) {
+  for (const [x, z, r, w] of ax.flatMap(([t, z, r, w]) => [[t, z, r, w], [-t, z, r, w]])) {
     const ri = r * 0.66, b = 0.05, h = w / 2, prof = [];
     prof.push(new THREE.Vector2(ri, -h));
     for (let k = 0; k <= 2; k++) prof.push(new THREE.Vector2(r - b + b * Math.sin(Math.PI / 4 * k), -h + b - b * Math.cos(Math.PI / 4 * k)));
@@ -295,5 +363,5 @@ function wheels() {
   const g = merge([a, bb]);
   g.addGroup(0, a.attributes.position.count, 0);
   g.addGroup(a.attributes.position.count, bb.attributes.position.count, 1);
-  return (WHEELS = g);
+  return (WHEELS[key] = g);
 }

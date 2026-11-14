@@ -18,6 +18,7 @@ import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, 
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard, startScene } from './cine.js';
 import { renderRoom } from './showroom.js';
+import { modelsReady } from './carmodel.js';
 import { logoSVG } from './logo.js';
 import { paySponsors, sponsorGoalsHTML } from './sponsors.js';
 import { showTuning, bestSetup, setupLap, weekendTemps, SETUPS } from './tuning.js';
@@ -729,5 +730,5 @@ initInput(toggleCam, pause);
 refreshMenu();
 setFov();
 show('menu');
-if (params.has('demo')) startRace({ wx: wxParam() });
+if (params.has('demo')) modelsReady.then(() => startRace({ wx: wxParam() }));   // attend les monoplaces Blender
 requestAnimationFrame(loop);
