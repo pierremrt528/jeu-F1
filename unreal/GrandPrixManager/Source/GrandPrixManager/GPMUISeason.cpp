@@ -306,7 +306,7 @@ TSharedRef<SWidget> FGPMUI::StandingsPanel()
 		TArray<TPair<FString, float>> Cells;
 		Cells.Emplace(FString::FromInt(k + 1), 34.f);
 		Cells.Emplace(Nm(Drv[k].Name), 0.f);
-		Cells.Emplace(Drv[k].Team, 170.f);
+		Cells.Emplace(Drv[k].Team, 200.f);
 		Cells.Emplace(FString::Printf(TEXT("%d"), Drv[k].Pts), 50.f);
 		DrvList->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Drv[k].Color, Drv[k].bPlayer, Cells, { GPMUISeasonCal::PodiumCol(k), CText, CDim, CText }) ];
 	}

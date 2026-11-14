@@ -532,7 +532,7 @@ TSharedRef<SWidget> FGPMUI::QualiScreen(AGPMGameMode* GM)
 		TArray<TPair<FString, float>> Cells;
 		Cells.Emplace(FString::FromInt(k + 1), 34.f);
 		Cells.Emplace(Nm(Cr->DriverName), 0.f);
-		Cells.Emplace(Cr->TeamName, 200.f);
+		Cells.Emplace(Cr->TeamName, 230.f);
 		Cells.Emplace(Tm >= 999.f ? FString(TEXT("pas de temps")) : Clock(Tm), 120.f);
 		Cells.Emplace(k > 0 && Tm < 999.f ? FString::Printf(TEXT("+%.3f"), Tm - Pole) : FString(), 90.f);
 		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Cr->TeamColor, Cr == Me, Cells, { CText, CText, CDim, k == 0 ? CPurple : CText, CDim }) ];
@@ -571,7 +571,7 @@ TSharedRef<SWidget> FGPMUI::ResultsScreen(AGPMGameMode* GM)
 		TArray<TPair<FString, float>> Cells;
 		Cells.Emplace(FString::FromInt(k + 1), 34.f);
 		Cells.Emplace(Nm(Cr->DriverName), 0.f);
-		Cells.Emplace(Cr->TeamName, 190.f);
+		Cells.Emplace(Cr->TeamName, 220.f);
 		Cells.Emplace(k == 0 ? Clock(Tm) : FString::Printf(TEXT("+%.3f%s"), Tm - Lead, Cr->bFinished ? TEXT("") : TEXT(" (est.)")), 140.f);
 		Cells.Emplace(Clock(Cr->BestLap), 110.f);
 		Cells.Emplace(k < 10 ? FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]) : FString(), 70.f);

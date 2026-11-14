@@ -728,13 +728,14 @@ TSharedRef<SWidget> FGPMUI::Row(const FLinearColor& TeamCol, bool bMe, const TAr
 		];
 		Box->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f, 10.f, 0.f))
 		[
-			SNew(SBox).WidthOverride(3.f).HeightOverride(18.f)[ Layer(GPMUIStyle::Rounded(0.f), TeamCol) ]
+			SNew(SBox).WidthOverride(6.f).HeightOverride(22.f)[ Layer(GPMUIStyle::Rounded(0.f), TeamCol) ]
 		];
 	}
 	for (int32 k = 1; k < Cells.Num(); ++k)
 	{
 		const FLinearColor Col = bMe ? Fg : Colors.IsValidIndex(k) ? Colors[k] : CText;
-		TSharedRef<SWidget> Cell = Txt(Cells[k].Key, 16, Col, bMe || k == 1);
+		// nom en gras ; colonnes suivantes (écurie, temps, points) un peu plus petites pour tenir dans leur largeur
+		TSharedRef<SWidget> Cell = Txt(Cells[k].Key, k == 1 ? 16 : 15, Col, bMe || k == 1);
 		if (Cells[k].Value > 0.f)
 			Box->AddSlot().AutoWidth().VAlign(VAlign_Center)
 			[
