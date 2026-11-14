@@ -57,10 +57,34 @@ namespace
 
 FString AGPMHUD::Code3(const FString& Driver) const
 {
+	if (const FString* Known = CodeMap.Find(Driver)) return *Known;
 	FString Full = Nm(Driver).TrimStartAndEnd();
 	int32 Sp = INDEX_NONE;
 	if (Full.FindLastChar(TEXT(' '), Sp)) Full = Full.Mid(Sp + 1);
 	return GPMUp(Full.Left(3));
+}
+
+void AGPMHUD::BuildCodes(const TArray<AGPMCar*>& Cars)
+{
+	// 3 premières lettres du nom ; en cas de doublon : 2 premières + une autre lettre du nom, sinon initiale du prénom + 2 lettres
+	CodeMap.Reset();
+	CodeField = Cars.Num();
+	TSet<FString> Used;
+	for (const AGPMCar* C : Cars)
+	{
+		if (!C || CodeMap.Contains(C->DriverName)) continue;
+		const FString Full = Nm(C->DriverName).TrimStartAndEnd();
+		int32 Sp = INDEX_NONE;
+		const bool bTwo = Full.FindLastChar(TEXT(' '), Sp);
+		const FString Last = GPMUp(bTwo ? Full.Mid(Sp + 1) : Full), First = GPMUp(bTwo ? Full.Left(Sp) : FString());
+		TArray<FString> Try = { Last.Left(3) };
+		for (int32 i = 3; i < Last.Len(); ++i) Try.Add(Last.Left(2) + Last.Mid(i, 1));
+		if (!First.IsEmpty()) Try.Add(First.Left(1) + Last.Left(2));
+		FString Pick = Try[0];
+		for (const FString& T : Try) if (T.Len() == 3 && !Used.Contains(T)) { Pick = T; break; }
+		Used.Add(Pick);
+		CodeMap.Add(C->DriverName, Pick);
+	}
 }
 
 void AGPMHUD::SetPaused(bool bPause)
@@ -98,6 +122,7 @@ void AGPMHUD::UpdateTiming(AGPMGameMode* GM, AGPMCar* Car, float Dt)
 		FastestLap = 0.f; FastestCar = nullptr; FastestCode.Reset();
 		CurProf.Reset(); BestProf.Reset(); ProfLap = -1;
 		StintStops = -1; AlertT = 0.f;
+		CodeField = -1;   // nouveau plateau possible (transferts) : codes refaits
 	}
 	LastRaceTime = Car->RaceTime;
 	const TArray<AGPMCar*>& Ord = GM->Standings();
@@ -110,7 +135,9 @@ void AGPMHUD::UpdateTiming(AGPMGameMode* GM, AGPMCar* Car, float Dt)
 		const int32 G = FMath::FloorToInt(C->Progress() / MarkLen);
 		if (G > Tm.LastMark)
 		{
-			for (int32 g = FMath::Max(Tm.LastMark + 1, G - 4); g <= G; ++g) { Tm.Mark[g & 127] = C->RaceTime; Tm.MarkId[g & 127] = g; }
+			// première vue (grille) : pas un vrai passage, l'écart reste estimé à la distance jusqu'au premier point franchi
+			if (Tm.LastMark >= 0)
+				for (int32 g = FMath::Max(Tm.LastMark + 1, G - 4); g <= G; ++g) { Tm.Mark[g & 127] = C->RaceTime; Tm.MarkId[g & 127] = g; }
 			Tm.LastMark = G;
 		}
 		if (C->Lap < 1) continue;
@@ -185,7 +212,7 @@ float AGPMHUD::TimeGap(const AGPMCar* Ahead, const AGPMCar* Behind, float PerLap
 	if (TA && TB && TB->LastMark >= 0)
 	{
 		const int32 g = TB->LastMark;
-		if (TA->MarkId[g & 127] == g)
+		if (TA->MarkId[g & 127] == g && TB->MarkId[g & 127] == g)
 		{
 			float Gt = TB->Mark[g & 127] - TA->Mark[g & 127];
 			if (TA->MarkId[(g + 1) & 127] == g + 1) Gt = FMath::Max(Gt, Behind->RaceTime - TA->Mark[(g + 1) & 127]);
@@ -256,6 +283,7 @@ float AGPMHUD::DrawTower(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
 			Row.bFast = C == FastestCar && FastestLap > 0.f;
 			Row.bFlag = C->bFinished;
 			if (R == 0) { Row.Gap = TEXT("LEADER"); Row.GapKind = 2; }
+			else if (GM->Phase == AGPMGameMode::EPhase::Lights) Row.Gap = FString();   // sur la grille : pas encore d'écart
 			else
 			{
 				const AGPMCar* Ref = bGapLeader ? Ord[0] : Ord[R - 1];
@@ -287,18 +315,18 @@ float AGPMHUD::DrawTower(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
 	DrawRect(HudAcc, X, Y, 2.5f * S, HH);
 	if (bQuali)
 	{
-		Ink(TEXT("QUALIFICATIONS"), X + 8.f * S, Y + 3.f * S, 2, 5.f, RaceDim);
+		Ink(TEXT("QUALIFICATIONS"), X + 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim);
 		Ink(Car->Lap >= 1 ? TEXT("TOUR LANCÉ") : TEXT("TOUR DE LANCEMENT"), X + 8.f * S, Y + 10.f * S, 1, 7.f, RaceYellow);
 	}
 	else
 	{
 		const AGPMCar* Lead = GM->Standings()[0];
 		const FString LapNum = FString::FromInt(FMath::Clamp(Lead ? Lead->Lap : 1, 1, GM->TotalLaps));
-		Ink(TEXT("TOUR"), X + 8.f * S, Y + 2.5f * S, 2, 5.f, RaceDim);
+		Ink(TEXT("TOUR"), X + 8.f * S, Y + 2.5f * S, 2, 5.5f, RaceDim);
 		Ink(LapNum, X + 8.f * S, Y + 7.5f * S, 4, 11.f, RaceText);
 		Ink(FString::Printf(TEXT("/ %d"), GM->TotalLaps), X + 11.f * S + InkSize(LapNum, 4, 11.f).X, Y + 11.5f * S, 4, 7.f, RaceDim);
 	}
-	if (T) Ink(GPMUp(T->Name), X + TW - 8.f * S, Y + 3.f * S, 2, 5.f, RaceDim, 1.f);
+	if (T) Ink(GPMUp(T->Name), X + TW - 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim, 1.f);
 	Ink(bQuali ? TEXT("TEMPS") : bGapLeader ? TEXT("ÉCART") : TEXT("INTERVALLE"), X + TW - 8.f * S, Y + 10.5f * S, 1, 6.5f, RaceText, 1.f);
 
 	float Yr = Y + HH + 2.f * S;
@@ -353,7 +381,7 @@ void AGPMHUD::DrawLapPanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, flo
 	const bool bQuali = GM->Phase == AGPMGameMode::EPhase::Quali;
 	Panel(X, Y, PW, PH, RacePanel);
 	DrawRect(HudAcc, X, Y, 2.5f * S, PH);
-	Ink(bQuali ? (Car->Lap >= 1 ? TEXT("TOUR LANCÉ") : TEXT("TOUR DE LANCEMENT")) : TEXT("TOUR EN COURS"), X + 9.f * S, Y + 4.f * S, 2, 5.f, RaceDim);
+	Ink(bQuali ? (Car->Lap >= 1 ? TEXT("TOUR LANCÉ") : TEXT("TOUR DE LANCEMENT")) : TEXT("TOUR EN COURS"), X + 9.f * S, Y + 4.f * S, 2, 5.5f, RaceDim);
 	Ink(Chrono(Car->LapTime()), X + 9.f * S, Y + 8.f * S, 4, 19.f, RaceText);
 
 	// delta : sur la pole en qualifications, sur son meilleur tour en course
@@ -383,13 +411,13 @@ void AGPMHUD::DrawLapPanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, flo
 	const FString LeftLab = bQuali ? TEXT("RECORD PERSO") : TEXT("MEILLEUR");
 	const float* Prev = bQuali ? GM->QTimes.Find(Car) : nullptr;
 	const float LeftVal = bQuali ? (Prev && *Prev < 900.f ? *Prev : 0.f) : Car->BestLap;
-	InkV(LeftLab, X + 9.f * S, L2, BH, 2, 5.f, RaceDim);
+	InkV(LeftLab, X + 9.f * S, L2, BH, 2, 5.5f, RaceDim);
 	InkV(Chrono(LeftVal), X + 13.f * S + InkSize(LeftLab, 2, 5.f).X, L2, BH, 4, 8.f, RaceText);
 	const float RightVal = bQuali ? GM->QPole() : FastestLap;
 	const FString RightLab = bQuali ? FString(TEXT("POLE")) : FastestCode.IsEmpty() ? FString(TEXT("RECORD")) : FString::Printf(TEXT("RECORD · %s"), *FastestCode);
 	const FString RightTxt = Chrono(RightVal);
 	InkV(RightTxt, X + PW - 9.f * S, L2, BH, 4, 8.f, RightVal > 0.f ? RacePurple : RaceDim, 1.f);
-	InkV(RightLab, X + PW - 13.f * S - InkSize(RightTxt, 4, 8.f).X, L2, BH, 2, 5.f, RaceDim, 1.f);
+	InkV(RightLab, X + PW - 13.f * S - InkSize(RightTxt, 4, 8.f).X, L2, BH, 2, 5.5f, RaceDim, 1.f);
 
 	// secteurs : barre colorée, numéro, temps (ceux du tour précédent en grisé tant que le nouveau n'est pas fait)
 	const float SY = Y + 52.f * S, Gp = 6.f * S, CW = (PW - 18.f * S - 2.f * Gp) / 3.f;
@@ -413,7 +441,7 @@ void AGPMHUD::DrawLapPanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, flo
 		}
 		const float CX = X + 9.f * S + k * (CW + Gp);
 		DrawRect(Col ? RaceA(SecColour(Col), bOld ? 0.35f : 1.f) : RaceLine, CX, SY, CW, 2.5f * S);
-		InkV(FString::Printf(TEXT("S%d"), k + 1), CX, SY + 5.f * S, 12.f * S, 2, 5.f, RaceDim);
+		InkV(FString::Printf(TEXT("S%d"), k + 1), CX, SY + 5.f * S, 12.f * S, 2, 5.5f, RaceDim);
 		InkV(SecT > 0.f ? FString::Printf(TEXT("%.3f"), SecT) : FString(TEXT("--.---")), CX + 11.f * S, SY + 5.f * S, 12.f * S, 4, 8.5f, bOld ? RaceDim : RaceText);
 	}
 }
@@ -434,7 +462,7 @@ void AGPMHUD::DrawGaps(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, float P
 		if (!Other && k == 1) continue;
 		Panel(X, RY, PW, RH, RacePanel, 4.f);
 		DrawRect(k == 0 ? RacePurple : RaceYellow, X, RY, 2.5f * S, RH);
-		InkV(k == 0 ? TEXT("DEVANT") : TEXT("DERRIÈRE"), X + 9.f * S, RY, RH, 2, 5.f, RaceDim);
+		InkV(k == 0 ? TEXT("DEVANT") : TEXT("DERRIÈRE"), X + 9.f * S, RY, RH, 2, 5.5f, RaceDim);
 		if (!Other) { InkV(TEXT("EN TÊTE"), X + PW - 9.f * S, RY, RH, 1, 7.5f, RaceText, 1.f); continue; }
 		InkV(FString::Printf(TEXT("P%d"), OtherIdx + 1), X + 52.f * S, RY, RH, 4, 8.f, RaceDim);
 		DrawRect(Other->TeamColor, X + 68.f * S, RY + 4.f * S, 2.f * S, RH - 8.f * S);
@@ -469,10 +497,10 @@ void AGPMHUD::DrawTyrePanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, fl
 	const int32 Laps = bRace ? FMath::Max(0, Car->Lap - StintLap0) : 0;
 	const FString Sub = Car->bFlat ? FString(TEXT("CREVAISON !"))
 		: FString::Printf(TEXT("%d TOUR%s · USURE %d %%"), Laps, Laps > 1 ? TEXT("S") : TEXT(""), FMath::RoundToInt(Car->Wear * 100.f));
-	Ink(Sub, X + 29.f * S, Y + 15.f * S, 2, 5.f, Car->bFlat ? RaceRed : RaceDim);
+	Ink(Sub, X + 29.f * S, Y + 15.f * S, 2, 5.5f, Car->bFlat ? RaceRed : RaceDim);
 	DrawRect(RaceLine, X + 9.f * S, Y + 27.f * S, 96.f * S, 1.f * S);
 
-	Ink(TEXT("CARBURANT"), X + 9.f * S, Y + 30.f * S, 2, 5.f, RaceDim);
+	Ink(TEXT("CARBURANT"), X + 9.f * S, Y + 30.f * S, 2, 5.5f, RaceDim);
 	Ink(Comma(FString::Printf(TEXT("%.1f KG"), Car->Fuel)), X + 9.f * S, Y + 34.f * S, 4, 11.f, RaceText);
 	FLinearColor FuelCol = RaceGreen;
 	const FGPMTrackData* T = Car->GetTrack();
@@ -482,7 +510,7 @@ void AGPMHUD::DrawTyrePanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, fl
 		// marge : tours d'essence en plus de ceux qu'il faut jusqu'au prochain ravitaillement (ou à l'arrivée)
 		const float Margin = Car->Fuel / PerLap - GM->LapsToRefuel(Car);
 		FuelCol = Margin < 0.f ? RaceRed : Margin < 0.5f ? RaceYellow : RaceGreen;
-		Ink(Comma(FString::Printf(TEXT("%+.1f TOUR%s DE MARGE"), Margin, FMath::Abs(Margin) >= 2.f ? TEXT("S") : TEXT(""))), X + 9.f * S, Y + 48.f * S, 2, 5.f, FuelCol);
+		Ink(Comma(FString::Printf(TEXT("%+.1f TOUR%s DE MARGE"), Margin, FMath::Abs(Margin) >= 2.f ? TEXT("S") : TEXT(""))), X + 9.f * S, Y + 48.f * S, 2, 5.5f, FuelCol);
 	}
 	const float Frac = StintFuel > 0.f && bRace ? FMath::Clamp(Car->Fuel / StintFuel, 0.f, 1.f) : 1.f;
 	DrawRect(RaceLine, X + 9.f * S, Y + 56.f * S, 96.f * S, 2.f * S);
@@ -537,22 +565,24 @@ void AGPMHUD::DrawCluster(AGPMCar* Car, float W, float H)
 	const FLinearColor GearBg = Frac > 0.9f ? RaceBlue : HudAcc;
 	DrawRect(GearBg, GX, GY, GB, GB);
 	InkV(Gr == 0 ? FString(TEXT("N")) : FString::FromInt(Gr), GX + GB * 0.5f, GY, GB, 4, 24.f, InkOnColour(GearBg), 0.5f);
-	InkV(FString::FromInt(FMath::RoundToInt(Kmh)), GX - 7.f * S, GY - 2.f * S, GB, 4, 25.f, RaceText, 1.f);
-	Ink(TEXT("KM/H"), GX - 7.f * S, GY + GB - 1.f * S, 2, 4.5f, RaceDim, 1.f);
+	const FString Spd = FString::FromInt(FMath::RoundToInt(Kmh));
+	const float SpW = FMath::Max(InkSize(Spd, 4, 25.f).X, InkSize(TEXT("000"), 4, 25.f).X);
+	InkV(Spd, GX - 7.f * S, GY - 2.f * S, GB, 4, 25.f, RaceText, 1.f);
+	Ink(TEXT("KM/H"), GX - 7.f * S - SpW * 0.5f, GY + GB - 1.f * S, 2, 5.5f, RaceDim, 0.5f);
 
 	// mode de pilotage, aspiration, aides
 	const float MX = GX + GB + 8.f * S, MW = 62.f * S, MH = 11.f * S, MY = GY + 1.f * S;
 	const FLinearColor ModeCol = Car->Mode == 0 ? FLinearColor(1.f, 0.16f, 0.1f) : Car->Mode == 2 ? RaceGreen : RaceDim;
 	DrawRect(FLinearColor(ModeCol.R * 0.22f, ModeCol.G * 0.22f, ModeCol.B * 0.22f, 0.95f), MX, MY, MW, MH);
 	InkV(Car->Mode == 0 ? TEXT("ATTAQUE") : Car->Mode == 2 ? TEXT("ÉCONOMIE") : TEXT("NORMAL"), MX + MW * 0.5f, MY, MH, 1, 6.f, ModeCol, 0.5f);
-	Ink(TEXT("ASPIRATION"), MX, MY + 13.f * S, 2, 4.5f, RaceDim);
+	Ink(TEXT("ASPIRATION"), MX, MY + 12.5f * S, 2, 5.5f, RaceDim);
 	DrawRect(RaceLine, MX, MY + 21.f * S, MW, 2.5f * S);
 	DrawRect(RaceBlue, MX, MY + 21.f * S, MW * FMath::Clamp(Car->Slipstream, 0.f, 1.f), 2.5f * S);
 	FString Aids;
 	if (Car->bAbsOn) Aids += TEXT("ABS  ");
 	if (Car->bTcOn) Aids += TEXT("TC  ");
 	if (Car->bBox) Aids += TEXT("BOX");
-	if (!Aids.IsEmpty()) Ink(Aids.TrimEnd(), MX, MY + 26.f * S, 2, 4.5f, Car->bBox ? RaceBlue : RaceYellow);
+	if (!Aids.IsEmpty()) Ink(Aids.TrimEnd(), MX, MY + 26.f * S, 2, 5.5f, Car->bBox ? RaceBlue : RaceYellow);
 }
 
 // Pluie à l'écran : traits qui tombent, plus vite et plus penchés avec la vitesse (sans coût 3D)
@@ -609,7 +639,7 @@ float AGPMHUD::DrawRadioMsg(const FString& Msg, float W, float Y)
 	DrawLine(Cx - 1.f * S, Cy - 1.5f * S, Cx + 2.5f * S, Cy - 4.f * S, Ic, 1.2f * S);
 	DrawLine(Cx + 2.5f * S, Cy - 4.f * S, Cx + 2.5f * S, Cy + 4.f * S, Ic, 1.2f * S);
 	DrawLine(Cx + 2.5f * S, Cy + 4.f * S, Cx - 1.f * S, Cy + 1.5f * S, Ic, 1.2f * S);
-	Ink(TEXT("RADIO · MURET"), RX + IconW, Y + 3.5f * S, 2, 5.f, Lab);
+	Ink(TEXT("RADIO · MURET"), RX + IconW, Y + 3.5f * S, 2, 5.5f, Lab);
 	for (int32 i = 0; i < Lines.Num(); ++i) Ink(Lines[i], RX + IconW, Y + Head + i * LH, 3, Sz, RaceText);
 	return Y + BoxH;
 }
@@ -664,7 +694,7 @@ void AGPMHUD::DrawWeatherChip(AGPMGameMode* GM, float RightX, float Y)
 	const float BarX = X0 + 9.f * S, BarW = CW - 17.f * S;
 	DrawRect(RaceLine, BarX, Y + 18.f * S, BarW, 3.f * S);
 	DrawRect(RaceBlue, BarX, Y + 18.f * S, BarW * FMath::Clamp(GM->TrackWet, 0.f, 1.f), 3.f * S);
-	if (bChange) Ink(GM->bRainStart ? TEXT("ÉCLAIRCIE ATTENDUE") : TEXT("AVERSE ATTENDUE"), BarX, Y + 23.f * S, 2, 5.f, RaceYellow);
+	if (bChange) Ink(GM->bRainStart ? TEXT("ÉCLAIRCIE ATTENDUE") : TEXT("AVERSE ATTENDUE"), BarX, Y + 23.f * S, 2, 5.5f, RaceYellow);
 }
 
 void AGPMHUD::DrawPause(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
@@ -676,7 +706,7 @@ void AGPMHUD::DrawPause(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	Ink(TEXT("PAUSE"), W * 0.5f, H * 0.08f + 11.f * S, 0, 30.f, RaceText, 0.5f);
 	DrawRect(HudAcc, W * 0.5f - 24.f * S, H * 0.08f + 60.f * S, 48.f * S, 3.f * S);
 	const float BW = 240.f * S, BH = 32.f * S, X = (W - BW) * 0.5f;
-	float Y = H * 0.33f;
+	float Y = H * 0.08f + 84.f * S;
 	const FLinearColor Alt(0.0109f, 0.0159f, 0.0296f, 0.96f);
 	if (Btn(TEXT("REPRENDRE"), X, Y, BW, BH, HudAcc)) { SetPaused(false); return; }
 	Y += BH + 8.f * S;
@@ -687,7 +717,7 @@ void AGPMHUD::DrawPause(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (Btn(bShowFps ? TEXT("COMPTEUR I/S : OUI") : TEXT("COMPTEUR I/S : NON"), X, Y, BW, BH, Alt)) bShowFps = !bShowFps;
 	Y += BH + 8.f * S;
 	if (Btn(GM && GM->bCareer ? TEXT("QUITTER LE GRAND PRIX") : TEXT("MENU PRINCIPAL"), X, Y, BW, BH, Alt)) { SetPaused(false); if (GM) GM->GoHome(); return; }
-	Ink(TEXT("ÉCHAP OU P : REPRENDRE"), W * 0.5f, Y + BH + 12.f * S, 2, 6.f, RaceDim, 0.5f);
+	Ink(TEXT("ÉCHAP OU P : REPRENDRE"), W * 0.5f, H * 0.08f + 66.f * S, 2, 6.f, RaceDim, 0.5f);
 }
 
 void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
@@ -705,6 +735,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 	if (bPaused && !bLive) SetPaused(false);
 
 	if (GM && (GM->Phase == AGPMGameMode::EPhase::QualiDone || GM->Phase == AGPMGameMode::EPhase::Done)) return;
+	if (CodeField != Car->Field.Num()) BuildCodes(Car->Field);
 	DrawRain(GM, Car, W, H);
 	const bool bQuali = GM && GM->Phase == AGPMGameMode::EPhase::Quali;
 	const bool bRacing = GM && (GM->Phase == AGPMGameMode::EPhase::Race || GM->Phase == AGPMGameMode::EPhase::Lights);
@@ -806,7 +837,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		DrawButton(Brake, bBrake);
 		DrawButton(Gas, bGas);
 	}
-	else if (GM && GM->Clock < 20.f)
+	else if (GM && (bQuali ? Car->Lap < 1 : GM->Clock < 20.f))
 	{
 		static const TCHAR* const KeyHelp[][2] = {
 			{ TEXT("FLÈCHES / ZQSD"), TEXT("CONDUIRE") }, { TEXT("C"), TEXT("CAMÉRA") }, { TEXT("1 2 3"), TEXT("RADIO") },
@@ -824,7 +855,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			DrawRect(RaceLine, KX, KY + KH - 1.5f * S, KW, 1.5f * S);
 			InkV(KP[0], KX + KW * 0.5f, KY, KH, 1, 6.5f, RaceText, 0.5f);
 			KX += KW + Pad;
-			InkV(KP[1], KX, KY, KH, 2, 5.f, RaceDim);
+			InkV(KP[1], KX, KY, KH, 2, 5.5f, RaceDim);
 			KX += InkSize(KP[1], 2, 5.f).X + Sep;
 		}
 	}

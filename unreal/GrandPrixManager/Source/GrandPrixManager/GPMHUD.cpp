@@ -84,8 +84,19 @@ void AGPMHUD::DrawButton(const FButton& B, bool bDown)
 {
 	Panel(B.Pos.X, B.Pos.Y, B.Size.X, B.Size.Y, bDown ? FLinearColor(1.f, 1.f, 1.f, 0.3f) : FLinearColor(HudPanel.R, HudPanel.G, HudPanel.B, 0.5f), 10.f);
 	DrawRect(FLinearColor(HudAcc.R, HudAcc.G, HudAcc.B, bDown ? 1.f : 0.7f), B.Pos.X, B.Pos.Y + B.Size.Y - 3.f * Scale, B.Size.X, 3.f * Scale);
-	const FVector2D Sz = InkSize(B.Label, 0, 16.f);
-	Ink(B.Label, B.Pos.X + (B.Size.X - Sz.X) / 2, B.Pos.Y + (B.Size.Y - Sz.Y) / 2, 0, 16.f, FLinearColor(1, 1, 1, 0.9f));
+	const FString Lab = B.Label;
+	if (Lab == TEXT("<") || Lab == TEXT(">"))
+	{
+		// flèche de direction : chevron épais dessiné (le caractère était minuscule dans la police)
+		const float Cx = B.Pos.X + B.Size.X * 0.5f, Cy = B.Pos.Y + B.Size.Y * 0.5f, R = FMath::Min(B.Size.X, B.Size.Y) * 0.2f;
+		const float Dir = Lab == TEXT("<") ? -1.f : 1.f, Th = 6.f * Scale;
+		const FLinearColor Col(1.f, 1.f, 1.f, bDown ? 1.f : 0.9f);
+		DrawLine(Cx - Dir * R * 0.5f, Cy - R, Cx + Dir * R * 0.5f, Cy, Col, Th);
+		DrawLine(Cx + Dir * R * 0.5f, Cy, Cx - Dir * R * 0.5f, Cy + R, Col, Th);
+		return;
+	}
+	const FVector2D Sz = InkSize(Lab, 0, 16.f);
+	Ink(Lab, B.Pos.X + (B.Size.X - Sz.X) / 2, B.Pos.Y + (B.Size.Y - Sz.Y) / 2, 0, 16.f, FLinearColor(1, 1, 1, 0.9f));
 }
 
 // ---------- charte des écrans dans le HUD ----------

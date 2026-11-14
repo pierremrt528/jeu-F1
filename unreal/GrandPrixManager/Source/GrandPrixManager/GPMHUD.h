@@ -59,6 +59,10 @@ private:
 	void DrawPause(class AGPMGameMode* GM, class AGPMCar* Car, float W, float H);
 	void SetPaused(bool bPause);
 	FString Code3(const FString& Driver) const;
+	/** Codes à 3 lettres uniques sur le plateau (deux noms qui commencent pareil : la 3e lettre change). */
+	TMap<FString, FString> CodeMap;
+	int32 CodeField = -1;
+	void BuildCodes(const TArray<class AGPMCar*>& Cars);
 	bool bShowFps = false;
 	bool bGapLeader = false;   // classement : intervalle avec la voiture de devant (par défaut) ou écart avec le leader (touche G)
 	// course complète : pluie à l'écran, radio du muret (3 boutons), météo
