@@ -5,15 +5,36 @@
 // ères (univers fictif) : id = nom du modèle 3D de l'ère (un modèle par ère), mul = poids des effets des pièces,
 // shape = forme de la monoplace procédurale (carmodel.js)
 export const ERAS = [
-  { id: 'fondation', name: 'Fondation', desc: 'Voitures longues, aileron avant à trois éléments, grande dérive.', mul: {}, shape: {} },
-  { id: 'effet-sol', name: 'Effet de sol', desc: 'L’appui vient du dessous : fond sculpté, pontons creusés, aileron avant à deux éléments et aileron de poutre.',
-    mul: { kd: 1.25, vtop: 0.9 }, shape: { nose: 0.93, fwEl: 2, pod: 0.78, podH: 0.92, fin: 0, rwW: 0.94, beam: 1 } },
-  { id: 'hybride', name: 'Hybride', desc: 'Moteurs plus électriques : voitures plus courtes, gros pontons pour refroidir, aileron arrière bas et large.',
-    mul: { acc: 1.3, fuel: 1.3, vtop: 1.1, kd: 0.85 }, shape: { nose: 0.86, fwSpan: 0.92, pod: 1.12, podH: 1.06, rwW: 1.14, rwH: -0.12, beam: 0 } },
-  { id: 'aero-active', name: 'Aéro active', desc: 'Ailerons mobiles et nez très long : quatre éléments à l’avant, pontons étroits, très grande dérive.',
-    mul: { slip: 1.4, kd: 1.1, tyre: 1.2 }, shape: { nose: 1.1, fwEl: 4, fwSpan: 1.04, pod: 0.72, podH: 0.86, fin: 2, rwW: 0.9, rwH: 0.1 } },
-  { id: 'securite', name: 'Sécurité', desc: 'Structures renforcées, voitures plus larges et plus lourdes, aileron avant très large et sans dérive.',
-    mul: { rel: 1.3, wall: 1.3, mu: 1.15, vtop: 0.95 }, shape: { nose: 0.97, fwEl: 2, fwSpan: 1.1, pod: 1.2, podH: 1.1, fin: 0, rwW: 1.05, rwH: 0.05, beam: 0 } },
+  { id: 'fondation', name: 'Fondation', key: null, focus: 'Ère équilibrée : aucun pôle ne domine.',
+    desc: 'Voitures longues, aileron avant à trois éléments, grande dérive.', mul: {}, shape: {} },
+  { id: 'effet-sol', name: 'Effet de sol', key: 'chassis', focus: 'Le châssis est roi : plus de pièces châssis, beaucoup plus d’appui et d’adhérence.',
+    desc: 'L’appui vient du dessous de la voiture : fond sculpté, pontons creusés, aileron avant à deux éléments et aileron de poutre.',
+    mul: { kd: 1.3, mu: 1.25, vtop: 0.9 }, shape: { nose: 0.93, fwEl: 2, pod: 0.78, podH: 0.92, fin: 0, rwW: 0.94, beam: 1 }, extra: [
+      ['Plancher abaissé', 'La voiture frôle la piste : l’effet de sol est maximal.', { kd: 1, mu: 0.4 }, 'c5'],
+      ['Suspension anti-pompage', 'Le fond reste à hauteur constante : l’appui ne décroche plus.', { kd: 0.8, mu: 0.5 }, 'c6'],
+      ['Raideur de caisse pilotée', 'Plus d’appui en courbe rapide, sans rebonds.', { kd: 0.7, steer: 0.4 }, 'c1'],
+    ] },
+  { id: 'hybride', name: 'Hybride', key: 'moteur', focus: 'Le moteur est roi : plus de pièces moteur, accélération et vitesse de pointe renforcées.',
+    desc: 'Moteurs à forte part électrique : voitures plus courtes, gros pontons pour refroidir les batteries, aileron arrière bas et large.',
+    mul: { acc: 1.35, vtop: 1.25, fuel: 1.3, kd: 0.85 }, shape: { nose: 0.86, fwSpan: 0.92, pod: 1.12, podH: 1.06, rwW: 1.14, rwH: -0.12, beam: 0 }, extra: [
+      ['Batterie double', 'Deux fois plus d’énergie électrique à chaque tour.', { acc: 1, vtop: 0.3 }, 'm4'],
+      ['Turbo électrique', 'Le turbo tourne avant même que le pilote accélère.', { vtop: 0.7, acc: 0.6 }, 'm2'],
+      ['Mode dépassement', 'Un surplus de puissance électrique en ligne droite.', { vtop: 1 }, 'm5'],
+    ] },
+  { id: 'aero-active', name: 'Aéro active', key: 'aero', focus: 'L’aéro est reine : plus de pièces aéro, appui et aspiration renforcés.',
+    desc: 'Ailerons mobiles et nez très long : quatre éléments à l’avant, pontons étroits, très grande dérive.',
+    mul: { slip: 1.5, kd: 1.2, vtop: 1.05, tyre: 1.2 }, shape: { nose: 1.1, fwEl: 4, fwSpan: 1.04, pod: 0.72, podH: 0.86, fin: 2, rwW: 0.9, rwH: 0.1 }, extra: [
+      ['Volets pilotés', 'Les ailerons changent d’angle à chaque virage.', { kd: 0.8, vtop: 0.4 }, 'a8'],
+      ['Mode ligne droite', 'Les deux ailerons s’effacent dans les lignes droites.', { vtop: 1, slip: 0.4 }, 'a6'],
+      ['Capteurs de flux', 'L’aéro s’adapte à l’air sale en temps réel.', { slip: 0.8, kd: 0.3 }, 'a7'],
+    ] },
+  { id: 'securite', name: 'Sécurité', key: 'fiab', focus: 'La fiabilité est reine : plus de pièces de fiabilité, voitures solides, plus d’adhérence.',
+    desc: 'Structures renforcées, voitures plus larges et plus lourdes, aileron avant très large et sans dérive.',
+    mul: { rel: 1.3, wall: 1.3, off: 1.3, mu: 1.15, vtop: 0.95 }, shape: { nose: 0.97, fwEl: 2, fwSpan: 1.1, pod: 1.2, podH: 1.1, fin: 0, rwW: 1.05, rwH: 0.05, beam: 0 }, extra: [
+      ['Cellule de survie étendue', 'Les chocs ne cassent presque plus rien.', { wall: 1, rel: 0.4 }, 'f2'],
+      ['Double circuit de freinage', 'Un deuxième circuit prend le relais en cas de panne.', { rel: 0.6, brake: 0.5 }, 'f5'],
+      ['Plancher absorbant', 'Les sorties de piste ne coûtent presque plus de temps.', { off: 1, wall: 0.4 }, 'f3'],
+    ] },
 ];
 // nom affiché d'une ère : les ères qui reviennent prennent un numéro (« Effet de sol II »)
 export const eraName = e => 'Ère ' + ERAS[e.i].name + (e.gen >= ERAS.length ? ' ' + ['', 'II', 'III', 'IV', 'V'][Math.min(4, Math.floor(e.gen / (ERAS.length - 1)))] : '');
@@ -105,20 +126,25 @@ const shuffle = (a, r) => { for (let k = a.length - 1; k > 0; k--) { const j = M
 // en miroir, avec de nouvelles pièces tirées de son catalogue ; ids uniques par génération (« g3m4 »)
 export function eraTrees(e, base) {
   if (!e.gen) return base;
-  const r = rng(e.gen * 97 + e.i), mul = ERAS[e.i].mul;
-  // formes : permutation des 5 arbres de base (un catalogue doit contenir assez de pièces)
-  let tpl;
-  do tpl = shuffle(base.slice(), r); while (tpl.some((t, k) => t.nodes.length > POOL[base[k].id].length) || tpl.every((t, k) => t === base[k]));
-  return base.map((b, k) => {
-    const T = tpl[k], mirror = r() < 0.5, pick = shuffle(POOL[b.id].slice(0, -1), r).slice(0, T.nodes.length - 1).concat([POOL[b.id].at(-1)]);
+  const E = ERAS[e.i], r = rng(e.gen * 97 + e.i), mul = E.mul;
+  // pôle roi : le plus grand arbre (aéro de base) agrandi de deux pièces ; les autres pôles se partagent
+  // au hasard les quatre autres formes de base
+  const big = base.find(t => t.id === 'aero'), a7 = big.nodes.find(n => n.id === 'a7'), a8 = big.nodes.find(n => n.id === 'a8');
+  const BIG = { id: 'aero', nodes: [...big.nodes, { id: 'x1', at: [5, 1], cost: 85, req: [a8.id] }, { id: 'x2', at: [5, 3], cost: 75, req: [a7.id] }] };
+  const rest = shuffle(base.filter(t => t !== big), r);
+  let j = 0;
+  const tpl = base.map(b => b.id === E.key ? BIG : rest[j++] || big);
+  const trees = base.map((b, k) => {
+    const T = tpl[k], key = b.id === E.key, mirror = r() < 0.5, pool = POOL[b.id], top = pool.at(-1);
+    const pick = shuffle([...(key ? E.extra : []), ...shuffle(pool.slice(0, -1), r).slice(0, T.nodes.length - 1 - (key ? E.extra.length : 0))], r).concat([top]);
     const ord = T.nodes.slice().sort((x, y) => x.at[0] - y.at[0] || x.cost - y.cost);   // la dernière pièce du catalogue au sommet
     const ids = Object.fromEntries(ord.map((n, j) => [n.id, `g${e.gen}${b.id[0]}${j + 1}`]));
     const nodes = ord.map((n, j) => {
       const [name, desc, w, art] = pick[j], cost = Math.max(6, Math.round(n.cost / LEVEL[T.id] * LEVEL[b.id] * (0.9 + r() * 0.2)));
       const fx = {};
-      for (const key in w) {
-        const v = UNIT[key] * w[key] * Math.sqrt(cost / LEVEL[b.id] / 40) * (mul[key] || 1);
-        fx[key] = key === 'rel' ? Math.round(v) : key === 'pit' ? Math.round(v * 10) / 10 : Math.round(v * 1000) / 1000;
+      for (const k2 in w) {
+        const v = UNIT[k2] * w[k2] * Math.sqrt(cost / LEVEL[b.id] / 40) * (mul[k2] || 1) * (key ? 1.25 : 1);   // pôle roi : effets renforcés
+        fx[k2] = k2 === 'rel' ? Math.round(v) : k2 === 'pit' ? Math.round(v * 10) / 10 : Math.round(v * 1000) / 1000;
       }
       const o = { id: ids[n.id], at: [n.at[0], mirror ? 4 - n.at[1] : n.at[1]], name, desc, cost, fx, art };
       if (n.req) o.req = n.req.map(q => ids[q]);
@@ -127,4 +153,10 @@ export function eraTrees(e, base) {
     });
     return { ...b, nodes };
   });
+  // potentiel total de performance ramené à celui des arbres de base (±5 %) : l'ère change où se trouve la performance, pas combien
+  const k = (score(base) / score(trees)) * (0.95 + r() * 0.1);
+  for (const t of trees) for (const n of t.nodes) for (const f in n.fx) if (f in PERF) n.fx[f] = Math.round(n.fx[f] * k * 1000) / 1000;
+  return trees;
 }
+const PERF = { vtop: 0.6, acc: 0.15, kd: 0.08, mu: 0.25, brake: 0.04, steer: 0.04 };   // poids de perfFactor (garage.js)
+const score = T => T.flatMap(t => t.nodes).reduce((s, n) => s + Object.entries(n.fx).reduce((x, [f, v]) => x + (PERF[f] || 0) * v, 0), 0);

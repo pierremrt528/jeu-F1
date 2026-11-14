@@ -498,8 +498,8 @@ function openSeason() {
 // grandes refontes : annonce un an avant (voiture de la nouvelle ère à développer), puis début de la nouvelle ère
 function eraHTML(S) {
   const E = eraInfo();
-  if (E.open) return `<div class="reg big">📜 <b>Grande refonte du règlement ${E.at}</b> · ${E.next}. ${E.desc} Au 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro, et les arbres de développement changent. Développe dès maintenant la voiture ${E.at} : mêmes ateliers et même budget que la voiture ${S.year}. <b>${E.fut} pièce${E.fut > 1 ? 's' : ''} prête${E.fut > 1 ? 's' : ''}.</b><button id="szFut">📜 Voir la voiture ${E.at}</button></div>`;
-  if (S.reform && S.round < 3) return `<div class="reg big">🆕 <b>Nouvelle ère : ${S.reform.name}</b>. ${S.reform.desc} Tout le plateau est reparti de zéro : ${S.reform.parts ? `${S.reform.parts} pièce${S.reform.parts > 1 ? 's' : ''} préparée${S.reform.parts > 1 ? 's' : ''} l’an dernier équipe${S.reform.parts > 1 ? 'nt' : ''} ta voiture` : 'aucune pièce préparée l’an dernier, tout est à construire'}. Prochaine refonte : pas avant ${E.at - 1}.</div>`;
+  if (E.open) return `<div class="reg big">📜 <b>Grande refonte du règlement ${E.at}</b> · ${E.next}. ⭐ ${E.focus} ${E.desc} Au 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro, et les arbres de développement changent. Développe dès maintenant la voiture ${E.at} : mêmes ateliers et même budget que la voiture ${S.year}. <b>${E.fut} pièce${E.fut > 1 ? 's' : ''} prête${E.fut > 1 ? 's' : ''}.</b><button id="szFut">📜 Voir la voiture ${E.at}</button></div>`;
+  if (S.reform && S.round < 3) return `<div class="reg big">🆕 <b>Nouvelle ère : ${S.reform.name}</b>. ${S.reform.focus ? '⭐ ' + S.reform.focus + ' ' : ''}${S.reform.desc} Tout le plateau est reparti de zéro : ${S.reform.parts ? `${S.reform.parts} pièce${S.reform.parts > 1 ? 's' : ''} préparée${S.reform.parts > 1 ? 's' : ''} l’an dernier équipe${S.reform.parts > 1 ? 'nt' : ''} ta voiture` : 'aucune pièce préparée l’an dernier, tout est à construire'}. Prochaine refonte : pas avant ${E.at - 1}.</div>`;
   return '';
 }
 document.addEventListener('click', e => { if (e.target.closest?.('#szFut')) showGarage('season', { fut: true }); });
@@ -532,11 +532,11 @@ function offSeason(tp) {
 function eraStart(S, ref) {
   if (ref) {
     S.reform = { ...ref, year: S.year };
-    mail({ from: 'Instance dirigeante du championnat', subject: `${ref.name} : le nouveau règlement entre en vigueur`, body: `${ref.desc}\nToutes les écuries repartent de zéro : ${ref.lost} pièce${ref.lost > 1 ? 's' : ''} de l’ancienne voiture ${ref.lost > 1 ? 'sont retirées' : 'est retirée'}, ${ref.parts} pièce${ref.parts > 1 ? 's' : ''} de la nouvelle voiture ${ref.parts > 1 ? 'sont' : 'est'} déjà prête${ref.parts > 1 ? 's' : ''}.\nLa hiérarchie est rebattue : les écuries qui ont le mieux préparé cette saison partent devant.`, tag: 'reglement' });
+    mail({ from: 'Instance dirigeante du championnat', subject: `${ref.name} : le nouveau règlement entre en vigueur`, body: `${ref.focus}\n${ref.desc}\nToutes les écuries repartent de zéro : ${ref.lost} pièce${ref.lost > 1 ? 's' : ''} de l’ancienne voiture ${ref.lost > 1 ? 'sont retirées' : 'est retirée'}, ${ref.parts} pièce${ref.parts > 1 ? 's' : ''} de la nouvelle voiture ${ref.parts > 1 ? 'sont' : 'est'} déjà prête${ref.parts > 1 ? 's' : ''}.\nLa hiérarchie est rebattue : les écuries qui ont le mieux préparé cette saison partent devant.`, tag: 'reglement' });
   }
   if (futureOpen()) {
     const E = eraInfo(); S.fut = S.fut || {};
-    mail({ from: 'Instance dirigeante du championnat', subject: `Officiel : refonte totale du règlement en ${E.at}`, body: `Le règlement ${E.at} est publié : ${E.next}.\n${E.desc}\nAu 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro et les arbres de développement changent.\nTu peux développer la voiture ${E.at} dès aujourd’hui (QG → Usine → 📜 Voiture ${E.at}). Attention : les ateliers et le budget sont partagés avec la voiture ${S.year}.`, tag: 'reglement' });
+    mail({ from: 'Instance dirigeante du championnat', subject: `Officiel : refonte totale du règlement en ${E.at}`, body: `Le règlement ${E.at} est publié : ${E.next}.\n${E.focus}\n${E.desc}\nAu 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro et les arbres de développement changent.\nTu peux développer la voiture ${E.at} dès aujourd’hui (QG → Usine → 📜 Voiture ${E.at}). Attention : les ateliers et le budget sont partagés avec la voiture ${S.year}.`, tag: 'reglement' });
   }
   SZ.saveSeason();
 }

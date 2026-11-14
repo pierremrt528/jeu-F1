@@ -112,12 +112,12 @@ const stores = () => [[garage.dev, garage.owned], [garage.era.fdev, garage.era.f
 export const shownEra = () => ERAS[F ? garage.era.ni : garage.era.i];
 export const currentEra = () => ERAS[garage.era.i];
 export const futureOpen = () => !!season && season.year >= garage.era.at - 1;
-export const eraInfo = () => { const e = garage.era; return { name: eraName(e), at: e.at, next: eraName({ i: e.ni, gen: e.gen + 1 }), desc: ERAS[e.ni].desc, open: futureOpen(), fut: e.fut.length, cur: ERAS[e.i].desc }; };
+export const eraInfo = () => { const e = garage.era; return { name: eraName(e), at: e.at, next: eraName({ i: e.ni, gen: e.gen + 1 }), desc: ERAS[e.ni].desc, focus: ERAS[e.ni].focus, nowFocus: ERAS[e.i].focus, open: futureOpen(), fut: e.fut.length, cur: ERAS[e.i].desc }; };
 // refonte : la voiture de la nouvelle ère remplace l'ancienne (pièces et recherches en cours), tout le reste repart de zéro
 export function applyReform(year) {
   const e = garage.era;
   if (year < e.at) return null;
-  const out = { name: eraName({ i: e.ni, gen: e.gen + 1 }), parts: e.fut.length, lost: garage.owned.length, desc: ERAS[e.ni].desc };
+  const out = { name: eraName({ i: e.ni, gen: e.gen + 1 }), parts: e.fut.length, lost: garage.owned.length, desc: ERAS[e.ni].desc, focus: ERAS[e.ni].focus };
   garage.owned = e.fut; garage.dev = e.fdev;
   garage.era = { i: e.ni, gen: e.gen + 1, at: year + reformGap(), ni: nextEra(e.ni), fut: [], fdev: {} };
   index(); save(); rebuildRoom();
@@ -246,7 +246,7 @@ function cmpHTML() {
 // prochaine ère : règlement, forme de la voiture, avance déjà prise
 function eraHTML() {
   const e = garage.era, u = carUpgrades(e.fut), v = (TEAMS[0].perf * perfFactor(u) * 100).toFixed(1).replace('.', ',');
-  return `<h4>📜 ${eraName({ i: e.ni, gen: e.gen + 1 })} · ${e.at}</h4><div class="era"><p>${ERAS[e.ni].desc}</p>` +
+  return `<h4>📜 ${eraName({ i: e.ni, gen: e.gen + 1 })} · ${e.at}</h4><div class="era"><p class="erak">⭐ ${ERAS[e.ni].focus}</p><p>${ERAS[e.ni].desc}</p>` +
     `<p>Au 1er janvier ${e.at}, toutes les pièces de la voiture actuelle disparaissent, chez toi comme chez les rivaux : seules comptent les pièces de la voiture ${e.at} développées d’ici là. Ateliers et budget sont partagés entre les deux voitures.</p>` +
     `<p class="eraf"><span>Voiture ${e.at}</span><b>${v}</b><small>${e.fut.length} pièce${e.fut.length > 1 ? 's' : ''} prête${e.fut.length > 1 ? 's' : ''}</small></p></div>`;
 }
@@ -294,7 +294,7 @@ function render() {
   if (!ZONES[zone].tabs.includes(tab)) tab = ZONES[zone].tabs[0];
   $('#gTitle').textContent = zone === 'usine' && F ? `Voiture ${garage.era.at}` : ZONES[zone].title;
   $('#gLogo').innerHTML = logoSVG(TEAMS[0].logo) + `<b>${TEAMS[0].abbr}</b>`;
-  $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${VT().reduce((s, t) => s + t.nodes.filter(n => owned(n.id)).length, 0)}/${VT().reduce((s, t) => s + t.nodes.length, 0)} pièces installées` : '');
+  $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${VT().reduce((s, t) => s + t.nodes.filter(n => owned(n.id)).length, 0)}/${VT().reduce((s, t) => s + t.nodes.length, 0)} pièces · ${eraName(F ? { i: garage.era.ni, gen: garage.era.gen + 1 } : garage.era)}` : '');
   $('#gZones').innerHTML = Object.entries(ZONES).map(([k, z]) => `<button data-zone="${k}" class="${k === zone ? 'sel' : ''}">${z.name}</button>`).join('');
   root.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { if (b.dataset.zone !== 'usine') viewFuture(false); zone = b.dataset.zone; tab = ZONES[zone].tabs[0]; sel = null; render(); });
   const rd = zone === 'usine', ov = rd && tab === 'apercu', card = root.querySelector('.garage');
@@ -319,7 +319,7 @@ function renderRD($, ov) {
   $('#gTabs').innerHTML = ZONES.usine.tabs.map(id => {
     if (id === 'apercu') return `<button data-tab="apercu" class="${tab === id ? 'sel' : ''}" style="--c:var(--acc)">Aperçu</button>`;
     const t = treeById(id), n = t.nodes.filter(x => owned(x.id)).length;
-    return `<button data-tab="${id}" class="${tab === id ? 'sel' : ''}" style="--c:${t.color}">${art(DEPT_ART[id])}${tname(t)}<small>${slots(t).some(k => VD()[k]) ? '⏳' : ''}${n}/${t.nodes.length}</small></button>`;
+    return `<button data-tab="${id}" class="${tab === id ? 'sel' : ''}" style="--c:${t.color}">${art(DEPT_ART[id])}${tname(t)}${shownEra().key === id ? ' ⭐' : ''}<small>${slots(t).some(k => VD()[k]) ? '⏳' : ''}${n}/${t.nodes.length}</small></button>`;
   }).join('') + (futureOpen() ? `<button data-fut class="fut ${F ? 'sel' : ''}" style="--c:#ffd84d">📜 ${F ? `Voiture ${season.year}` : `Voiture ${garage.era.at}`}<small>${F ? 'ère actuelle' : 'nouveau règlement'}</small></button>` : '');
   root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sel = null; render(); });
   const fb = root.querySelector('[data-fut]'); if (fb) fb.onclick = () => { viewFuture(!F); tab = 'apercu'; sel = null; render(); };
@@ -333,7 +333,7 @@ function renderOverview($) {
   const cards = VT().map(t => {
     const n = t.nodes.filter(x => owned(x.id)).length, w = slots(t).map(k => VD()[k]).filter(Boolean), c = chiefOf(t.id);
     return `<button class="dcard" data-go="${t.id}" style="--c:${t.color}"><span class="dn">${tname(t)}</span><span class="dd">${DESC[t.id]}</span>${ring(t, n / t.nodes.length)}` +
-      `<span class="dc"><b>${n}</b>/${t.nodes.length} pièces</span>${chain(t)}` +
+      `<span class="dc"><b>${n}</b>/${t.nodes.length} pièces${shownEra().key === t.id ? ' · ⭐ pôle roi' : ''}</span>${chain(t)}` +
       (w.length ? w.map(d => `<span class="dw"><span>⏳ ${NODES[d.id].name}</span><i><em style="width:${prog(d) * 100}%"></em></i><small>prête dans ${left(d)} j</small></span>`).join('')
         : `<span class="dw free">${n === t.nodes.length ? '✓ Pôle complet' : '● Pôle libre : lance une pièce'}</span>`) +
       `<span class="dch">${c ? '👤 ' + c.name : '👤 Pas de chef'}</span></button>`;

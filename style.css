@@ -1188,3 +1188,4 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 .cmp .era p { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: rgba(255,255,255,.8); }
 .cmp .era .eraf { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,216,77,.12); color: #ffe9a0; }
 .cmp .era .eraf b { font-size: 18px; color: #ffd84d; }
+.cmp .era .erak { color: #ffd84d; font-weight: 700; }
