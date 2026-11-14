@@ -200,13 +200,14 @@ export function buildTrackMeshes(track, scene) {
       lane.quad(pt(i, la - hw, 0.04), pt(i, la + hw, 0.04), pt(j, lb - hw, 0.04), pt(j, lb + hw, 0.04), [0, v0 / 16], [0.45, v0 / 16], [0, v1 / 16], [0.45, v1 / 16]);
       for (const e of [-hw, hw]) paint.quad(pt(i, la + e - 0.12, 0.06), pt(i, la + e + 0.12, 0.06), pt(j, lb + e - 0.12, 0.06), pt(j, lb + e + 0.12, 0.06), [0, 0], [1, 0], [0, 1], [1, 1]);
     }
-    // emplacements : rectangle à la couleur de chaque écurie, côté garages
+    // emplacements (P.slot) : carré à la couleur de chaque écurie, côté garages, cadre blanc (jaune pour le joueur) où il faut s'arrêter
     TEAMS.forEach((t, n) => {
-      const c = new THREE.Color(t.color), k0 = P.box(n) - 2;
-      for (let k = k0; k < k0 + 4; k++) {
-        const i = ip(k), j = ip(k + 1);
-        paint.quad(pt(i, P.lat + 0.6, 0.065), pt(i, P.lat + hw - 0.3, 0.065), pt(j, P.lat + 0.6, 0.065), pt(j, P.lat + hw - 0.3, 0.065), [0, 0], [1, 0], [0, 1], [1, 1], [c.r, c.g, c.b]);
-      }
+      const c = new THREE.Color(t.color), s = P.slot(n), f = n ? [1, 1, 1] : [1, 0.85, 0.1], e = n ? 0.15 : 0.3;
+      const lerpPt = (i, i2, w, o) => { const a = pt(i, o, 0.07), b = pt(i2, o, 0.07); return a.map((v, q) => v + (b[q] - v) * w); };
+      const rect = (ka, kb, la, lb, y, col) => { for (let k = ka; k < kb; k++) { const i = ip(k), j = ip(k + 1); paint.quad(pt(i, la, y), pt(i, lb, y), pt(j, la, y), pt(j, lb, y), [0, 0], [1, 0], [0, 1], [1, 1], col); } };
+      rect(s.k0, s.k1, s.l0, s.l1, 0.065, [c.r, c.g, c.b]);
+      rect(s.k0, s.k1, s.l0 - e, s.l0, 0.07, f); rect(s.k0, s.k1, s.l1, s.l1 + e, 0.07, f);
+      for (const k of [s.k0, s.k1]) { const i = ip(k), i2 = ip(k + (k === s.k0 ? 1 : -1)), w = e / DSm; paint.quad(pt(i, s.l0 - e, 0.07), pt(i, s.l1 + e, 0.07), lerpPt(i, i2, w, s.l0 - e), lerpPt(i, i2, w, s.l1 + e), [0, 0], [1, 0], [0, 1], [1, 1], f); }
     });
     // muret des stands entre la piste et la voie, avec grillage
     const pw = new Geo();

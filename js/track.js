@@ -153,7 +153,10 @@ export function pitLane(track) {
   P.loss = Math.round(loss * 10) / 10;
   P.latAt = k => k < P.e1 ? half - 1 + (lat - half + 1) * sm((k - P.e0) / (P.e1 - P.e0))
     : k > P.x0 ? lat - (lat - half + 1) * sm((k - P.x0) / (P.x1 - P.x0)) : lat;
-  P.box = t => -125 + t * 13;          // emplacement de l'écurie t (0..9), avant et après la ligne
+  P.box = t => -125 + t * 13;          // emplacement de l'écurie t (0..9), avant la ligne
+  // carré de l'écurie t au sol, côté garages : de k0 à k1 (échantillons signés), de l0 à l1 (latéral), centre kc / lc
+  // (sert à la physique, au dessin des carrés et à l'habillage des stands)
+  P.slot = t => ({ k0: P.box(t) - 2, k1: P.box(t) + 2, kc: P.box(t), l0: lat + 0.6, l1: lat + 3.3, lc: lat + 1.95 });
   P.k = (i, N) => i > N / 2 ? i - N : i;  // indice signé par rapport à la ligne
   return P;
 }

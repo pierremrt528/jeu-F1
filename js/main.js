@@ -14,7 +14,7 @@ import { buildQuestions, runPress, teamLine } from './press.js';
 import { TEAMS, DIFF, DIFFS, dname } from './data.js';
 import { carUpgrades } from './garage.js';
 import * as SZ from './season.js';
-import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, boxToggle, radioAsk, radioOrder } from './strategy.js';
+import { TYRES, FORMATS, MODES, forecast, wxText, lapsFor, radioAsk, radioOrder } from './strategy.js';
 import { showPreraceScreen } from './prerace.js';
 import { startIntro, startOutro, cineCamera, cineKind, end as endCine, champCard, startScene } from './cine.js';
 import { renderRoom } from './showroom.js';
@@ -707,10 +707,8 @@ function showPrerace(opts) {
   show('prerace');
 }
 // stand et radio
-const toggleBox = () => { if (R && !R.solo) boxToggle(R, R.player); };
-$('boxBtn').onclick = toggleBox;
 $('tyreChip').onclick = () => { if (R && !R.solo) radioOrder(R, 'tyre'); };
-addEventListener('keydown', e => { if (e.target?.tagName === 'INPUT') return; if (e.code === 'KeyB') toggleBox(); if (e.code === 'KeyR') toggleRadio(); });
+addEventListener('keydown', e => { if (e.target?.tagName === 'INPUT') return; if (e.code === 'KeyR') toggleRadio(); });
 function toggleRadio() { if (!R || R.solo) return; $('radioPanel').classList.toggle('hidden'); radioLabels(); }
 function radioLabels() {
   if (!R) return;

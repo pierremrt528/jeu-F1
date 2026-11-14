@@ -215,6 +215,7 @@ body.tilt #ctl .left { display: none; }
 #tyreChip b { width: 24px; height: 24px; border-radius: 50%; border: 4px solid var(--c); display: flex; align-items: center; justify-content: center; font-size: 11px; background: #111; }
 #tyreChip.box { outline: 2px solid #ffd84d; }
 #dmgIco { color: #ff9a6a; font-weight: 700; }
+#boxBtn { pointer-events: none; border-radius: 8px; color: #fff; font-weight: 700; white-space: nowrap; }
 #boxBtn.on { background: #b58900; color: #111; }
 .prerace { max-width: 520px; }
 .prwx { font-size: 17px; font-weight: 700; }

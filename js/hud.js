@@ -2,7 +2,7 @@
 import { DS } from './track.js';
 import { dname } from './data.js';
 import { SPEC } from './car.js';
-import { TYRES, MODES, fuelLaps, lifeBand } from './strategy.js';
+import { TYRES, MODES, fuelLaps, lifeBand, inSlot } from './strategy.js';
 import { updateQuali, qualiHud } from './qsession.js';
 const LIFEC = { max: '#fff', bon: '#c8f07a', faible: '#ffb340', nul: '#ff5a4a' };
 
@@ -62,9 +62,12 @@ export function updateHud(R, fps) {
   txt('wxIco', R.raining ? '🌧️' : R.wet > 0.1 ? '💧' : '');
   const dm = [p.fwOff ? '⚠ aileron avant arraché' : p.dmg > 0.12 ? `⚠ aileron av. ${Math.round(p.dmg * 100)} %` : '', p.rwOff ? '⚠ aileron arrière arraché' : p.dmgR > 0.12 ? `⚠ aileron arr. ${Math.round(p.dmgR * 100)} %` : ''].filter(Boolean).join(' · ');
   txt('dmgIco', dm || (p.powerLoss ? '⚠ moteur' : ''));
-  tog('boxBtn', 'hidden', !!R.solo); tog('radioBtn', 'hidden', !!R.solo);
-  tog('boxBtn', 'on', !!p.box || !!p.pit);
-  txt('boxBtn', p.pit ? '🔧 AU STAND' : p.box ? '🔧 BOX ✓' : '🔧 STAND');
+  tog('boxBtn', 'hidden', !p.pit); tog('radioBtn', 'hidden', !!R.solo);
+  if (p.pit) {   // voie des stands : où est le carré ?
+    const q = p.pit, s = R.pitP.slot(p.teamIdx ?? 0), d = Math.round((s.kc - q.k) * 2);
+    tog('boxBtn', 'on', q.phase === 'stop');
+    txt('boxBtn', q.phase === 'stop' ? `🔧 Pneus… ${Math.max(0, q.stop).toFixed(1)} s` : q.phase === 'out' ? '🟢 Sortie · limiteur' : !q.manual ? '🔧 Au stand' : inSlot(R, p) ? '🛑 Freine !' : d > 2 ? `🔧 Carré dans ${d} m${p.lat < s.lc - 0.9 ? ' ➡' : ''}` : d < -2 ? `⬇ Recule de ${-d} m` : '➡ Serre à droite');
+  }
   html('pos', `P${pos}<small>/${n}</small>`);
   txt('lap', R.solo ? (p.lap < 1 ? 'Tour de lancement' : 'Tour chrono') : `Tour ${Math.max(1, Math.min(p.lap, R.laps))}/${R.laps}`);
   txt('cur', R.phase === 'race' && !p.finished ? fmt(R.t - p.lapStart) : fmt(0));
