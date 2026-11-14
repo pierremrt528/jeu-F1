@@ -42,6 +42,7 @@ class Car:
     def __init__(self, name):
         self.bm = bmesh.new()
         self.tag = self.bm.faces.layers.int.new('tag')
+        self.uvl = self.bm.loops.layers.uv.new('UVMap')
         self.cur_tag = 0
         self.name = name
 
@@ -204,6 +205,14 @@ class Car:
     def rod(self, a, b, r, k, rb=None, seg=6):
         return self.tube([a, b], r, k, seg=seg, smooth=0, rb=rb)
 
+    def panel(self, pts, k, uvs):
+        """Quadrilatère texturé (panneau publicitaire) : pts 4 coins (ordre trigonométrique vu de face), uvs 4 couples."""
+        V = [self.bm.verts.new(Vector(p)) for p in pts]
+        f = self._face(V, k)
+        if f:
+            for l, uv in zip(f.loops, uvs): l[self.uvl].uv = uv
+        return [f]
+
     def box(self, c, size, k, rx=0.0):
         bm = self.bm
         hx, hy, hz = size[0] / 2, size[1] / 2, size[2] / 2
@@ -348,3 +357,56 @@ def export_json(obj_body, obj_wheels, path_unreal, path_web, meta):
         f.write(b'\0' * pad)
         f.write(struct.pack('<%dH' % len(index), *index))
     return {'tris_body': len(body), 'tris_wheels': len(wheels), 'web_verts': len(verts)}
+
+
+def materials_for(prefix, pal, rough=None):
+    out = []
+    for k, h in enumerate(pal):
+        name = '%s%d' % (prefix, k)
+        m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+        m.use_nodes = True
+        b = m.node_tree.nodes.get('Principled BSDF')
+        if b:
+            b.inputs['Base Color'].default_value = srgb(h)
+            b.inputs['Roughness'].default_value = (rough or {}).get(k, 0.7)
+        out.append(m)
+    return out
+
+
+def export_prop(ob, path, ad_k=None, meta=None):
+    """Décor : binaire GPMC v2 indexé (positions int16 au 1/200 m, normales int8, K uint8, indices uint16, puis uv int16 au 1/1000).
+    Les triangles du panneau publicitaire (K = ad_k) sont rangés à la fin (groupe de matériau texturé : 'ad' = premier indice)."""
+    import json, struct
+    dg = bpy.context.evaluated_depsgraph_get()
+    e = ob.evaluated_get(dg); me = e.to_mesh(); me.calc_loop_triangles()
+    cn = me.corner_normals; uvl = me.uv_layers.active
+    tris = []
+    for t in me.loop_triangles:
+        k = int(''.join(ch for ch in me.materials[t.material_index].name if ch.isdigit()))
+        vs = [(tuple(me.vertices[me.loops[l].vertex_index].co), tuple(cn[l].vector), tuple(uvl.data[l].uv) if uvl else (0, 0)) for l in t.loops]
+        tris.append((1 if k == ad_k else 0, k, vs))
+    e.to_mesh_clear()
+    tris.sort(key=lambda t: t[0])
+    verts, index, vmap, ad = [], [], {}, None
+    for isad, k, vs in tris:
+        if isad and ad is None: ad = len(index)
+        for (p, n, uv) in vs:
+            q = (round(p[0] * 200), round(p[1] * 200), round(p[2] * 200), round(n[0] * 127), round(n[1] * 127), round(n[2] * 127), k,
+                 round(uv[0] * 1000) if isad else 0, round(uv[1] * 1000) if isad else 0)
+            i = vmap.get(q)
+            if i is None: i = vmap[q] = len(verts); verts.append(q)
+            index.append(i)
+    assert len(verts) < 65536
+    head = json.dumps({'v': 2, 'nv': len(verts), 'ni': len(index), 'ad': ad, 'q': 200, 'meta': meta or {}}).encode()
+    head += b' ' * ((4 - len(head) % 4) % 4)
+    nv = len(verts)
+    with open(path, 'wb') as f:
+        f.write(b'GPMC'); f.write(struct.pack('<I', len(head))); f.write(head)
+        f.write(struct.pack('<%dh' % (nv * 3), *[c for v in verts for c in v[:3]]))
+        f.write(struct.pack('<%db' % (nv * 3), *[c for v in verts for c in v[3:6]]))
+        f.write(bytes([v[6] for v in verts]))
+        f.write(b'\0' * ((4 - (nv * 10) % 4) % 4))
+        f.write(struct.pack('<%dH' % len(index), *index))
+        f.write(b'\0' * ((4 - (len(index) * 2) % 4) % 4))
+        f.write(struct.pack('<%dh' % (nv * 2), *[c for v in verts for c in v[7:9]]))
+    return {'tris': len(tris), 'verts': nv}

@@ -5,7 +5,8 @@
 import os, sys, importlib, bpy
 D = os.path.dirname(os.path.abspath(globals().get('__file__') or globals().get('CHEMIN', '.')))
 ROOT = os.path.dirname(os.path.dirname(D))
-if D not in sys.path: sys.path.insert(0, D)
+sys.path[:] = [D] + [p for p in sys.path if p != D]
+for m in ('carlib', 'cars'): sys.modules.pop(m, None)
 import carlib, cars
 importlib.reload(carlib); importlib.reload(cars)
 os.makedirs(os.path.join(D, 'out'), exist_ok=True)
