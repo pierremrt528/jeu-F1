@@ -108,6 +108,9 @@ garage.owned = garage.owned.filter(id => NODES[id]);   // anciennes sauvegardes
 for (const k in garage.dev) if (!NODES[garage.dev[k]?.id]) delete garage.dev[k];
 const stores = () => [[garage.dev, garage.owned], [garage.era.fdev, garage.era.fut]];
 // la voiture de la prochaine ère se développe pendant la dernière saison de l'ère en cours
+// ère dont la voiture est affichée (atelier : vue « voiture de la prochaine ère ») ; id = modèle 3D de l'ère (reglement.js)
+export const shownEra = () => ERAS[F ? garage.era.ni : garage.era.i];
+export const currentEra = () => ERAS[garage.era.i];
 export const futureOpen = () => !!season && season.year >= garage.era.at - 1;
 export const eraInfo = () => { const e = garage.era; return { name: eraName(e), at: e.at, next: eraName({ i: e.ni, gen: e.gen + 1 }), desc: ERAS[e.ni].desc, open: futureOpen(), fut: e.fut.length, cur: ERAS[e.i].desc }; };
 // refonte : la voiture de la nouvelle ère remplace l'ancienne (pièces et recherches en cours), tout le reste repart de zéro

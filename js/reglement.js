@@ -2,16 +2,17 @@
 // de développement changent et toutes les pièces repartent de zéro. La voiture de la nouvelle ère se
 // développe un an à l'avance, avec les mêmes ateliers et le même budget que la voiture en cours.
 
-// ères (univers fictif) : mul = poids des effets des pièces, shape = forme de la monoplace (carmodel.js)
+// ères (univers fictif) : id = nom du modèle 3D de l'ère (un modèle par ère), mul = poids des effets des pièces,
+// shape = forme de la monoplace procédurale (carmodel.js)
 export const ERAS = [
-  { name: 'Fondation', desc: 'Voitures longues, aileron avant à trois éléments, grande dérive.', mul: {}, shape: {} },
-  { name: 'Effet de sol', desc: 'L’appui vient du dessous : fond sculpté, pontons creusés, aileron avant à deux éléments et aileron de poutre.',
+  { id: 'fondation', name: 'Fondation', desc: 'Voitures longues, aileron avant à trois éléments, grande dérive.', mul: {}, shape: {} },
+  { id: 'effet-sol', name: 'Effet de sol', desc: 'L’appui vient du dessous : fond sculpté, pontons creusés, aileron avant à deux éléments et aileron de poutre.',
     mul: { kd: 1.25, vtop: 0.9 }, shape: { nose: 0.93, fwEl: 2, pod: 0.78, podH: 0.92, fin: 0, rwW: 0.94, beam: 1 } },
-  { name: 'Hybride', desc: 'Moteurs plus électriques : voitures plus courtes, gros pontons pour refroidir, aileron arrière bas et large.',
+  { id: 'hybride', name: 'Hybride', desc: 'Moteurs plus électriques : voitures plus courtes, gros pontons pour refroidir, aileron arrière bas et large.',
     mul: { acc: 1.3, fuel: 1.3, vtop: 1.1, kd: 0.85 }, shape: { nose: 0.86, fwSpan: 0.92, pod: 1.12, podH: 1.06, rwW: 1.14, rwH: -0.12, beam: 0 } },
-  { name: 'Aéro active', desc: 'Ailerons mobiles et nez très long : quatre éléments à l’avant, pontons étroits, très grande dérive.',
+  { id: 'aero-active', name: 'Aéro active', desc: 'Ailerons mobiles et nez très long : quatre éléments à l’avant, pontons étroits, très grande dérive.',
     mul: { slip: 1.4, kd: 1.1, tyre: 1.2 }, shape: { nose: 1.1, fwEl: 4, fwSpan: 1.04, pod: 0.72, podH: 0.86, fin: 2, rwW: 0.9, rwH: 0.1 } },
-  { name: 'Sécurité', desc: 'Structures renforcées, voitures plus larges et plus lourdes, aileron avant très large et sans dérive.',
+  { id: 'securite', name: 'Sécurité', desc: 'Structures renforcées, voitures plus larges et plus lourdes, aileron avant très large et sans dérive.',
     mul: { rel: 1.3, wall: 1.3, mu: 1.15, vtop: 0.95 }, shape: { nose: 0.97, fwEl: 2, fwSpan: 1.1, pod: 1.2, podH: 1.1, fin: 0, rwW: 1.05, rwH: 0.05, beam: 0 } },
 ];
 // nom affiché d'une ère : les ères qui reviennent prennent un numéro (« Effet de sol II »)
