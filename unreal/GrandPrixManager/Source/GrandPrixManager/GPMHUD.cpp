@@ -107,22 +107,41 @@ void AGPMHUD::Paint(int32 Which, float X, float Y, float W, float H, FLinearColo
 	else if (Which != 3) DrawRect(Col, X, Y, W, H);
 }
 
+// Textes du HUD avec les polices du moteur (le chemin Canvas + police Slate n'affichait rien) :
+// taille en points comme dans les écrans, graisse simulée par un second passage décalé, ombre légère pour la lisibilité
+namespace GPMHudInk
+{
+	UFont* FontOf(int32 Kind) { return GEngine ? (Kind <= 1 ? GEngine->GetLargeFont() : GEngine->GetMediumFont()) : nullptr; }
+	float ScaleOf(const UFont* F, float Px) { return Px / FMath::Max(1.f, F ? F->GetMaxCharHeight() : 16.f); }
+}
+
 FVector2D AGPMHUD::InkSize(const FString& Text, int32 Kind, float Size) const
 {
-	FSlateFontInfo F = GPMUIStyle::Face(Kind, 10);
-	F.Size = Size * Scale;
-	if (!FSlateApplication::IsInitialized() || !FSlateApplication::Get().GetRenderer()) return FVector2D(Text.Len() * F.Size * 0.75f, F.Size * 1.4f);
-	return FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Text, F, 1.f);
+	const float Px = Size * Scale * 1.5f;
+	const UFont* F = GPMHudInk::FontOf(Kind);
+	if (!F || Text.IsEmpty()) return FVector2D(Text.Len() * Px * 0.5f, Px);
+	const float K = GPMHudInk::ScaleOf(F, Px);
+	return FVector2D(F->GetStringSize(*Text) * K + (Kind == 0 ? Px * 0.06f : 0.f), F->GetStringHeightSize(*Text) * K);
 }
 
 void AGPMHUD::Ink(const FString& Text, float X, float Y, int32 Kind, float Size, FLinearColor Col, float Align)
 {
 	if (!Canvas || Text.IsEmpty()) return;
-	FSlateFontInfo F = GPMUIStyle::Face(Kind, 10);
-	F.Size = Size * Scale;
-	const float Px = Align > 0.f ? X - InkSize(Text, Kind, Size).X * Align : X;
-	FCanvasTextItem Item(FVector2D(Px, Y), FText::FromString(Text), F, Col);
+	UFont* F = GPMHudInk::FontOf(Kind);
+	if (!F) return;
+	const float Px = Size * Scale * 1.5f, K = GPMHudInk::ScaleOf(F, Px);
+	const float Sx = Align > 0.f ? X - InkSize(Text, Kind, Size).X * Align : X;
+	const float Bold = Kind == 0 ? Px * 0.06f : Kind == 1 ? Px * 0.035f : 0.f;
+	FCanvasTextItem Item(FVector2D(Sx, Y), FText::FromString(Text), F, Col);
+	Item.Scale = FVector2D(K, K);
+	Item.EnableShadow(FLinearColor(0.f, 0.f, 0.f, 0.45f * Col.A), FVector2D(1.f, 1.f) * FMath::Max(1.f, Px * 0.05f));
 	Canvas->DrawItem(Item);
+	if (Bold > 0.f)
+	{
+		Item.DisableShadow();
+		Item.Position = FVector2D(Sx + Bold, Y);
+		Canvas->DrawItem(Item);
+	}
 }
 
 void AGPMHUD::TyreIcon(TCHAR Tyre, float Cx, float Cy, float Rad)
