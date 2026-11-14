@@ -1,0 +1,72 @@
+{
+ "FORMATS": {
+  "flash": {
+   "name": "Éclair",
+   "minutes": 0,
+   "prize": 0.3
+  },
+  "sprint": {
+   "name": "Sprint",
+   "minutes": 11,
+   "prize": 1
+  },
+  "long": {
+   "name": "Long",
+   "minutes": 22,
+   "prize": 1.6
+  }
+ },
+ "FPK": 1.7,
+ "KPLAN": 1.05,
+ "MODES": {
+  "push": {
+   "name": "Attaque",
+   "v": 1.012,
+   "a": 1.04,
+   "fuel": 1.15,
+   "wear": 1.3
+  },
+  "norm": {
+   "name": "Normal",
+   "v": 1,
+   "a": 1,
+   "fuel": 1,
+   "wear": 1
+  },
+  "save": {
+   "name": "Économie",
+   "v": 0.985,
+   "a": 0.94,
+   "fuel": 0.8,
+   "wear": 0.75
+  }
+ },
+ "PIT_LOSS": 24.4,
+ "TANK": 110,
+ "TYRES": {
+  "S": {
+   "name": "Tendre",
+   "color": "#ff3b3b",
+   "grip": 1.09,
+   "wpl": 0.16
+  },
+  "M": {
+   "name": "Medium",
+   "color": "#ffd400",
+   "grip": 1,
+   "wpl": 0.085
+  },
+  "H": {
+   "name": "Dur",
+   "color": "#f2f2f2",
+   "grip": 0.93,
+   "wpl": 0.055
+  },
+  "W": {
+   "name": "Pluie",
+   "color": "#2f8cff",
+   "grip": 0.86,
+   "wpl": 0.06
+  }
+ }
+}

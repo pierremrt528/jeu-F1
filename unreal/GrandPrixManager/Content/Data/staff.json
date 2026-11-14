@@ -1,0 +1,211 @@
+{
+ "CHIEFS": [
+  {
+   "id": "m1",
+   "dept": "moteur",
+   "name": "R. Valtieri",
+   "from": "Ex-motoriste",
+   "cost": 18,
+   "time": 8,
+   "risk": 6,
+   "fee": 3
+  },
+  {
+   "id": "m2",
+   "dept": "moteur",
+   "name": "J. Okafor",
+   "from": "Ingénieur maison",
+   "cost": 5,
+   "time": 15,
+   "risk": 12,
+   "fee": 3
+  },
+  {
+   "id": "m3",
+   "dept": "moteur",
+   "name": "H. Lindgren",
+   "from": "Formule B",
+   "cost": 8,
+   "time": 8,
+   "risk": 8,
+   "fee": 2.4
+  },
+  {
+   "id": "m4",
+   "dept": "moteur",
+   "name": "D. Morel",
+   "from": "Vétéran",
+   "cost": 10,
+   "time": 22,
+   "risk": 30,
+   "fee": 5.2
+  },
+  {
+   "id": "a1",
+   "dept": "aero",
+   "name": "C. Nakamura",
+   "from": "Soufflerie universitaire",
+   "cost": 6,
+   "time": 25,
+   "risk": 10,
+   "fee": 3.7
+  },
+  {
+   "id": "a2",
+   "dept": "aero",
+   "name": "E. Fontaine",
+   "from": "Ex-aéronautique",
+   "cost": 12,
+   "time": 12,
+   "risk": 22,
+   "fee": 4.1
+  },
+  {
+   "id": "a3",
+   "dept": "aero",
+   "name": "P. Duarte",
+   "from": "Jeune talent",
+   "cost": 9,
+   "time": 9,
+   "risk": 5,
+   "fee": 2.3
+  },
+  {
+   "id": "a4",
+   "dept": "aero",
+   "name": "S. Brandt",
+   "from": "Vétéran",
+   "cost": 22,
+   "time": 15,
+   "risk": 25,
+   "fee": 5.2
+  },
+  {
+   "id": "c1",
+   "dept": "chassis",
+   "name": "L. Marquez",
+   "from": "Composites",
+   "cost": 20,
+   "time": 6,
+   "risk": 12,
+   "fee": 3.5
+  },
+  {
+   "id": "c2",
+   "dept": "chassis",
+   "name": "A. Kovač",
+   "from": "Ingénieur maison",
+   "cost": 8,
+   "time": 18,
+   "risk": 8,
+   "fee": 3.2
+  },
+  {
+   "id": "c3",
+   "dept": "chassis",
+   "name": "T. Bello",
+   "from": "Formule B",
+   "cost": 6,
+   "time": 6,
+   "risk": 14,
+   "fee": 2.6
+  },
+  {
+   "id": "c4",
+   "dept": "chassis",
+   "name": "G. Riedel",
+   "from": "Vétéran",
+   "cost": 15,
+   "time": 20,
+   "risk": 28,
+   "fee": 5.3
+  },
+  {
+   "id": "f1",
+   "dept": "fiab",
+   "name": "M. Haddad",
+   "from": "Banc d’essai",
+   "cost": 5,
+   "time": 8,
+   "risk": 35,
+   "fee": 4.2
+  },
+  {
+   "id": "f2",
+   "dept": "fiab",
+   "name": "N. Petit",
+   "from": "Qualité industrielle",
+   "cost": 15,
+   "time": 10,
+   "risk": 15,
+   "fee": 3.6
+  },
+  {
+   "id": "f3",
+   "dept": "fiab",
+   "name": "Y. Sato",
+   "from": "Jeune talent",
+   "cost": 8,
+   "time": 12,
+   "risk": 10,
+   "fee": 2.9
+  },
+  {
+   "id": "f4",
+   "dept": "fiab",
+   "name": "B. Weller",
+   "from": "Vétéran",
+   "cost": 12,
+   "time": 18,
+   "risk": 30,
+   "fee": 5.1
+  },
+  {
+   "id": "s1",
+   "dept": "stand",
+   "name": "O. Lacroix",
+   "from": "Chef mécanicien",
+   "cost": 10,
+   "time": 20,
+   "risk": 10,
+   "fee": 3.6
+  },
+  {
+   "id": "s2",
+   "dept": "stand",
+   "name": "K. Mensah",
+   "from": "Équipe de rallye",
+   "cost": 18,
+   "time": 8,
+   "risk": 8,
+   "fee": 3.2
+  },
+  {
+   "id": "s3",
+   "dept": "stand",
+   "name": "V. Ruiz",
+   "from": "Formule B",
+   "cost": 6,
+   "time": 10,
+   "risk": 12,
+   "fee": 2.7
+  },
+  {
+   "id": "s4",
+   "dept": "stand",
+   "name": "F. Aubert",
+   "from": "Vétéran",
+   "cost": 14,
+   "time": 16,
+   "risk": 26,
+   "fee": 4.8
+  }
+ ],
+ "DEPTS": {
+  "moteur": "Moteur",
+  "aero": "Aéro",
+  "chassis": "Châssis",
+  "fiab": "Fiabilité",
+  "stand": "Stands"
+ }
+}

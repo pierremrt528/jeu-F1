@@ -1,0 +1,54 @@
+{
+ "COULEURS": [
+  {
+   "id": "rouge",
+   "name": "Rouge course",
+   "hex": 14163486
+  },
+  {
+   "id": "nuit",
+   "name": "Bleu nuit",
+   "hex": 1189724
+  },
+  {
+   "id": "anglais",
+   "name": "Vert anglais",
+   "hex": 940598
+  },
+  {
+   "id": "papaye",
+   "name": "Orange papaye",
+   "hex": 16742938
+  },
+  {
+   "id": "jaune",
+   "name": "Jaune",
+   "hex": 16763930
+  },
+  {
+   "id": "carbone",
+   "name": "Noir carbone",
+   "hex": 1513757
+  },
+  {
+   "id": "blanc",
+   "name": "Blanc",
+   "hex": 15922423
+  },
+  {
+   "id": "argent",
+   "name": "Argent",
+   "hex": 11121083
+  },
+  {
+   "id": "violet",
+   "name": "Violet",
+   "hex": 8077284
+  },
+  {
+   "id": "ciel",
+   "name": "Bleu ciel",
+   "hex": 5028095
+  }
+ ]
+}

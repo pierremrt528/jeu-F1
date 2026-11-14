@@ -1,0 +1,119 @@
+{
+ "data.json": [
+  "CIRCUITS",
+  "DIFF",
+  "DIFFS",
+  "PLAYER",
+  "TEAMS",
+  "THEMES"
+ ],
+ "config_couleurs.json": [
+  "COULEURS"
+ ],
+ "config_motoristes.json": [
+  "MOTORISTES"
+ ],
+ "config_nations.json": [
+  "NATIONS"
+ ],
+ "config_pilotes.json": [
+  "PILOTES"
+ ],
+ "config_sponsors.json": [
+  "SPONSORS"
+ ],
+ "config_scenes.json": [
+  "SCENES"
+ ],
+ "career.json": [
+  "DEFAULT_LOGO",
+  "ENGINES",
+  "MARKET",
+  "TIERS",
+  "TIER_POS"
+ ],
+ "team.json": [
+  "FXNAMES"
+ ],
+ "season.json": [
+  "CALENDAR",
+  "GAPS",
+  "MOIS_LONG",
+  "POINTS"
+ ],
+ "garage.json": [
+  "TREES"
+ ],
+ "infra.json": [
+  "INFRA"
+ ],
+ "staff.json": [
+  "CHIEFS",
+  "DEPTS"
+ ],
+ "strategy.json": [
+  "FORMATS",
+  "FPK",
+  "KPLAN",
+  "MODES",
+  "PIT_LOSS",
+  "TANK",
+  "TYRES"
+ ],
+ "tuning.json": [
+  "SETUPS"
+ ],
+ "events.json": [
+  "EVENTS",
+  "EXPECT"
+ ],
+ "stories.json": [
+  "EXTRA",
+  "STORIES"
+ ],
+ "press.json": [
+  "OUTLETS",
+  "QUESTIONS"
+ ],
+ "market.json": [
+  "MID_MULT"
+ ],
+ "nego.json": [
+  "CLAUSES",
+  "INT",
+  "PERS",
+  "ROLES"
+ ],
+ "sponsors.json": [
+  "GOALS",
+  "MAX_SEC",
+  "SPONSORS"
+ ],
+ "logo.json": [
+  "SHAPES"
+ ],
+ "tracks": [
+  "valmont",
+  "portazur",
+  "sierra",
+  "kerlan",
+  "sahrane",
+  "veldmar",
+  "neokyara",
+  "solenza",
+  "varenne",
+  "brekka",
+  "rocheval",
+  "miravel",
+  "oberthal",
+  "kasbara",
+  "castelmare",
+  "aurelia",
+  "nordfjell",
+  "tessaline",
+  "sorrane",
+  "qaltara",
+  "brumenval",
+  "coralia"
+ ]
+}
