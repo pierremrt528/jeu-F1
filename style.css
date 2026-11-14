@@ -1189,3 +1189,4 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 .cmp .era .eraf { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,216,77,.12); color: #ffe9a0; }
 .cmp .era .eraf b { font-size: 18px; color: #ffd84d; }
 .cmp .era .erak { color: #ffd84d; font-weight: 700; }
+#newCareerBtn { color: #ffb0a4; } #newCareerBtn.warn { color: #0a0c10; background: #ffd84d; font-weight: 800; }

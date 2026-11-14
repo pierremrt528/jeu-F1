@@ -375,6 +375,7 @@ function refreshMenu() {
   const c = CIRCUITS.find(c => c.id === settings.circuit) || CIRCUITS[0];
   $('soloInfo').textContent = `${c.name} · ${FORMATS[settings.soloFmt]?.name || 'Sprint'}`;
   $('garageBtn').classList.toggle('hidden', !S);
+  $('newCareerBtn').classList.toggle('hidden', !S && !career);
   $('teamState').innerHTML = S ? teamLine() : '';
 }
 $('pressBtn').onclick = () => {
@@ -594,6 +595,8 @@ function resetAll() {
   SZ.quitSeason(); resetCareer(); resetGarage(); resetInfra(); resetStaff(); resetTeam(); refreshMenu(); show('menu');
 }
 twoTap($('resetBtn'), resetAll); twoTap($('szReset'), resetAll);
+// accueil : tout effacer puis repartir directement sur la création de l'écurie
+twoTap($('newCareerBtn'), () => { resetAll(); ctx = 'career'; setupSeason(); });
 $('absBtn').onclick = () => { settings.abs = !settings.abs; save(); refreshMenu(); };
 $('tcBtn').onclick = () => { settings.tc = !settings.tc; save(); refreshMenu(); };
 $('lineBtn').onclick = () => { settings.line = ((settings.line || 0) + 1) % 3; save(); refreshMenu(); };
