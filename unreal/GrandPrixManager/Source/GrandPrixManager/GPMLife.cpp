@@ -485,6 +485,22 @@ void UGPMCareerSubsystem::Choose(int32 I)
 	Dl->bBad = bBadLuck;
 	Dl->Result = bBadLuck ? C.RiskOut : C.Out;
 	Dl->FxText = FxText(Fx);
+	if (Dl->Kind == FGPMDialog::EKind::Press)
+	{
+		// « CONFÉRENCE DE PRESSE · Média — question k/n » → le nom du média
+		FString Who = Dl->Kicker;
+		Who.Split(TEXT(" · "), nullptr, &Who);
+		Who.Split(TEXT(" — "), &Who, nullptr);
+		PressLog.Add(FString::Printf(TEXT("%s : %s\n> %s%s"), *Who, *Dl->Text, *C.Text, Dl->FxText.IsEmpty() ? TEXT("") : *(TEXT("\n  ") + Dl->FxText)));
+	}
+	else
+	{
+		const bool bStory = Dl->Kind == FGPMDialog::EKind::Story;
+		FString From = bStory ? Dl->Kicker : FString(Dl->Kicker == TEXT("EN BREF") ? TEXT("En bref") : TEXT("Flash info"));
+		if (bStory) From.Split(TEXT(" · "), nullptr, &From, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		SendMail(TEXT("evenement"), From, Dl->Title, FString::Printf(TEXT("%s\n\nTa décision : %s\n%s%s%s"), *Dl->Text, *C.Text, Dl->bBad ? TEXT("(pas de chance) ") : TEXT(""), *Dl->Result,
+			Dl->FxText.IsEmpty() ? TEXT("") : *(TEXT("\n\n") + Dl->FxText)));
+	}
 	if (Dl->Kind == FGPMDialog::EKind::Story)
 		if (UGPMSaveGame* G = Save())
 		{
@@ -508,4 +524,12 @@ void UGPMCareerSubsystem::Choose(int32 I)
 void UGPMCareerSubsystem::Next()
 {
 	if (Queue.Num()) Queue.RemoveAt(0);
+	// fin de la conférence de presse : un seul message qui reprend les questions et les réponses
+	if (PressLog.Num() && !(Queue.Num() && Queue[0].Kind == FGPMDialog::EKind::Press))
+	{
+		SendMail(TEXT("presse"), TEXT("Service de presse"), FString::Printf(TEXT("Revue de presse : %d question%s après la course"), PressLog.Num(), PressLog.Num() > 1 ? TEXT("s") : TEXT("")),
+			FString::Join(PressLog, TEXT("\n\n")));
+		PressLog.Reset();
+		if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Season->Save();
+	}
 }

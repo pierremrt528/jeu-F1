@@ -17,6 +17,20 @@ struct FGPMRaceResult
 	UPROPERTY() FString Fastest;
 };
 
+/** Message de la boîte mail de la carrière (mail.js du jeu web) : presse, mercato, événements, direction, sponsors, usine. */
+USTRUCT()
+struct FGPMMail
+{
+	GENERATED_BODY()
+	UPROPERTY() FString Tag;       // direction, presse, mercato, evenement, reglement, sponsor, usine, equipe
+	UPROPERTY() FString From;
+	UPROPERTY() FString Subject;
+	UPROPERTY() FString Body;
+	UPROPERTY() int32 Year = 2027;
+	UPROPERTY() int32 Round = 0;   // manches courues quand le message arrive (0 = pré-saison)
+	UPROPERTY() bool bRead = false;
+};
+
 /** Sauvegarde de la saison (gpm-season) : calendrier, manche en cours, points des pilotes et des écuries. */
 UCLASS()
 class GRANDPRIXMANAGER_API UGPMSaveGame : public USaveGame
@@ -42,6 +56,7 @@ public:
 	UPROPERTY() TArray<FString> Delayed;    // pièces déjà retardées une fois
 	UPROPERTY() TMap<FString, float> RivalDev;    // progrès des écuries rivales (perf)
 	UPROPERTY() TArray<FString> News;       // messages de l'usine depuis le dernier GP
+	UPROPERTY() TArray<FGPMMail> Mail;      // boîte mail de la carrière, du plus récent au plus ancien
 
 	// Carrière (career.js) : identité de l'écurie, motoriste, équipier et son contrat
 	UPROPERTY() bool bCreated = false;

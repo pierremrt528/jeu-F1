@@ -192,6 +192,13 @@ void UGPMCareerSubsystem::CreateCareer()
 		Factory->EnsurePerfStart();
 	}
 	UE_LOG(LogGPM, Log, TEXT("Nouvelle écurie : %s (%s, moteur %s, équipier %s)"), *G->TeamName, *T.Name, *E.Name, *M.Name);
+	{
+		FString Obj;
+		for (const TPair<FString, bool>& O : Objectives()) Obj += TEXT("\n[ ] ") + O.Key;
+		SendMail(TEXT("direction"), TEXT("Président de l'écurie"), FString::Printf(TEXT("Bienvenue chez %s"), *G->TeamName),
+			FString::Printf(TEXT("Bienvenue au QG, %s. Lance tes premières recherches à l'usine et recrute tes chefs de pôle.\n\nNos objectifs pour la saison%s\n\nTous les messages de l'écurie arriveront dans cette boîte : presse, mercato, événements, sponsors et usine."), *G->PlayerName, *Obj));
+		Season->Save();
+	}
 }
 
 // ---------- direction, sponsors, contrats ponctuels ----------
@@ -241,6 +248,52 @@ void UGPMCareerSubsystem::ClearBoost() { if (UGPMSaveGame* G = Save()) G->Boost.
 
 void UGPMCareerSubsystem::News(const FString& Msg) { if (UGPMSaveGame* G = Save()) G->News.Add(Msg); }
 
+// ---------- boîte mail ----------
+void UGPMCareerSubsystem::SendMail(const FString& InTag, const FString& InFrom, const FString& InSubj, const FString& InBody)
+{
+	UGPMSaveGame* G = Save();
+	if (!G || !G->bCreated || InSubj.IsEmpty()) return;
+	FGPMMail M;
+	M.Tag = InTag; M.From = InFrom; M.Subject = InSubj; M.Body = InBody;
+	M.Year = G->Year; M.Round = G->Round;
+	G->Mail.Insert(M, 0);
+	if (G->Mail.Num() > 150) G->Mail.SetNum(150);
+}
+
+int32 UGPMCareerSubsystem::Unread() const
+{
+	const UGPMSaveGame* G = Save();
+	int32 N = 0;
+	if (G) for (const FGPMMail& M : G->Mail) N += M.bRead ? 0 : 1;
+	return N;
+}
+
+void UGPMCareerSubsystem::RaceMails(const FGPMRaceCtx& R, const TArray<FString>& Lines)
+{
+	UGPMSaveGame* G = Save();
+	if (!G || !G->bCreated) return;
+	const FString Gp = FString::Printf(TEXT("GP %s"), *R.Circuit);
+	const FString Res = R.bDnf ? FString(TEXT("abandon")) : FString::Printf(TEXT("P%d, parti P%d"), R.Pos, R.Grid);
+	const TCHAR* Word = R.bDnf ? TEXT("Un abandon coûte cher, nous attendons une réaction.") : R.Pos <= 3 ? TEXT("Superbe résultat, toute l'usine est fière.")
+		: R.Pos < R.Grid ? TEXT("Bonne remontée, continuez ainsi.") : TEXT("Résultat noté. Nous comptons sur toi pour progresser.");
+	// bilan : direction, sponsors, primes (lignes d'AfterRace), puis objectifs de la saison
+	FString Body = FString(Word) + TEXT("\n");
+	for (const FString& L : Lines) Body += TEXT("\n• ") + L;
+	Body += FString::Printf(TEXT("\n\nBudget : %.1f M€\n\nObjectifs de la saison"), G->Budget);
+	for (const TPair<FString, bool>& O : Objectives()) Body += FString::Printf(TEXT("\n%s %s"), O.Value ? TEXT("[x]") : TEXT("[ ]"), *O.Key);
+	SendMail(TEXT("direction"), TEXT("Direction de l'écurie"), Gp + TEXT(" : ") + Res, Body);
+	// nouvelles de l'usine (livraisons, retards, échecs, chefs) et du mercato des rivaux
+	FString Fab, Mkt;
+	int32 NMkt = 0;
+	for (const FString& N : G->News)
+	{
+		if (N.StartsWith(TEXT("Mercato"))) { Mkt += (Mkt.IsEmpty() ? TEXT("• ") : TEXT("\n• ")) + N; ++NMkt; }
+		else Fab += (Fab.IsEmpty() ? TEXT("• ") : TEXT("\n• ")) + N;
+	}
+	if (!Fab.IsEmpty()) SendMail(TEXT("usine"), TEXT("Bureau technique"), Fab.Contains(TEXT("Livrée")) ? TEXT("Livraison à l'usine") : Fab.Contains(TEXT("Échec")) ? TEXT("Recherche ratée au banc d'essai") : TEXT("Nouvelles de l'usine"), Fab);
+	if (NMkt) SendMail(TEXT("mercato"), TEXT("Le Paddock (presse)"), FString::Printf(TEXT("Mercato : %d transfert%s chez les rivaux"), NMkt, NMkt > 1 ? TEXT("s") : TEXT("")), Mkt);
+}
+
 // mission d'un sponsor ponctuel avant chaque GP (makeMission d'events.js), à accepter dans l'écran de saison
 void UGPMCareerSubsystem::EnsureMission()
 {
@@ -284,6 +337,8 @@ void UGPMCareerSubsystem::EnsureMission()
 		const int32 T = FMath::Min(20, Exp + 3);
 		G->MisKind = TEXT("finish"); G->MisV = T; G->MisText = FString::Printf(TEXT("Termine la course sans abandon, dans le top %d"), T); G->MisGain = 1.f;
 	}
+	SendMail(TEXT("sponsor"), G->MisSponsor, TEXT("Proposition de mission pour le prochain GP"),
+		FString::Printf(TEXT("%s.\n\nPrime si c'est réussi : +%.1f M€. En cas d'échec : réputation -3.\nAccepte la mission dans l'écran de la saison avant les qualifications."), *G->MisText, G->MisGain));
 	Season->Save();
 }
 
@@ -383,6 +438,9 @@ TArray<FString> UGPMCareerSubsystem::SeasonReview()
 		G->Budget = R1(G->Budget + Bonus);
 		G->bFired = G->Conf < 25;
 		if (Bonus > 0) News(FString::Printf(TEXT("La direction est ravie : prime de %.1f M€"), Bonus));
+		SendMail(TEXT("direction"), TEXT("Président de l'écurie"), G->bFired ? FString(TEXT("Fin de saison : nous devons parler")) : FString::Printf(TEXT("Bilan de la saison %d"), G->Year),
+			FString::Printf(TEXT("Objectifs atteints : %d sur %d.\nConfiance de la direction : %d %% (%s).%s%s"), Met, Obj.Num(), G->Conf, *ConfText(G->Conf),
+				Bonus > 0 ? *FString::Printf(TEXT("\nPrime de la direction : +%.1f M€."), Bonus) : TEXT(""), G->bFired ? TEXT("\n\nLa confiance est rompue : la direction cherche ton remplaçant.") : TEXT("")));
 		if (UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>()) Season->Save();
 	}
 	Lines.Add(FString::Printf(TEXT("Bilan de la direction : %d objectif%s sur %d · confiance %d %% (%s)"), Met, Met > 1 ? TEXT("s") : TEXT(""), Obj.Num(), G->Conf, *ConfText(G->Conf)));
@@ -581,6 +639,8 @@ void UGPMCareerSubsystem::NegoAct(int32 Action)
 		if (Nego.Patience > 0) { NegoDialog(TEXT("C'est une plaisanterie ? Revenez avec une offre sérieuse.")); return; }
 	}
 	G->Broken.AddUnique(Nego.D.Name);
+	SendMail(TEXT("mercato"), FString::Printf(TEXT("Agent de %s"), *Nego.D.Name), FString::Printf(TEXT("Discussions rompues : %s"), *Nego.D.Name),
+		TEXT("Mon client ne donne pas suite. Nous pourrons reparler après le prochain Grand Prix, avec une offre sérieuse."));
 	Dl->Chosen = 0;
 	Dl->bBad = true;
 	Dl->Result = FString::Printf(TEXT("L'agent de %s claque la porte : discussions rompues jusqu'au prochain Grand Prix."), *Nego.D.Name);
@@ -618,6 +678,10 @@ void UGPMCareerSubsystem::Sign()
 	G->DriverPts.FindOrAdd(Old);
 	ApplyIdentity();
 	News(FString::Printf(TEXT("%s signe chez %s ! %s s'en va."), *Nego.D.Name, *G->TeamName, *Old));
+	SendMail(TEXT("mercato"), TEXT("Cellule recrutement"), FString::Printf(TEXT("Contrat signé : %s"), *Nego.D.Name),
+		FString::Printf(TEXT("%s rejoint %s pour %d saison%s.\nSalaire : %.1f M€ par saison · statut %s%s\nCoût immédiat : %.1f M€.\n%s quitte l'écurie."), *Nego.D.Name, *G->TeamName,
+			Nego.Years, Nego.Years > 1 ? TEXT("s") : TEXT(""), Sal, RoleName(Nego.Role),
+			(Nego.Pod > 0.f || Nego.Win > 0.f) ? *FString::Printf(TEXT(" · primes %.1f M€ par podium, %.1f M€ par victoire"), Nego.Pod, Nego.Win) : TEXT(""), Cost, *Old));
 	Dl->Chosen = 0;
 	Dl->bBad = false;
 	Dl->Result = FString::Printf(TEXT("%s signe pour %d saison%s (%.1f M€ par saison, statut %s). Coût immédiat : %.1f M€."), *Nego.D.Name, Nego.Years,

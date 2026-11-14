@@ -155,8 +155,10 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 			+ SOverlay::Slot().Padding(FMargin(16.f, 14.f))[ Content ];
 	};
 
-	SeasonTab = FMath::Clamp(SeasonTab, 0, 2);
-	TSharedRef<SWidget> Panel = SeasonTab == 1 ? CalendarPanel() : SeasonTab == 2 ? PerfPanel() : StandingsPanel();
+	SeasonTab = FMath::Clamp(SeasonTab, 0, bTeam ? 3 : 2);
+	TSharedRef<SWidget> Panel = SeasonTab == 1 ? CalendarPanel() : SeasonTab == 2 ? PerfPanel() : SeasonTab == 3 ? InboxPanel() : StandingsPanel();
+	TArray<FString> TabNames = { TEXT("CLASSEMENTS"), TEXT("CALENDRIER"), TEXT("PERFORMANCE") };
+	if (bTeam) { const int32 NUnread = C->Unread(); TabNames.Add(NUnread ? FString::Printf(TEXT("BOÎTE MAIL (%d)"), NUnread) : FString(TEXT("BOÎTE MAIL"))); }
 	TSharedRef<SScrollBox> LeftCol = SNew(SScrollBox);
 	LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ HeroNext(GM) ];
 	LeftCol->AddSlot()[ MissionCard() ];
@@ -177,7 +179,7 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("CLASSEMENTS"), TEXT("CALENDRIER"), TEXT("PERFORMANCE") }, SeasonTab, [this](int32 k) { SeasonTab = k; }) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ Tabs(TabNames, SeasonTab, [this](int32 k) { SeasonTab = k; }) ]
 				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Keycap(TEXT("TAB"), TEXT("onglet suivant")) ]
 			]
 			+ SVerticalBox::Slot().FillHeight(1.f)[ Panel ]
