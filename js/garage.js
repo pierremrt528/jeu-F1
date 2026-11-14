@@ -11,12 +11,15 @@ import { season, preStep } from './season.js';
 import { TEAMS } from './data.js';
 import { logoSVG } from './logo.js';
 import { art, DEPT_ART } from './art.js';
-import { frame } from './showroom.js';
+import { frame, rebuildRoom } from './showroom.js';
+import { ERAS, eraTrees, eraName, reformGap, nextEra } from './reglement.js';
+import { setCarShape } from './carmodel.js';
+import { ART } from './art.js';
 
 // fx : bonus additionnels (0.02 = +2 %). rel : fiabilité. tyre/fuel : usure et consommation (-0.05 = −5 %). pit : secondes à l'arrêt.
 // req : toutes les pièces requises ; reqAny : au moins une.
 // Chaque pôle a sa propre forme d'arbre (at : [rangée, colonne] sur 3 colonnes) et ses propres prix.
-export const TREES = [
+const BASE = [
   { id: 'moteur', name: 'Moteur', color: '#e5483b', nodes: [   // long tronc, pièces chères
     { id: 'm1', at: [1, 2], name: 'Admission optimisée', desc: 'Meilleur remplissage des cylindres.', cost: 20, fx: { vtop: 0.006, acc: 0.02 } },
     { id: 'm2', at: [2, 1], name: 'Turbo grand débit', desc: 'Plus de puissance à haut régime.', cost: 45, req: ['m1'], fx: { vtop: 0.012 } },
@@ -68,8 +71,16 @@ export const TREES = [
     { id: 's8', at: [5, 3], name: 'Ravitaillement rapide', desc: 'Le plein en un éclair.', cost: 55, req: ['s6', 's7'], fx: { pit: -0.3 } },
   ] },
 ];
-const NODES = Object.fromEntries(TREES.flatMap(t => t.nodes.map(n => [n.id, n])));
-const TREE_OF = Object.fromEntries(TREES.flatMap(t => t.nodes.map(n => [n.id, t.id])));
+// arbres de l'ère en cours (TREES) et de la prochaine (FTREES, développée un an à l'avance) ; voir reglement.js
+export let TREES = BASE, FTREES = BASE;
+let NODES = {}, TREE_OF = {};
+function index() {
+  const e = garage.era;
+  TREES = eraTrees(e, BASE); FTREES = eraTrees({ i: e.ni, gen: e.gen + 1 }, BASE);
+  NODES = {}; TREE_OF = {};
+  for (const t of [...TREES, ...FTREES]) for (const n of t.nodes) { NODES[n.id] = n; TREE_OF[n.id] = t.id; if (n.art && !ART[n.id]) ART[n.id] = ART[n.art]; }
+  setCarShape(ERAS[e.i].shape);
+}
 // prix en M€ (Centre de R&D, chef du pôle), délai en jours (Soufflerie, chef), risques d'échec et de retard (chef)
 export const price = n => Math.round(n.cost / 5 * partDiscount() * chiefMul(TREE_OF[n.id], 'cost') * 10) / 10;
 export const delay = n => Math.max(6, Math.round(partDelay(n.cost <= 20 ? 20 : n.cost <= 55 ? 36 : 56) * chiefMul(TREE_OF[n.id], 'time')));   // 20 à 56 jours
@@ -87,17 +98,35 @@ export const garage = (() => {
 })();
 garage.dev = garage.dev || {};
 function save() { try { localStorage.setItem(KEY, JSON.stringify(garage)); } catch {} }
+// ère du règlement : i (ERAS), gen (n° de génération), at (année de la prochaine refonte), ni (ère suivante),
+// fut / fdev : pièces installées et recherches en cours de la voiture de la prochaine ère
+export function initEra(year) { garage.era = { i: 0, gen: 0, at: year + reformGap(), ni: nextEra(0), fut: [], fdev: {} }; index(); save(); }
+if (!garage.era) initEra(season?.year || 2027); else index();
 
-const owned = id => garage.owned.includes(id);
+const owned = id => garage.owned.includes(id) || garage.era.fut.includes(id);
 garage.owned = garage.owned.filter(id => NODES[id]);   // anciennes sauvegardes
 for (const k in garage.dev) if (!NODES[garage.dev[k]?.id]) delete garage.dev[k];
+const stores = () => [[garage.dev, garage.owned], [garage.era.fdev, garage.era.fut]];
+// la voiture de la prochaine ère se développe pendant la dernière saison de l'ère en cours
+export const futureOpen = () => !!season && season.year >= garage.era.at - 1;
+export const eraInfo = () => { const e = garage.era; return { name: eraName(e), at: e.at, next: eraName({ i: e.ni, gen: e.gen + 1 }), desc: ERAS[e.ni].desc, open: futureOpen(), fut: e.fut.length, cur: ERAS[e.i].desc }; };
+// refonte : la voiture de la nouvelle ère remplace l'ancienne (pièces et recherches en cours), tout le reste repart de zéro
+export function applyReform(year) {
+  const e = garage.era;
+  if (year < e.at) return null;
+  const out = { name: eraName({ i: e.ni, gen: e.gen + 1 }), parts: e.fut.length, lost: garage.owned.length, desc: ERAS[e.ni].desc };
+  garage.owned = e.fut; garage.dev = e.fdev;
+  garage.era = { i: e.ni, gen: e.gen + 1, at: year + reformGap(), ni: nextEra(e.ni), fut: [], fdev: {} };
+  index(); save(); rebuildRoom();
+  return out;
+}
 // anciennes sauvegardes : délais comptés en GP → jours
 for (const d of Object.values(garage.dev)) if (!d.days) { d.left *= 10; d.days = 1; }
 const unlocked = n => (!n.req || n.req.every(owned)) && (!n.reqAny || n.reqAny.some(owned));
 
-export function carUpgrades() {
+export function carUpgrades(list = garage.owned) {
   const up = { ...NO_UP };
-  for (const id of garage.owned) {
+  for (const id of list) {
     const fx = NODES[id]?.fx || {};
     for (const k in fx) up[k] += fx[k];
   }
@@ -106,7 +135,7 @@ export function carUpgrades() {
   return up;
 }
 
-export function resetGarage() { garage.owned = []; garage.dev = {}; save(); }
+export function resetGarage(year = 2027) { garage.owned = []; garage.dev = {}; initEra(year); }
 
 // Pièces de départ selon le niveau de l'écurie : n pièces par pôle, les moins chères accessibles d'abord
 export function grantParts(n) {
@@ -138,14 +167,14 @@ export function perfFactor(u = carUpgrades()) {
 // peut prendre du retard (une fois) ou échouer (argent perdu). Renvoie { done, fail, late }.
 export function tickDevelopment(days) {
   const out = { done: [], fail: [], late: [] };
-  for (const k in garage.dev) {
-    const d = garage.dev[k], n = NODES[d.id];
+  for (const [dev, own] of stores()) for (const k in dev) {
+    const d = dev[k], n = NODES[d.id];
     d.left -= days;
     while (d.left <= 0) {
       const r = risk(n);
       if (!d.rolled && Math.random() * 100 < r.late) { const x = 8 + Math.floor(Math.random() * 17); d.left += x; if (d.tot) d.tot += x; d.rolled = true; out.late.push(`${n.name} (+${x} j)`); continue; }
-      if (Math.random() * 100 < r.fail) out.fail.push(n.name); else { garage.owned.push(d.id); out.done.push(n.name); }
-      delete garage.dev[k]; break;
+      if (Math.random() * 100 < r.fail) out.fail.push(n.name); else { own.push(d.id); out.done.push(n.name); }
+      delete dev[k]; break;
     }
   }
   save();
@@ -154,10 +183,10 @@ export function tickDevelopment(days) {
 
 // événements : retard (+) ou avance (−) de toutes les recherches en cours, en jours
 export function shiftDev(days) {
-  for (const k in garage.dev) { const d = garage.dev[k]; d.left = Math.max(1, d.left + days); if (d.tot && days > 0) d.tot += days; }
+  for (const [dev] of stores()) for (const k in dev) { const d = dev[k]; d.left = Math.max(1, d.left + days); if (d.tot && days > 0) d.tot += days; }
   save();
 }
-export const devCount = () => Object.keys(garage.dev).length;
+export const devCount = () => Object.keys(garage.dev).length + Object.keys(garage.era.fdev).length;   // ateliers partagés entre les deux voitures
 // ateliers de l'usine : recherches simultanées tous pôles confondus (selon le niveau de départ + bâtiment « Ateliers »)
 const WS_BASE = { new: 2, mid: 3, top: 4 };
 export const workshops = () => (WS_BASE[career?.tier] ?? 3) + level('shop');
@@ -172,7 +201,9 @@ const pct = (k, v) => k === 'rel' ? `+${v}` : k === 'pit' ? `${v.toFixed(1)} s` 
 const FXN = { vtop: 'vitesse de pointe', acc: 'accélération', kd: 'appui', mu: 'adhérence', brake: 'freinage', steer: 'agilité', slip: 'aspiration', off: 'hors piste', wall: 'perte aux chocs', rel: 'fiabilité', tyre: 'usure des pneus', fuel: 'consommation', pit: 'à l’arrêt' };
 // emplacements de développement d'un pôle (2 avec la Soufflerie niveau 3)
 const slots = t => [t.id, t.id + '#2'].slice(0, parallelParts());
-const devOf = id => Object.values(garage.dev).find(d => d.id === id);
+const devOf = id => [...Object.values(garage.dev), ...Object.values(garage.era.fdev)].find(d => d.id === id);
+let F = false;   // vue de l'usine : voiture de la prochaine ère
+const VT = () => F ? FTREES : TREES, VD = () => F ? garage.era.fdev : garage.dev;
 
 let zone = 'usine', tab = 'apercu', sel = null, root = null;
 const ICONS = { moteur: '⚡', aero: '🌀', chassis: '🔩', fiab: '🛡️', stand: '🔧', infra: '🏗️' };
@@ -182,7 +213,7 @@ const ZONES = {
   chefs: { name: 'Chefs', title: 'Chefs de pôle', tabs: Object.keys(DEPTS) },
 };
 const DESC = { moteur: 'Puissance et relances', aero: 'Appui et traînée', chassis: 'Adhérence, freins, direction', fiab: 'Casse, chocs, hors-piste', stand: 'Arrêts, pneus, carburant' };
-const treeById = id => TREES.find(t => t.id === id);
+const treeById = id => VT().find(t => t.id === id);
 const tname = t => t.id === 'stand' ? 'Pit stop' : t.name;
 // un effet est-il favorable ? (usure, consommation et temps d'arrêt : plus bas = mieux)
 const infraBusy = () => !!infra.build;
@@ -209,8 +240,17 @@ function cmpHTML() {
   const me = rows.findIndex(r => r.me), keep = k => k === 0 || Math.abs(k - Math.max(2, me)) <= 2;
   return `<h4>Comparaison des performances</h4>` + rows.map((r, k) => `<div class="cr ${r.me ? 'me' : ''} ${keep(k) ? '' : 'far'}"><small>${k + 1}</small><i style="background:${hex(r.color)}"></i><span>${r.name}</span><em><u style="width:${6 + 94 * (r.v - lo) / (hi - lo)}%"></u></em><b>${(r.v * 100).toFixed(1).replace('.', ',')}</b></div>`).join('');
 }
+// prochaine ère : règlement, forme de la voiture, avance déjà prise
+function eraHTML() {
+  const e = garage.era, u = carUpgrades(e.fut), v = (TEAMS[0].perf * perfFactor(u) * 100).toFixed(1).replace('.', ',');
+  return `<h4>📜 ${eraName({ i: e.ni, gen: e.gen + 1 })} · ${e.at}</h4><div class="era"><p>${ERAS[e.ni].desc}</p>` +
+    `<p>Au 1er janvier ${e.at}, toutes les pièces de la voiture actuelle disparaissent, chez toi comme chez les rivaux : seules comptent les pièces de la voiture ${e.at} développées d’ici là. Ateliers et budget sont partagés entre les deux voitures.</p>` +
+    `<p class="eraf"><span>Voiture ${e.at}</span><b>${v}</b><small>${e.fut.length} pièce${e.fut.length > 1 ? 's' : ''} prête${e.fut.length > 1 ? 's' : ''}</small></p></div>`;
+}
 // effet d'une pièce sur la place de la voiture dans la hiérarchie
 function impactHTML(u2) {
+  if (F) { const a = TEAMS[0].perf * perfFactor(carUpgrades(garage.era.fut)) * 100, b = TEAMS[0].perf * perfFactor(u2) * 100, d = b - a;
+    return `<p class="impact"><small>Voiture ${garage.era.at}</small><b>${a.toFixed(1).replace('.', ',')} → ${b.toFixed(1).replace('.', ',')}</b><em class="${d > 0.005 ? 'up' : ''}">${d > 0.005 ? '+' + d.toFixed(2).replace('.', ',') : '='}</em><span>départ de la nouvelle ère</span></p>`; }
   const rows = perfTable(u2), me = rows.find(r => r.me), p1 = rows.indexOf(me) + 1, p2 = rows.filter(r => !r.me && r.v > me.v2).length + 1;
   const d = (me.v2 - me.v) * 100;
   return `<p class="impact"><small>Performance</small><b>${(me.v * 100).toFixed(1).replace('.', ',')} → ${(me.v2 * 100).toFixed(1).replace('.', ',')}</b><em class="${d > 0.005 ? 'up' : ''}">${d > 0.005 ? '+' + d.toFixed(2).replace('.', ',') : '='}</em><span>P${p1}${p2 < p1 ? ` → <b>P${p2}</b>` : ''} du plateau</span></p>`;
@@ -218,7 +258,7 @@ function impactHTML(u2) {
 // barres « Ta voiture » (u2 : avec la pièce sélectionnée)
 function statsHTML(u, u2) {
   const bw = (f, max) => Math.max(0, Math.min(100, 100 * f / max));
-  return `<h4>Ta voiture${u2 ? ' <small>▲ avec cette pièce</small>' : ''}</h4>` + STATS.map(([name, f, max]) => {
+  return `<h4>${F ? `Voiture ${garage.era.at}` : 'Ta voiture'}${u2 ? ' <small>▲ avec cette pièce</small>' : ''}</h4>` + STATS.map(([name, f, max]) => {
     const v = f(u), w = bw(v, max), g = u2 ? Math.max(0, bw(f(u2), max) - w) : 0;
     const val = name === 'Fiabilité' ? 50 + u.rel : name === 'Arrêt au stand' ? (v ? '−' + v.toFixed(1) + ' s' : '0 s') : (name === 'Usure des pneus' || name === 'Consommation' ? (v ? '−' : '') : v >= 0 ? '+' : '') + (v * 100).toFixed(1) + ' %';
     return `<div class="${g ? 'up' : ''}"><span>${name}</span><i><em style="width:${w}%"></em>${g ? `<u style="left:${w}%;width:${g}%"></u>` : ''}</i><small>${val}</small></div>`;
@@ -231,9 +271,17 @@ function frameCar() {
   else tall() ? frame(0.1, 0.9, 0.62, 0.9) : frame(0.5, 0.98, 0.3, 0.9);
 }
 
-export function openGarage(el, onClose) {
-  root = el; root.querySelector('#garageClose').onclick = onClose;
+export function openGarage(el, onClose, opts = {}) {
+  root = el; root.querySelector('#garageClose').onclick = () => { if (F) viewFuture(false); onClose(); };
+  if (opts.fut && futureOpen()) { zone = 'usine'; tab = 'apercu'; }
+  viewFuture(!!opts.fut && futureOpen());
   render();
+}
+// l'atelier 3D montre la voiture de l'ère affichée
+function viewFuture(on) {
+  if (on === F) return;
+  F = on; const e = garage.era;
+  setCarShape(ERAS[F ? e.ni : e.i].shape); rebuildRoom();
 }
 
 function render() {
@@ -241,11 +289,11 @@ function render() {
   lastTall = tall();
   $('#gPts').textContent = team.budget.toFixed(1);
   if (!ZONES[zone].tabs.includes(tab)) tab = ZONES[zone].tabs[0];
-  $('#gTitle').textContent = ZONES[zone].title;
+  $('#gTitle').textContent = zone === 'usine' && F ? `Voiture ${garage.era.at}` : ZONES[zone].title;
   $('#gLogo').innerHTML = logoSVG(TEAMS[0].logo) + `<b>${TEAMS[0].abbr}</b>`;
-  $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${garage.owned.length}/${TREES.reduce((s, t) => s + t.nodes.length, 0)} pièces installées` : '');
+  $('#gTeam').textContent = TEAMS[0].name + (zone === 'usine' ? ` · ${VT().reduce((s, t) => s + t.nodes.filter(n => owned(n.id)).length, 0)}/${VT().reduce((s, t) => s + t.nodes.length, 0)} pièces installées` : '');
   $('#gZones').innerHTML = Object.entries(ZONES).map(([k, z]) => `<button data-zone="${k}" class="${k === zone ? 'sel' : ''}">${z.name}</button>`).join('');
-  root.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { zone = b.dataset.zone; tab = ZONES[zone].tabs[0]; sel = null; render(); });
+  root.querySelectorAll('[data-zone]').forEach(b => b.onclick = () => { if (b.dataset.zone !== 'usine') viewFuture(false); zone = b.dataset.zone; tab = ZONES[zone].tabs[0]; sel = null; render(); });
   const rd = zone === 'usine', ov = rd && tab === 'apercu', card = root.querySelector('.garage');
   card.classList.toggle('rd', rd); card.classList.toggle('one', ZONES[zone].tabs.length < 2);
   root.classList.toggle('isov', ov);
@@ -268,39 +316,40 @@ function renderRD($, ov) {
   $('#gTabs').innerHTML = ZONES.usine.tabs.map(id => {
     if (id === 'apercu') return `<button data-tab="apercu" class="${tab === id ? 'sel' : ''}" style="--c:var(--acc)">Aperçu</button>`;
     const t = treeById(id), n = t.nodes.filter(x => owned(x.id)).length;
-    return `<button data-tab="${id}" class="${tab === id ? 'sel' : ''}" style="--c:${t.color}">${art(DEPT_ART[id])}${tname(t)}<small>${slots(t).some(k => garage.dev[k]) ? '⏳' : ''}${n}/${t.nodes.length}</small></button>`;
-  }).join('');
+    return `<button data-tab="${id}" class="${tab === id ? 'sel' : ''}" style="--c:${t.color}">${art(DEPT_ART[id])}${tname(t)}<small>${slots(t).some(k => VD()[k]) ? '⏳' : ''}${n}/${t.nodes.length}</small></button>`;
+  }).join('') + (futureOpen() ? `<button data-fut class="fut ${F ? 'sel' : ''}" style="--c:#ffd84d">📜 ${F ? `Voiture ${season.year}` : `Voiture ${garage.era.at}`}<small>${F ? 'ère actuelle' : 'nouveau règlement'}</small></button>` : '');
   root.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sel = null; render(); });
+  const fb = root.querySelector('[data-fut]'); if (fb) fb.onclick = () => { viewFuture(!F); tab = 'apercu'; sel = null; render(); };
   return ov ? renderOverview($) : renderTree($);
 }
 
 function renderOverview($) {
-  const total = TREES.reduce((s, t) => s + t.nodes.length, 0), [mt, mc] = moraleTxt(team.moral);
-  const cap = Math.min(TREES.length * parallelParts(), workshops()), used = devCount();
+  const total = VT().reduce((s, t) => s + t.nodes.length, 0), [mt, mc] = moraleTxt(team.moral);
+  const cap = Math.min(VT().length * parallelParts(), workshops()), used = devCount();
   const eff = [partDiscount() < 1 ? `coûts −${Math.round((1 - partDiscount()) * 100)} %` : '', partDelay(100) < 100 ? `délais −${100 - Math.round(partDelay(100))} %` : ''].filter(Boolean).join(' · ') || 'coûts et délais standard';
-  const cards = TREES.map(t => {
-    const n = t.nodes.filter(x => owned(x.id)).length, w = slots(t).map(k => garage.dev[k]).filter(Boolean), c = chiefOf(t.id);
+  const cards = VT().map(t => {
+    const n = t.nodes.filter(x => owned(x.id)).length, w = slots(t).map(k => VD()[k]).filter(Boolean), c = chiefOf(t.id);
     return `<button class="dcard" data-go="${t.id}" style="--c:${t.color}"><span class="dn">${tname(t)}</span><span class="dd">${DESC[t.id]}</span>${ring(t, n / t.nodes.length)}` +
       `<span class="dc"><b>${n}</b>/${t.nodes.length} pièces</span>${chain(t)}` +
       (w.length ? w.map(d => `<span class="dw"><span>⏳ ${NODES[d.id].name}</span><i><em style="width:${prog(d) * 100}%"></em></i><small>prête dans ${left(d)} j</small></span>`).join('')
         : `<span class="dw free">${n === t.nodes.length ? '✓ Pôle complet' : '● Pôle libre : lance une pièce'}</span>`) +
       `<span class="dch">${c ? '👤 ' + c.name : '👤 Pas de chef'}</span></button>`;
   }).join('');
-  const all = Object.values(garage.dev).sort((a, b) => a.left - b.left);
+  const all = [...Object.values(garage.dev), ...Object.values(garage.era.fdev)].sort((a, b) => a.left - b.left);
   const next = `<div class="dcard next"><span class="dn">Usine</span><span class="dd">Moral <b class="${mc}">${mt}</b> · ${eff}</span>` +
     `<span class="slots"><small>Ateliers</small>${Array.from({ length: Math.max(cap, used) }, (_, k) => `<i class="${k < used ? 'on' : ''}"></i>`).join('')}<i class="n">${used}/${cap}</i></span>` +
     (all.length ? '<div class="nxl">' + all.slice(0, 3).map(d => `<span class="nx" style="--c:${treeById(TREE_OF[d.id]).color}">${art(d.id)}<b>${NODES[d.id].name}</b><em>${left(d)} j</em></span>`).join('') + '</div>'
       : '<p class="hint">Aucune recherche en cours : touche un pôle pour lancer une pièce.</p>') + '</div>';
-  $('#gRD').innerHTML = `<div class="ov"><div class="ovcards">${cards}${next}</div><div class="ovside"><div class="cmp">${cmpHTML()}</div></div></div>`;
+  $('#gRD').innerHTML = `<div class="ov"><div class="ovcards">${cards}${next}</div><div class="ovside"><div class="cmp">${F ? eraHTML() : cmpHTML()}</div></div></div>`;
   root.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { tab = b.dataset.go; sel = null; render(); });
 }
 
 function renderTree($) {
   const t = treeById(tab), chief = chiefOf(tab), T = tall();
-  const shopFull = devCount() >= workshops(), free = !shopFull && slots(t).find(k => !garage.dev[k]), money = n => team.budget >= price(n);
+  const shopFull = devCount() >= workshops(), free = !shopFull && slots(t).find(k => !VD()[k]), money = n => team.budget >= price(n);
   const n0 = t.nodes.filter(x => owned(x.id)).length, lv = Math.max(...t.nodes.map(n => n.at[0]));
   $('#gInfo').innerHTML = `<span class="st"><small>${tname(t)}</small><b>${n0}<i>/${t.nodes.length}</i>${chain(t)}</b></span><span class="st"><small>Chef de pôle</small><b>${chief ? chief.name : '—'}</b></span>` +
-    `<span class="st"><small>Recherches</small><b class="slots">${slots(t).map(k => `<i class="${garage.dev[k] ? 'on' : ''}"></i>`).join('')}<i class="n">${free ? 'libre' : 'occupé'}</i></b></span><span class="st"><small>Ateliers</small><b>${devCount()}<i>/${workshops()}</i></b></span>`;
+    `<span class="st"><small>Recherches</small><b class="slots">${slots(t).map(k => `<i class="${VD()[k] ? 'on' : ''}"></i>`).join('')}<i class="n">${free ? 'libre' : 'occupé'}</i></b></span><span class="st"><small>Ateliers</small><b>${devCount()}<i>/${workshops()}</i></b></span>`;
   const tree = $('#gTree');
   tree.style.setProperty('--lv', lv);
   tree.innerHTML = `<svg id="gLines"></svg>` + t.nodes.map(n => {
@@ -315,11 +364,11 @@ function renderTree($) {
   const n = sel && NODES[sel], D = $('#gDetail');
   if (!T) root.querySelector('.gside').scrollTop = 0;
   D.style.setProperty('--c', t.color);
-  const u = carUpgrades(), u2 = { ...u };
+  const u = F ? carUpgrades(garage.era.fut) : carUpgrades(), u2 = { ...u };
   if (n && !owned(n.id)) for (const k in n.fx) u2[k] += n.fx[k];
   if (n) {
     const w = devOf(n.id), can = !owned(n.id) && !w && unlocked(n) && free && money(n), rk = risk(n);
-    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : shopFull && slots(t).some(k => !garage.dev[k]) ? `Tous les ateliers de l’usine sont occupés (${devCount()}/${workshops()}) : attends une livraison ou construis des Ateliers aux Installations.` : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[garage.dev[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${fr((price(n) - team.budget).toFixed(1))} M€.` : '';
+    const why = !unlocked(n) ? 'Pièce verrouillée : développe d’abord les pièces requises.' : shopFull && slots(t).some(k => !VD()[k]) ? `Tous les ateliers de l’usine sont occupés (${devCount()}/${workshops()}) : attends une livraison ou construis des Ateliers aux Installations.` : !free ? `Le pôle ${t.name} développe déjà : ${slots(t).map(k => NODES[VD()[k].id].name).join(', ')}` : !money(n) ? `Budget insuffisant : il manque ${fr((price(n) - team.budget).toFixed(1))} M€.` : '';
     const reqs = (n.req || n.reqAny || []).map(r => `<span class="${owned(r) ? 'ok' : ''}">${owned(r) ? '✓' : '○'} ${NODES[r].name}</span>`).join(n.reqAny ? '<em>ou</em>' : '');
     D.innerHTML = `<div class="ph"><span class="pimg">${art(n.id)}</span><span class="pt"><small>Pôle ${tname(t)} · ${n.id.toUpperCase()}</small><b>${n.name}</b></span></div><p class="desc">${n.desc}</p>` +
       `<p class="fx">${Object.entries(n.fx).map(([k, v]) => `<span class="${good(k, v) ? '' : 'bad'}">${good(k, v) ? '▲' : '▼'} ${pct(k, v)} ${FXN[k]}</span>`).join('')}</p>` +
@@ -332,7 +381,7 @@ function renderTree($) {
     if (buy) buy.onclick = () => {
       if (!can) return;
       team.budget = Math.round((team.budget - price(n)) * 10) / 10; saveTeam();
-      garage.dev[free] = { id: n.id, left: delay(n), tot: delay(n), days: 1 }; save(); render();
+      VD()[free] = { id: n.id, left: delay(n), tot: delay(n), days: 1 }; save(); render();
     };
   } else D.innerHTML = `<div class="ph"><span class="pimg">${art(DEPT_ART[t.id])}</span><span class="pt"><small>${n0}/${t.nodes.length} pièces · ${chief ? 'chef ' + chief.name : 'pas de chef'}</small><b>${tname(t)}</b></span></div>` +
     `<p class="hint">Touche une pièce pour voir ses effets. Une recherche se paie tout de suite et dure 20 à 56 jours : elle avance avec le calendrier (pré-saison, puis entre les Grands Prix). À la fin des essais, elle peut prendre du retard ou échouer : un bon chef de pôle réduit ces risques.</p>`;

@@ -1179,3 +1179,12 @@ body.scene3d .screen > .card, body.scene3d #nego { visibility: hidden; } body.sc
 #gTree .chsec { grid-column: 1 / -1; margin: 6px 2px 0; color: var(--mut); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 #gTree .node.chef .cf i { font-style: normal; }
 .ncard.evc.story .flash { background: linear-gradient(100deg, #4a1fa8, #7a3cff 60%, #b06cff); } .ncard.evc.story .flash b { color: #4a1fa8; } .stend { font-size: 13px; color: #c9b6ff; margin: 4px 0 0; }
+/* grandes refontes du règlement */
+.reg.big { padding: 9px 10px; line-height: 1.45; border: 1px solid rgba(255,216,77,.35); color: #ffe9a0; }
+.reg.big b { color: #ffd84d; }
+.reg.big button { display: block; margin-top: 7px; width: 100%; padding: 8px; border-radius: 9px; border: 0; background: #ffd84d; color: #1a1400; font-weight: 700; }
+.gtabs button.fut { border-color: #ffd84d; }
+.gtabs button.fut.sel { background: rgba(255,216,77,.18); }
+.cmp .era p { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: rgba(255,255,255,.8); }
+.cmp .era .eraf { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,216,77,.12); color: #ffe9a0; }
+.cmp .era .eraf b { font-size: 18px; color: #ffd84d; }

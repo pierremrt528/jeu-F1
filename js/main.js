@@ -7,7 +7,7 @@ import { setAniso } from './textures.js';
 import { createRace, updateRace, results } from './race.js';
 import { initInput, enableTilt, resetInput } from './input.js';
 import { initHud, updateHud, fmt } from './hud.js';
-import { garage, openGarage, tickDevelopment, resetGarage, grantParts, drawRegulation, applyRegulation, treeName, perfFactor } from './garage.js';
+import { garage, openGarage, tickDevelopment, resetGarage, grantParts, drawRegulation, applyRegulation, treeName, perfFactor, futureOpen, eraInfo, applyReform, garage as GAR } from './garage.js';
 import { openSetup, growMate, career, natOf } from './career.js';
 import { team, racePrize, repFactor, consumeBoost } from './team.js';
 import { buildQuestions, runPress, teamLine } from './press.js';
@@ -302,7 +302,8 @@ function showResults() {
       if (career && (S.round === SZ.midRound() || S.done)) { S.news = aiMercato(S.done ? 'off' : 'mid'); SZ.saveSeason(); R.news = S.news.length; }
       if (career && !S.done) R.mkt = rotateMarket();   // nouveaux pilotes et chefs libres
       // annonce du règlement de la saison suivante à la mi-saison (ou en fin de saison pour les anciennes sauvegardes)
-      if ((S.round === SZ.midRound() || S.done) && !S.reg) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
+      if (S.round === SZ.midRound() && S.year === GAR.era.at - 2) { R.rumor = GAR.era.at; mail({ from: 'Instance dirigeante du championnat', subject: `Rumeurs : un tout nouveau règlement pour ${GAR.era.at} ?`, body: `Selon nos informations, l’instance dirigeante prépare une refonte complète du règlement technique pour la saison ${GAR.era.at}.\nLe texte officiel devrait être publié au 1er janvier ${GAR.era.at - 1} : à partir de là, chaque écurie pourra commencer à développer sa voiture ${GAR.era.at}.`, tag: 'reglement' }); }
+      if ((S.round === SZ.midRound() || S.done) && !S.reg && !futureOpen()) { S.reg = drawRegulation(); SZ.saveSeason(); R.regNews = S.reg.map(treeName).join(' et '); R.regN = S.reg.length; }
       SZ.recordPerf(playerPerf());
       // direction, mission du sponsor, sponsors ponctuels, événement d'ici le prochain GP
       R.conf = boardAfterRace(me.pos, me.dnf);
@@ -328,12 +329,13 @@ function showResults() {
       else S.event = pickEvent(eventCtx({ pos: me.pos, dnf: me.dnf, rival: ahead[Math.max(0, ahead.findIndex(d => d.player) - 1)]?.name }));
       SZ.saveSeason();
       Object.assign(R.pressCtx, { champ: ahead.findIndex(d => d.player) + 1, round: S.round, n: SZ.nRounds(), mid: S.round === SZ.midRound(), last: S.done,
-        role: career?.contract?.role, conf: team.conf, tier: career?.tier, reg: !!S.reg?.length });
+        role: career?.contract?.role, conf: team.conf, tier: career?.tier, reg: !!S.reg?.length || futureOpen() });
     }
   }
   $('againBtn').textContent = R.season ? 'Saison →' : 'Nouvelle course';
   $('resGarageBtn').classList.toggle('hidden', R.free);
   $('rdGain').innerHTML = R.free ? `Course solo · ${def.name} · parti P${me.grid}, ${me.dnf ? 'abandon' : 'arrivé P' + me.pos}${me.best ? ' · meilleur tour ' + fmt(me.best) : ''}` : `Prime : <b>+${R.prize.toFixed(1)} M€</b> · Partenaires : <b>+${R.sponsor.toFixed(1)} M€</b> <small>(×${R.mult.toFixed(2)} · budget ${team.budget.toFixed(1)} M€)</small>` +
+    (R.rumor ? `<br>📜 <b>Rumeurs</b> : un tout nouveau règlement se prépare pour ${R.rumor}. Le texte sera publié au 1er janvier ${R.rumor - 1}.` : '') +
     (R.regNews ? `<br>📜 <b>Annonce officielle</b> : nouveau règlement ${SZ.season.year + 1} pour <b>${R.regNews}</b>. Tes pièces ${R.regN > 1 ? 'de ces domaines' : 'de ce domaine'} repartiront de zéro l’an prochain.` : '') +
     (R.mkt && (R.mkt.drv || R.mkt.chief) ? `<br>🆕 Marché : <b>${R.mkt.drv} pilote${R.mkt.drv > 1 ? 's' : ''}</b> et <b>${R.mkt.chief} chef${R.mkt.chief > 1 ? 's' : ''} de pôle</b> libres arrivent` : '') +
     (R.news ? `<br>📰 Mercato ouvert : <b>${R.news} transfert${R.news > 1 ? 's' : ''}</b> chez les rivaux` : '') +
@@ -384,7 +386,7 @@ function setupSeason() {
   show('setup');
   openSetup($('setup'), () => {
     // départ selon le niveau : rien pour une nouvelle écurie, des pièces et des bâtiments pour les autres
-    resetGarage(); resetInfra(); resetStaff();
+    resetGarage(SZ.season ? SZ.season.year + 1 : 2027); resetInfra(); resetStaff();
     const tier = TIERS.find(t => t.id === career.tier);
     if (tier.parts) grantParts(tier.parts);
     if (tier.infra) grantInfra(tier.infra);
@@ -493,7 +495,16 @@ function openSeason() {
     if (titles.length) champCard($('nego'), { year: S.year, titles, line: `${wins} victoire${wins > 1 ? 's' : ''} · ${S.pts['Toi'] || 0} points · ${TEAMS[0].name}` }, () => {});
   }
 }
-const regHTML = S => S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartiront de zéro ${S.reg.length > 1 ? "dans ces domaines" : "dans ce domaine"} : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées à l’intersaison. Inutile d’y investir gros d’ici là !</div>` : '';
+// grandes refontes : annonce un an avant (voiture de la nouvelle ère à développer), puis début de la nouvelle ère
+function eraHTML(S) {
+  const E = eraInfo();
+  if (E.open) return `<div class="reg big">📜 <b>Grande refonte du règlement ${E.at}</b> · ${E.next}. ${E.desc} Au 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro, et les arbres de développement changent. Développe dès maintenant la voiture ${E.at} : mêmes ateliers et même budget que la voiture ${S.year}. <b>${E.fut} pièce${E.fut > 1 ? 's' : ''} prête${E.fut > 1 ? 's' : ''}.</b><button id="szFut">📜 Voir la voiture ${E.at}</button></div>`;
+  if (S.reform && S.round < 3) return `<div class="reg big">🆕 <b>Nouvelle ère : ${S.reform.name}</b>. ${S.reform.desc} Tout le plateau est reparti de zéro : ${S.reform.parts ? `${S.reform.parts} pièce${S.reform.parts > 1 ? 's' : ''} préparée${S.reform.parts > 1 ? 's' : ''} l’an dernier équipe${S.reform.parts > 1 ? 'nt' : ''} ta voiture` : 'aucune pièce préparée l’an dernier, tout est à construire'}. Prochaine refonte : pas avant ${E.at - 1}.</div>`;
+  return '';
+}
+document.addEventListener('click', e => { if (e.target.closest?.('#szFut')) showGarage('season', { fut: true }); });
+const mail = m => import('./mail.js').then(x => x.sendMail?.(m)).catch(() => {});   // boîte mail du jeu (si présente)
+const regHTML = S => eraHTML(S) + (S.reg?.length ? `<div class="reg">📜 Règlement ${S.year + 1} : nouvelles règles pour <b>${S.reg.map(treeName).join(' et ')}</b>. Toutes les écuries repartiront de zéro ${S.reg.length > 1 ? "dans ces domaines" : "dans ce domaine"} : tes pièces ${S.reg.length > 1 ? 'de ces pôles' : 'de ce pôle'} seront retirées à l’intersaison. Inutile d’y investir gros d’ici là !</div>` : '');
 const newsHTML = S => S.news?.length ? `<div class="news"><b>📰 Mercato</b>${S.news.map(n => `<p>${n}</p>`).join('')}</div>` : '';
 // intersaison : dotation (niveau de l'écurie + place au championnat), puis moteur et transferts
 function offSeason(tp) {
@@ -509,7 +520,25 @@ function offSeason(tp) {
     team.budget = Math.round((team.budget + S.bonus - S.wages) * 10) / 10; saveTeam(); SZ.saveSeason();
   }
   show('setup');
-  openMarket($('setup'), 'off', () => { applyRegulation(S.reg || []); SZ.newSeason(S.year + 1, true, (S.reg || []).length); SZ.recordPerf(playerPerf()); openSeason(); }, () => openSeason());
+  openMarket($('setup'), 'off', () => {
+    const ref = applyReform(S.year + 1);   // grande refonte : voiture de la nouvelle ère, tout le reste à zéro
+    if (!ref) applyRegulation(S.reg || []);
+    SZ.newSeason(S.year + 1, true, ref ? 0 : (S.reg || []).length, !!ref);
+    eraStart(SZ.season, ref);
+    SZ.recordPerf(playerPerf()); openSeason();
+  }, () => openSeason());
+}
+// début d'une saison : nouvelle ère, ou publication du règlement de la suivante (un an avant)
+function eraStart(S, ref) {
+  if (ref) {
+    S.reform = { ...ref, year: S.year };
+    mail({ from: 'Instance dirigeante du championnat', subject: `${ref.name} : le nouveau règlement entre en vigueur`, body: `${ref.desc}\nToutes les écuries repartent de zéro : ${ref.lost} pièce${ref.lost > 1 ? 's' : ''} de l’ancienne voiture ${ref.lost > 1 ? 'sont retirées' : 'est retirée'}, ${ref.parts} pièce${ref.parts > 1 ? 's' : ''} de la nouvelle voiture ${ref.parts > 1 ? 'sont' : 'est'} déjà prête${ref.parts > 1 ? 's' : ''}.\nLa hiérarchie est rebattue : les écuries qui ont le mieux préparé cette saison partent devant.`, tag: 'reglement' });
+  }
+  if (futureOpen()) {
+    const E = eraInfo(); S.fut = S.fut || {};
+    mail({ from: 'Instance dirigeante du championnat', subject: `Officiel : refonte totale du règlement en ${E.at}`, body: `Le règlement ${E.at} est publié : ${E.next}.\n${E.desc}\nAu 1er janvier ${E.at}, toutes les pièces de toutes les écuries repartent de zéro et les arbres de développement changent.\nTu peux développer la voiture ${E.at} dès aujourd’hui (QG → Usine → 📜 Voiture ${E.at}). Attention : les ateliers et le budget sont partagés avec la voiture ${S.year}.`, tag: 'reglement' });
+  }
+  SZ.saveSeason();
 }
 function showQuali(simTime) {
   paused = true;
@@ -555,7 +584,7 @@ function twoTap(btn, action) {
 twoTap($('szQuit'), () => { SZ.quitSeason(); refreshMenu(); show('menu'); });
 
 let garageFrom = 'menu';
-function showGarage(from) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }); }
+function showGarage(from, opts) { garageFrom = from; show('garage'); openGarage($('garage'), () => { refreshMenu(); show(garageFrom); }, opts); }
 $('garageBtn').onclick = () => showGarage('menu');
 $('resGarageBtn').onclick = () => showGarage('results');
 $('soundBtn').onclick = () => { settings.sound = !settings.sound; save(); initAudio(settings.sound); refreshMenu(); };

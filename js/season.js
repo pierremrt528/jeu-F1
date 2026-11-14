@@ -43,8 +43,15 @@ export function today() {
 // les écuries rivales travaillent aussi pendant l'hiver : progrès au prorata des jours (≈ 16,6 jours par GP)
 export function devRivals(days) {
   const k = Math.sqrt(10 / nRounds()) * days / 16.6;
-  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name);   // ses chefs de pôle accélèrent ou freinent
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) rivalGain(t, (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name));   // ses chefs de pôle accélèrent ou freinent
   saveSeason();
+}
+// progrès d'une écurie rivale ; l'année qui précède une refonte (season.fut), une partie des moyens va à la voiture suivante
+function rivalGain(t, g) {
+  if (!season.fut) { season.dev[t.name] = (season.dev[t.name] || 0) + g; return; }
+  const share = 0.3 + 0.3 * Math.random();
+  season.dev[t.name] = (season.dev[t.name] || 0) + g * (1 - share);
+  season.fut[t.name] = (season.fut[t.name] || 0) + g * share * 1.6;
 }
 // rendez-vous de la saison hors Grands Prix (affichés dans le calendrier)
 export function seasonEvents(year = season?.year || 2027) {
@@ -76,10 +83,12 @@ function pickRaces(n) {
   const idx = Array.from({ length: n }, (_, k) => Math.round(k * (CALENDAR.length - 1) / (n - 1)));
   return { cal: idx.map(i => CALENDAR[i]), gaps: idx.slice(1).map((i, k) => at[i] - at[idx[k]]) };
 }
-export function newSeason(year, carry = false, nReg = 0) {
+export function newSeason(year, carry = false, nReg = 0, reform = false) {
   // carry : les écuries rivales gardent la moitié de leurs progrès ; un nouveau règlement les
   // fait reculer et rebat les cartes (certaines écuries comprennent mieux les nouvelles règles)
-  const dev = carry && season ? Object.fromEntries(TEAMS.slice(1).map(t => [t.name, (season.dev[t.name] || 0) * 0.5 - nReg * 0.004 + (Math.random() - 0.5) * 0.008 * nReg])) : {};
+  let dev = carry && season ? Object.fromEntries(TEAMS.slice(1).map(t => [t.name, (season.dev[t.name] || 0) * 0.5 - nReg * 0.004 + (Math.random() - 0.5) * 0.008 * nReg])) : {};
+  // grande refonte : tout le monde repart de zéro, seule compte la voiture préparée l'an dernier, et la hiérarchie est rebattue
+  if (reform && season) dev = Object.fromEntries(TEAMS.slice(1).map(t => [t.name, (season.fut?.[t.name] || 0) - 0.006 + (Math.random() - 0.5) * 0.026]));
   season = { year: year || (season ? season.year + 1 : 2027), ...pickRaces(seasonOpts.races), round: 0, pts: {}, results: [], dev, hist: [], grid: null, quali: null, done: false };
   for (const d of DRIVERS()) season.pts[d.name] = 0;
   saveSeason();
@@ -155,7 +164,7 @@ export function recordRace(rows) {
   season.results.push({ circuit: cal()[season.round], pos: me.pos, pts: res.find(r => r.name === me.name).pts, podium: rows.slice(0, 3).map(r => r.name), fast: fast?.name });
   // les écuries rivales progressent un peu à chaque course
   const k = Math.sqrt(10 / nRounds());   // saison plus longue : progrès par course un peu plus faibles
-  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) season.dev[t.name] = (season.dev[t.name] || 0) + (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name);   // ses chefs de pôle accélèrent ou freinent
+  for (const t of TEAMS) if (!t.drivers.some(d => d.player)) rivalGain(t, (0.0012 + Math.random() * 0.0018) * k * rivalDevMul(t.name));   // ses chefs de pôle accélèrent ou freinent
   season.round++; season.grid = null; season.quali = null; season.wx = null;
   if (season.round >= nRounds()) season.done = true;
   saveSeason();

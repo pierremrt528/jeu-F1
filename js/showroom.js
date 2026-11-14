@@ -143,6 +143,7 @@ function refreshRoom() {
   W = null;
 }
 onTheme(refreshRoom);
+export const rebuildRoom = refreshRoom;   // nouvelle forme de voiture (règlement)
 export function frame(x0, x1, y0, y1) { box = [x0, x1, y0, y1]; }
 
 export function renderRoom(renderer, dt) {
