@@ -102,6 +102,14 @@ void AGPMCar::BeginPlay()
 	SetLivery(FLinearColor(0.85f, 0.12f, 0.12f), FLinearColor::White);
 }
 
+void AGPMCar::SyncModel(const FString& Era)
+{
+	ModelWant = Era;
+	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	const UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
+	if (Data && (Era.IsEmpty() ? Data->CarEra : Era) != ModelEra) SetLivery(LiveryMain, LiveryAccent);
+}
+
 void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 {
 	auto Paint = [](const TArray<TObjectPtr<UStaticMeshComponent>>& Parts, FLinearColor Col)
@@ -113,7 +121,8 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
 	LiveryMain = Main; LiveryAccent = Accent;
-	if (const FGPMCarModel* CM = Data ? Data->GetCarModel() : nullptr)
+	if (Data) ModelEra = ModelWant.IsEmpty() ? Data->CarEra : ModelWant;
+	if (const FGPMCarModel* CM = Data ? Data->GetCarModel(ModelEra) : nullptr)
 	{
 		CarModel = CM;
 		WingBend[0] = WingBend[1] = 0.f; bWingsShaped = false;   // modèle reconstruit : ailerons intacts

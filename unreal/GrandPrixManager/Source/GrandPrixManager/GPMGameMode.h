@@ -33,6 +33,9 @@ public:
 	enum class EPhase : uint8 { Quali, QualiDone, Lights, Race, Done, Season, Factory, Home, Setup, Solo, Settings, Press, Mercato, Tuning, Prerace, Fired, Intro, Outro };
 	/** Écrans de gestion (la course est figée derrière, caméra de survol). */
 	bool InMenu() const { return Phase >= EPhase::Season && Phase <= EPhase::Fired; }
+	bool bFutCar = false;                    // atelier : voiture de la prochaine ère (onglet « Voiture <année> » de l'usine)
+	FString CarsEra;                         // ère des monoplaces construites
+	int32 UiRequest = -1;                    // tests (GPM.Test) : 0-3 onglet de la saison, 10 usine (voiture suivante), 11 usine
 	EPhase Phase = EPhase::Lights;
 	float LightsT = 0.f, GoAt = 5.f, Clock = 0.f, DoneT = 0.f;
 	int32 LightsOn() const { return Phase == EPhase::Lights ? FMath::Clamp(FMath::FloorToInt(LightsT / 0.8f), 0, 5) : 0; }

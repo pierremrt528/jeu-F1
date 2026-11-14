@@ -255,6 +255,7 @@ export function wantBox(R, c) {
 
 // ---------- radio : réponses du muret ----------
 const say = (R, txt) => { R.radio.push(txt); };
+const sayNow = (R, txt) => { R.radio.unshift(txt); R.radioT = Math.min(R.radioT, 1.4); };   // stands : message tout de suite
 const gapTo = (R, a, b) => Math.abs(((a.lap * R.track.N + a.idx) - (b.lap * R.track.N + b.idx)) * DS) / Math.max(30, (a.v + b.v) / 2);
 export function radioAsk(R, what) {
   const p = R.player, left = lapsLeft(R, p);
@@ -289,7 +290,6 @@ export function radioOrder(R, what) {
   const p = R.player;
   if (what === 'mode') { const k = Object.keys(MODES); what = k[(k.indexOf(p.mode) + 1) % k.length]; }
   if (MODES[what]) { p.mode = what; say(R, `📻 Bien reçu, mode ${MODES[what].name.toLowerCase()}.`); return; }
-  if (what === 'box') { boxToggle(R, p); return; }
   if (!p.plan) return;
   const last = p.plan.length - 1;
   if (what === 'tyre') {
@@ -300,14 +300,6 @@ export function radioOrder(R, what) {
     say(R, `📻 Prochains pneus : ${TYRES[n.tyre].name.toLowerCase()}s.`);
   }
 }
-export function boxToggle(R, p) {
-  if (p.pit || R.solo || R.done) return;
-  if (p.box) { p.box = null; say(R, '📻 Arrêt annulé.'); return; }
-  const ns = nextStop(R, p);
-  p.box = { tyre: ns.tyre, fuel: ns.fuel };
-  say(R, `📻 Box à la fin du tour : ${TYRES[ns.tyre].name.toLowerCase()}s, +${Math.max(0, ns.fuel + (p.fuelAdj || 0))} kg.`);
-}
-
 // ---------- pendant la course ----------
 export function updateStrategy(R, dt) {
   const { track } = R, N = track.N, P = R.pitP;
@@ -365,21 +357,20 @@ export function updateStrategy(R, dt) {
       // stratégie risquée : attaque tant que les pneus et l'essence le permettent (peut payer… ou casser les pneus)
       if (c.risky && !c.player && c.mode === 'norm' && 1 - c.wear > 0.45 && fuelLaps(R, { ...c, mode: 'push' }) > need + 0.3) c.mode = 'push';
     }
-    // décision d'arrêt avant l'entrée des stands
-    const k0 = P.k(c.idx, N), zone = k0 > P.e0 - 30 && k0 < P.e0 - 10;
-    if (zone && !c.pit && !c.box && (!c.player || R.autopilot) && wantBox(R, c)) c.box = nextStop(R, c);
-    if (zone && !c.pit && c.box && c.lap < R.laps && c.lap >= 1) {
-      const add = Math.max(0, Math.min(TANK - c.fuel, c.box.fuel + (c.player ? c.fuelAdj || 0 : 0)));
-      c.box.fuel = Math.round(add);
+    // décision d'arrêt avant l'entrée des stands (IA et pilote auto) ; le joueur, lui, entre de lui-même dans la voie
+    const k0 = P.k(c.idx, N), zone = k0 > P.e0 - 30 && k0 < P.e0 - 10, manual = c.player && !R.autopilot;
+    if (zone && !c.pit && !c.box && !manual && wantBox(R, c)) c.box = nextStop(R, c);
+    if (zone && !c.pit && c.box && !manual && c.lap < R.laps && c.lap >= 1) {
+      c.box.fuel = fuelToAdd(c);
       c.frac = 0;
-      c.pit = { phase: 'in', k: k0, stop: Math.max(1.4, 2.3 + Math.random() * 0.6 + (c.up?.pit ?? 0)) + add / 10 + (c.dmg > 0.15 ? 3 : 0) + (c.dmgR > 0.15 ? 4 : 0) + (c.fwOff || c.rwOff ? 2 : 0) };
-      if (c.player) say(R, `📻 Muret : box, box ! ${TYRES[c.box.tyre].name}s et +${c.box.fuel} kg.`);
+      c.pit = { phase: 'in', k: k0, stop: stopTime(c) };
     }
+    if (manual && !R.solo && !c.pit && c.lap >= 1 && k0 > P.e0 + 12 && k0 < P.e1 && c.lat > P.half + 1.5 && c.lat > P.latAt(k0) - 2.5) enterPit(R, c, k0);
     // conseils du muret pour le joueur (un tour avant l'arrêt prévu, ou si besoin)
-    if (c.player && !R.autopilot && zone && !c.pit && !c.box && !c.adv) {
+    if (manual && zone && !c.pit && !c.adv) {
       c.adv = true;
       if (plannedStop(c) === c.lap + 1) say(R, '📻 Muret : arrêt prévu au prochain tour.');
-      else if (wantBox(R, c)) { const ns = nextStop(R, c); say(R, `📻 Muret : rentre ce tour (STAND) : ${TYRES[ns.tyre].name.toLowerCase()}s, +${ns.fuel} kg.`); }
+      else if (plannedStop(c) === c.lap || wantBox(R, c)) { const ns = nextStop(R, c); say(R, `📻 Muret : box, box ! Prends la voie des stands à droite : ${TYRES[ns.tyre].name.toLowerCase()}s, +${ns.fuel} kg.`); }
     }
     if (c.player && k0 > 200 && k0 < 210) c.adv = false;
   }
@@ -406,39 +397,92 @@ export function addDamage(R, c, amount, rear) {
   if (c.player && before < 0.15 && c[k] >= 0.15) say(R, rear ? '📻 Muret : aileron arrière abîmé, l’arrière sera instable. Un arrêt le réparera.' : '📻 Muret : aileron avant endommagé, tu perds de l’appui. Un arrêt le réparera.');
 }
 
-// ---------- voie des stands (déplacement imposé, limiteur 80 km/h) ----------
+// ---------- voie des stands (limiteur 80 km/h) ----------
+// IA : déplacement imposé jusqu'à leur emplacement. Joueur : il conduit lui-même et doit s'arrêter dans le carré de son écurie.
 const VPIT = 22;
+const fuelToAdd = c => Math.round(Math.max(0, Math.min(TANK - c.fuel, c.box.fuel + (c.player ? c.fuelAdj || 0 : 0))));
+const stopTime = c => Math.max(1.4, 2.3 + Math.random() * 0.6 + (c.up?.pit ?? 0)) + c.box.fuel / 10 + (c.dmg > 0.15 ? 3 : 0) + (c.dmgR > 0.15 ? 4 : 0) + (c.fwOff || c.rwOff ? 2 : 0);
+function enterPit(R, c, k0) {
+  if (!c.box) c.box = nextStop(R, c);
+  c.pit = { phase: 'in', k: k0, manual: true, hd: 0, o: Math.max(-2.5, Math.min(2.5, c.lat - R.pitP.latAt(k0))) };
+  sayNow(R, `📻 Voie des stands, limiteur ! Arrête-toi dans le carré ${teamColorName(c)} : ${TYRES[c.box.tyre].name.toLowerCase()}s prêts.`);
+}
+const teamColorName = c => c.teamIdx ? 'aux couleurs de l’écurie' : 'de ton écurie (cadre jaune)';
+function service(R, c) {
+  c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.dmgR = 0; c.fwOff = c.rwOff = false; repairCar(c); c.stops++; c.box = null; c.flat = false; c.tyreWarn = false;
+  c.lowFuel = false; if (c.player) c.fuelAdj = 0;
+  if (c.plan) {
+    if (c.stint >= c.plan.length - 1) c.plan.push({ laps: 0, tyre: c.tyre });
+    c.stint++; c.plan[c.stint].tyre = c.tyre;
+    // si le carburant et les pneus suffisent jusqu'à l'arrivée, plus d'autre arrêt
+    const left = lapsLeft(R, c);
+    if (fuelLaps(R, c) >= left + 0.1 && lifeAtEnd(R, c) >= 0.38) { c.plan.length = c.stint + 1; c.plan[c.stint].laps = Math.ceil(left); }
+  }
+}
+// le joueur est-il arrêté dans son carré ?
+export function inSlot(R, c) {
+  const s = R.pitP.slot(c.teamIdx ?? 0);
+  return Math.abs(c.pit.k - s.kc) < 1.1 && c.lat > s.lc - 0.9;
+}
+function placeInLane(R, c) {
+  const { track } = R, N = track.N, p = c.pit;
+  const f = ((p.k % N) + N) % N;
+  c.idx = Math.floor(f) % N; c.frac = f - Math.floor(f);
+  const i = c.idx, j = (i + 1) % N, t = c.frac;
+  const x = track.X[i] + (track.X[j] - track.X[i]) * t, z = track.Z[i] + (track.Z[j] - track.Z[i]) * t;
+  c.x = x - track.TZ[i] * c.lat; c.z = z + track.TX[i] * c.lat; c.y = track.Y[i];
+  c.heading = track.H[i] + (p.hd || 0); c.pitch = 0; c.beta = 0; c.spinT = 0; c.ax = c.ay = 0; c.dive = c.roll = c.yOff = 0; c.sliding = false; c.offTrack = false;
+}
+function pitManual(R, c, dt) {
+  const p = c.pit, P = R.pitP, prev = c.idx, s = P.slot(c.teamIdx ?? 0);
+  if (p.phase === 'stop') {
+    c.v = 0; p.stop -= dt; p.hd *= 0.9;
+    if (p.stop <= 0) { service(R, c); p.phase = 'out'; sayNow(R, '📻 Go, go, go ! Garde le limiteur jusqu’à la sortie.'); }
+  } else {
+    let v = c.v;
+    if (c.throttle) v += (v < 0 ? 12 : 9) * dt; else v -= Math.sign(v) * Math.min(Math.abs(v), 2 * dt);
+    if (c.brake) v = v > 0.05 ? Math.max(0, v - 28 * dt) : Math.max(-4, v - 5 * dt);   // à l'arrêt, le frein fait reculer
+    if (p.k < P.e1) v = Math.min(v, Math.max(VPIT, c.v - 30 * dt));                      // entrée : freinage jusqu'au limiteur
+    else if (p.k <= P.x0) v = Math.min(v, VPIT);                                          // limiteur
+    else v = Math.min(v, 55);
+    if (p.k <= P.e1 + 1 && v < 0) v = 0;
+    c.v = v; p.k += v * dt / DS;
+    // position dans la voie : écart au centre (±2,5 m), le volant le fait varier
+    p.o = Math.max(-2.5, Math.min(2.5, p.o + c.steer * 4.5 * Math.min(1, Math.abs(v) / 5) * dt));
+    const l0 = c.lat; c.lat = P.latAt(p.k) + p.o;
+    const lv = p.phase === 'out' && p.k > P.x0 ? 0 : (c.lat - l0) / dt;
+    p.hd += (Math.max(-0.35, Math.min(0.35, -Math.atan(lv / (Math.sign(v || 1) * Math.max(3, Math.abs(v)))))) - p.hd) * Math.min(1, dt * 6);
+    if (p.phase === 'in' && !p.missed && Math.abs(v) < 0.6 && inSlot(R, c)) {
+      c.v = 0; c.box.fuel = fuelToAdd(c); p.stop = stopTime(c); p.phase = 'stop';
+      sayNow(R, `📻 Parfait ! Changement de pneus${c.box.fuel ? ` et +${c.box.fuel} kg` : ''}…`);
+    }
+    if (p.phase === 'in' && !p.warned && p.k > s.k1 + 3) { p.warned = true; sayNow(R, '📻 Tu as dépassé ton carré ! Arrête-toi et recule (frein à l’arrêt), ou ressors sans changer.'); }
+    if (p.phase === 'in' && p.k > P.x0) { p.phase = 'out'; p.missed = true; c.box = null; }
+    if (p.k >= P.x1) { c.pit = null; c.lane = c.lat; c.heading = R.track.H[c.idx]; }
+  }
+  if (c.pit) placeInLane(R, c);
+  return prev;
+}
 export function pitStep(R, c, dt) {
-  const { track } = R, N = track.N, p = c.pit, P = R.pitP;
-  const prev = c.idx, boxK = P.box(c.teamIdx ?? 0);
+  if (c.pit.manual) return pitManual(R, c, dt);
+  const p = c.pit, P = R.pitP;
+  const prev = c.idx, boxK = P.box(c.teamIdx ?? 0), sl = P.slot(c.teamIdx ?? 0);
   if (p.phase === 'stop') {
     c.v = 0; p.stop -= dt;
-    if (p.stop <= 0) {
-      c.tyre = c.box.tyre; c.fuel = Math.min(TANK, c.fuel + c.box.fuel); c.wear = 0; c.dmg = 0; c.dmgR = 0; c.fwOff = c.rwOff = false; repairCar(c); c.stops++; c.box = null; c.flat = false; c.tyreWarn = false;
-      c.lowFuel = false; if (c.player) c.fuelAdj = 0;
-      if (c.plan) {
-        if (c.stint >= c.plan.length - 1) c.plan.push({ laps: 0, tyre: c.tyre });
-        c.stint++; c.plan[c.stint].tyre = c.tyre;
-        // si le carburant et les pneus suffisent jusqu'à l'arrivée, plus d'autre arrêt
-        const left = lapsLeft(R, c);
-        if (fuelLaps(R, c) >= left + 0.1 && lifeAtEnd(R, c) >= 0.38) { c.plan.length = c.stint + 1; c.plan[c.stint].laps = Math.ceil(left); }
-      }
-      p.phase = 'out';
-    }
+    if (p.stop <= 0) { service(R, c); p.phase = 'out'; }
   } else {
     if (p.k < P.e1) c.v = Math.max(VPIT, c.v - 30 * dt);                       // freinage vers le limiteur
     else if (p.phase === 'out' && p.k > P.x0) c.v = Math.min(55, c.v + 14 * dt); // sortie : on relance
+    else if (p.phase === 'in' && boxK - p.k < 6) c.v = Math.max(3, Math.min(c.v, (boxK - p.k) * 4)); // on se gare dans le carré
     else c.v = c.v > VPIT ? Math.max(VPIT, c.v - 30 * dt) : Math.min(VPIT, c.v + 10 * dt);
     p.k += c.v * dt / DS;
     if (p.phase === 'in' && p.k >= boxK) { p.k = boxK; p.phase = 'stop'; c.v = 0; }
     if (p.phase === 'out' && p.k >= P.x1) { c.pit = null; c.lane = c.lat; }
   }
-  const f = ((p.k % N) + N) % N;
-  c.idx = Math.floor(f) % N; c.frac = f - Math.floor(f);
-  c.lat += (P.latAt(p.k) - c.lat) * Math.min(1, dt * 4);
-  const i = c.idx, j = (i + 1) % N, t = c.frac;
-  const x = track.X[i] + (track.X[j] - track.X[i]) * t, z = track.Z[i] + (track.Z[j] - track.Z[i]) * t;
-  c.x = x - track.TZ[i] * c.lat; c.z = z + track.TX[i] * c.lat; c.y = track.Y[i];
-  c.heading = track.H[i]; c.pitch = 0; c.beta = 0; c.spinT = 0; c.ax = c.ay = 0; c.dive = c.roll = c.yOff = 0; c.throttle = 0; c.brake = 0; c.sliding = false; c.offTrack = false;
+  // vers le carré de l'écurie (côté garages), puis retour au centre de la voie
+  const near = Math.max(0, 1 - Math.abs(p.k - boxK) / 14), sm = near * near * (3 - 2 * near);
+  c.lat += (P.latAt(p.k) + (sl.lc - P.lat) * sm - c.lat) * Math.min(1, dt * 4);
+  if (!c.pit) return prev;
+  placeInLane(R, c); c.throttle = 0; c.brake = 0;
   return prev;
 }

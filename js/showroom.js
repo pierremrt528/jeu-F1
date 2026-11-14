@@ -2,7 +2,7 @@
 // sol miroir, rampes lumineuses, nom de l'écurie au mur. Scène séparée (≈ 11 appels de rendu), dessinée
 // seulement quand un de ces écrans est ouvert. frame() place la voiture dans une zone de l'écran.
 import * as THREE from '../lib/three.module.min.js';
-import { buildCarMesh } from './carmodel.js';
+import { buildCarMesh, modelsReady } from './carmodel.js';
 import { TEAMS } from './data.js';
 import { onTheme } from './theme.js';
 import { logoImage } from './logo.js';
@@ -143,6 +143,8 @@ function refreshRoom() {
   W = null;
 }
 onTheme(refreshRoom);
+modelsReady.then(refreshRoom);   // monoplaces Blender chargées : l'atelier les montre
+export const rebuildRoom = refreshRoom;   // nouvelle forme de voiture (règlement)
 export function frame(x0, x1, y0, y1) { box = [x0, x1, y0, y1]; }
 
 export function renderRoom(renderer, dt) {

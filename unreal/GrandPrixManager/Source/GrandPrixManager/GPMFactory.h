@@ -12,6 +12,7 @@ struct FGPMPart
 	int32 Row = 1, Col = 2;                 // position dans l'arbre (rangée, colonne sur 3)
 	TArray<FString> Req, ReqAny;            // toutes / au moins une
 	TMap<FString, float> Fx;                // vtop, acc, mu, brake, kd, steer, fuel, rel…
+	bool bFut = false;                      // pièce de la voiture de la prochaine ère
 };
 
 struct FGPMTree { FString Id, Name; FLinearColor Color; TArray<FGPMPart> Parts; };
@@ -49,7 +50,8 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	// --- Recherche ---
-	const TArray<FGPMTree>& Trees() const { return TreeList; }
+	/** Arbres de l'ère en cours, ou de la prochaine ère (voiture développée un an avant la refonte). */
+	const TArray<FGPMTree>& Trees(bool bFut = false) const { SyncEra(); return bFut ? FutList : TreeList; }
 	const FGPMPart* Part(const FString& Id) const;
 	/** Valeurs de base d'une pièce (sans bâtiments ni chef). */
 	static float Price(const FGPMPart& P) { return FMath::RoundToFloat(P.Cost / 5.f * 10.f) / 10.f; }
@@ -65,7 +67,7 @@ public:
 	/** Pièces en même temps dans un pôle (2 avec la Soufflerie niveau 3). */
 	int32 PerDept() const;
 	int32 Running() const;
-	int32 RunningIn(const FString& Tree) const;
+	int32 RunningIn(const FString& Tree, bool bFut = false) const;
 	float DaysLeft(const FGPMPart& P) const;
 	float DaysTotal(const FGPMPart& P) const;
 
@@ -75,7 +77,7 @@ public:
 	bool Start(const FString& Id);
 	/** Fait avancer les recherches de N jours ; les messages vont dans les actualités de la saison. */
 	void Tick(int32 Days);
-	FGPMUpgrades Upgrades() const;
+	FGPMUpgrades Upgrades(bool bFut = false) const;
 	float Budget() const;
 	void AddMoney(float M);
 
@@ -126,15 +128,53 @@ public:
 	/** Intersaison : salaires des chefs pour la nouvelle saison, fins de contrat. Renvoie le total payé. */
 	float RenewStaff(int32 NewYear);
 
+	// --- Grandes refontes du règlement (reglement.js) ---
+	struct FEra { const TCHAR* Id; const TCHAR* Name; const TCHAR* Key; const TCHAR* Focus; const TCHAR* Desc; };
+	static const FEra& EraDef(int32 I);
+	static int32 NumEras();
+	static FString EraName(int32 I, int32 Gen);
+	int32 EraIndex() const;
+	int32 NextEraIndex() const;
+	int32 EraGen() const;
+	/** Année de la prochaine refonte. */
+	int32 ReformYear() const;
+	int32 Year() const;
+	FString CurrentEraName() const;
+	FString NextEraName() const;
+	/** Règlement de la prochaine ère publié (au 1er janvier de l'année qui précède la refonte) : voiture suivante à développer. */
+	bool FutureOpen() const;
+	/** Pôle roi de l'ère en cours (ou de la prochaine) : chassis, moteur, aero, fiab, ou vide. */
+	FString KingDept(bool bFut = false) const;
+	/** Modèle 3D de l'ère en cours (car_<id>.json). */
+	FString CarEraId(bool bFut = false) const;
+	/** Pièces prêtes de la voiture de la prochaine ère. */
+	int32 FutCount() const;
+	/** Progrès d'une écurie rivale ; l'année qui précède une refonte, une partie va à la voiture suivante (rivalGain). */
+	void RivalGain(const FString& Team, float G);
+	/** Intersaison : refonte (vrai si une nouvelle ère commence l'an prochain) ou règlement annuel ; prépare l'avance des rivaux.
+	 *  OutMail* : messages à envoyer. */
+	bool Intersaison(int32 NextYear, FString& OutSubj, FString& OutBody);
+	/** Après chaque GP : rumeurs (deux ans avant) et tirage du règlement annuel (mi-saison ou fin de saison). */
+	void EraAfterRace(int32 Round, int32 NumRounds, bool bOver, TArray<TPair<FString, FString>>& OutMails, TArray<FString>& OutLines);
+	/** Début de saison : publication du règlement de la prochaine ère. */
+	bool EraPublished(FString& OutSubj, FString& OutBody) const;
+	/** Tests : la refonte arrive l'an prochain. */
+	void ForceReformSoon();
+
 	// --- Courbes de performance ---
-	/** Indice de performance de la voiture du joueur (perfFactor de garage.js). */
-	float PlayerPerf() const;
+	/** Indice de performance de la voiture du joueur (perfFactor de garage.js), ou de la voiture de la prochaine ère. */
+	float PlayerPerf(bool bFut = false) const;
 	/** Relevé de l'indice de chaque écurie (au départ de la saison, puis après chaque GP). */
 	void RecordPerf();
 	void EnsurePerfStart();
 
 private:
-	TArray<FGPMTree> TreeList;
+	TArray<FGPMTree> BaseList;
+	mutable TArray<FGPMTree> TreeList, FutList;
+	mutable int32 EraKey = -1;
+	void SyncEra() const;
+	void EnsureEra() const;
+	static TArray<FGPMTree> EraTrees(int32 I, int32 Gen, const TArray<FGPMTree>& Base);
 	TArray<FGPMBuilding> BuildingList;
 	TArray<FGPMChief> ChiefList;
 	class UGPMSaveGame* Save() const;

@@ -63,10 +63,10 @@ export const asphalt = () => make(IMG.asphalte ? 1024 : 256, IMG.asphalte ? 1024
   noise(c, w * 0.06, h, 900, ['rgba(80,80,80,.5)'], 1, r);
 });
 
-// Vibreur : bandes rouges/blanches avec relief
-export const kerb = () => make(64, 128, (c, w, h) => {
+// Vibreur : bandes de deux couleurs (propres à chaque circuit) avec relief
+export const kerb = (a = '#c8201e', b = '#f3f3f0') => make(64, 128, (c, w, h) => {
   for (let i = 0; i < 2; i++) {
-    c.fillStyle = i ? '#f3f3f0' : '#c8201e'; c.fillRect(0, i * h / 2, w, h / 2);
+    c.fillStyle = i ? b : a; c.fillRect(0, i * h / 2, w, h / 2);
   }
   for (let y = 0; y < h; y += 8) { c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(0, y, w, 2); }
   const g = c.createLinearGradient(0, 0, w, 0); g.addColorStop(0, 'rgba(0,0,0,.25)'); g.addColorStop(0.3, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.15)');

@@ -37,8 +37,9 @@ void UGPMFactorySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 				for (const TPair<FString, TSharedPtr<FJsonValue>>& E : (*Fx)->Values) P.Fx.Add(E.Key, float(E.Value->AsNumber()));
 			Tr.Parts.Add(P);
 		}
-		TreeList.Add(Tr);
+		BaseList.Add(Tr);
 	}
+	TreeList = FutList = BaseList;
 	LoadQG();
 	UE_LOG(LogGPM, Log, TEXT("Usine : %d pôles, %d bâtiments, %d chefs"), TreeList.Num(), BuildingList.Num(), ChiefList.Num());
 }
@@ -56,7 +57,9 @@ void UGPMFactorySubsystem::Persist() const
 
 const FGPMPart* UGPMFactorySubsystem::Part(const FString& Id) const
 {
+	SyncEra();
 	for (const FGPMTree& T : TreeList) for (const FGPMPart& P : T.Parts) if (P.Id == Id) return &P;
+	for (const FGPMTree& T : FutList) for (const FGPMPart& P : T.Parts) if (P.Id == Id) return &P;
 	return nullptr;
 }
 
@@ -66,10 +69,11 @@ int32 UGPMFactorySubsystem::Running() const
 	return G ? G->DevPart.Num() : 0;
 }
 
-int32 UGPMFactorySubsystem::RunningIn(const FString& Tree) const
+int32 UGPMFactorySubsystem::RunningIn(const FString& Tree, bool bFut) const
 {
 	const UGPMSaveGame* G = Save();
-	return G ? int32(G->DevPart.Contains(Tree)) + int32(G->DevPart.Contains(Tree + TEXT("+"))) : 0;
+	const FString K = bFut ? TEXT("F:") + Tree : Tree;
+	return G ? int32(G->DevPart.Contains(K)) + int32(G->DevPart.Contains(K + TEXT("+"))) : 0;
 }
 
 FString UGPMFactorySubsystem::DevKey(const FGPMPart& P) const
@@ -77,8 +81,10 @@ FString UGPMFactorySubsystem::DevKey(const FGPMPart& P) const
 	// une pièce en cours est rangée sous son pôle, ou « pôle+ » pour la 2e recherche du pôle (Soufflerie niveau 3)
 	const UGPMSaveGame* G = Save();
 	if (!G) return FString();
-	if (G->DevPart.FindRef(P.Tree) == P.Id) return P.Tree;
-	const FString Second = P.Tree + TEXT("+");
+	// voiture de la prochaine ère : « F:pôle »
+	const FString First = P.bFut ? TEXT("F:") + P.Tree : P.Tree;
+	if (G->DevPart.FindRef(First) == P.Id) return First;
+	const FString Second = First + TEXT("+");
 	if (G->DevPart.FindRef(Second) == P.Id) return Second;
 	return FString();
 }
@@ -131,16 +137,18 @@ UGPMFactorySubsystem::EState UGPMFactorySubsystem::StateOf(const FGPMPart& P) co
 {
 	const UGPMSaveGame* G = Save();
 	if (!G) return EState::Locked;
-	if (G->Owned.Contains(P.Id)) return EState::Owned;
+	const TArray<FString>& Own = P.bFut ? G->FutOwned : G->Owned;
+	if (Own.Contains(P.Id)) return EState::Owned;
 	if (!DevKey(P).IsEmpty()) return EState::Running;
-	for (const FString& R : P.Req) if (!G->Owned.Contains(R)) return EState::Locked;
+	for (const FString& R : P.Req) if (!Own.Contains(R)) return EState::Locked;
 	if (P.ReqAny.Num())
 	{
 		bool bAny = false;
-		for (const FString& R : P.ReqAny) bAny |= G->Owned.Contains(R);
+		for (const FString& R : P.ReqAny) bAny |= Own.Contains(R);
 		if (!bAny) return EState::Locked;
 	}
-	if (RunningIn(P.Tree) >= PerDept() || Running() >= Workshops()) return EState::Busy;
+	// ateliers et budget partagés entre la voiture de la saison et celle de la prochaine ère
+	if (RunningIn(P.Tree, P.bFut) >= PerDept() || Running() >= Workshops()) return EState::Busy;
 	if (G->Budget < PriceOf(P)) return EState::TooExpensive;
 	return EState::Available;
 }
@@ -150,7 +158,8 @@ bool UGPMFactorySubsystem::Start(const FString& Id)
 	const FGPMPart* P = Part(Id);
 	UGPMSaveGame* G = Save();
 	if (!P || !G || StateOf(*P) != EState::Available) return false;
-	const FString Key = G->DevPart.Contains(P->Tree) ? P->Tree + TEXT("+") : P->Tree;
+	const FString Base = P->bFut ? TEXT("F:") + P->Tree : P->Tree;
+	const FString Key = G->DevPart.Contains(Base) ? Base + TEXT("+") : Base;
 	const int32 Days = DelayOf(*P);
 	G->Budget = FMath::RoundToFloat((G->Budget - PriceOf(*P)) * 10.f) / 10.f;
 	G->DevPart.Add(Key, P->Id);
@@ -183,6 +192,7 @@ void UGPMFactorySubsystem::Tick(int32 Days)
 			continue;
 		}
 		if (FMath::RandRange(0, 99) < FailOf(*P)) G->News.Add(FString::Printf(TEXT("Échec : %s a cassé au banc d'essai, la pièce est perdue."), *P->Name));
+		else if (P->bFut) { G->FutOwned.Add(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est prête pour la voiture %d."), *P->Name, G->EraAt)); }
 		else { G->Owned.Add(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est montée sur la voiture."), *P->Name)); }
 		G->Delayed.Remove(P->Id);
 		Done.Add(D.Key);
@@ -191,12 +201,12 @@ void UGPMFactorySubsystem::Tick(int32 Days)
 	Persist();
 }
 
-FGPMUpgrades UGPMFactorySubsystem::Upgrades() const
+FGPMUpgrades UGPMFactorySubsystem::Upgrades(bool bFut) const
 {
 	FGPMUpgrades U;
 	const UGPMSaveGame* G = Save();
 	if (!G) return U;
-	for (const FString& Id : G->Owned)
+	for (const FString& Id : bFut ? G->FutOwned : G->Owned)
 		if (const FGPMPart* P = Part(Id))
 			for (const TPair<FString, float>& F : P->Fx)
 			{

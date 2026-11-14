@@ -1,9 +1,17 @@
 // Maillages du circuit et de l'environnement : piste texturée, vibreurs, herbe/gravier, murs publicitaires,
 // grillages, tribunes avec public, stands, portique de départ, arbres, montagnes, ciel et soleil.
+// Décors modélisés dans Blender (decor.js) : stands des écuries, motorhomes, panneaux, passerelle, commissaires,
+// murs de pneus, tours de télévision, mâts d'éclairage, immeubles.
 import * as THREE from '../lib/three.module.min.js';
 import { mulberry, pitLane } from './track.js';
 import { TEAMS } from './data.js';
 import * as TX from './textures.js';
+import { instances, hasDecor, BUILDINGS } from './decor.js';
+
+// couleurs des vibreurs selon le circuit (def.kerb pour en imposer une paire)
+const KERBS = [['#c8201e', '#f3f3f0'], ['#1f4fbf', '#f3f3f0'], ['#2a8a3a', '#f3f3f0'], ['#e0b81c', '#1c1c1c'], ['#c8201e', '#2a8a3a'],
+  ['#e8742a', '#f3f3f0'], ['#1f4fbf', '#e0b81c'], ['#c8201e', '#e0b81c'], ['#6a2c91', '#f3f3f0'], ['#111111', '#f3f3f0']];
+const kerbColors = def => def.kerb || KERBS[[...def.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % KERBS.length];
 
 // Petit constructeur de géométrie (triangles non indexés, uv + couleur par sommet)
 class Geo {
@@ -129,6 +137,14 @@ export function buildTrackMeshes(track, scene) {
     const gs = new Set(); for (let k = 0; k < def.gravel.length; k += 2) gs.add(def.gravel[k] + ',' + def.gravel[k + 1]);
     gravelAt = (p) => { const x = Math.round(p[0] / 10) * 10, z = Math.round(p[2] / 10) * 10; return gs.has(x + ',' + z); };
   }
+  // bacs à gravier : extérieur des virages marqués, prolongés sur ~40 m en sortie de virage (côté de la sortie)
+  const gSide = new Int8Array(N);
+  { let last = 0, cnt = 0;
+    for (let n = 0; n < N * 2; n++) {
+      const i = n % N;
+      if (Math.abs(Cw[i]) > 1 / 170) { last = Cw[i] > 0 ? 1 : -1; cnt = 20; if (n >= N || !gSide[i]) gSide[i] = last; }
+      else if (cnt > 0) { gSide[i] = last; cnt--; }
+    } }
   const deck = new Geo();
   const road = new Geo(), kerbs = new Geo(), grass = new Geo(), gravel = new Geo(), walls = new Geo(), fences = new Geo();
   for (let i = 0; i < N; i++) {
@@ -147,7 +163,7 @@ export function buildTrackMeshes(track, scene) {
       // distance du mur de ce côté (variable selon le circuit)
       const Wa = s > 0 ? WR[i] : WL[i], Wb = s > 0 ? WR[j] : WL[j];
       const wq = (geo, d1, d2, y1, y2, uv, k) => geo.quad(A(Wa + d1, y1), A(Wa + d2, y2), B(Wb + d1, y1), B(Wb + d2, y2), ...uv, k);
-      const outside = gravelAt ? gravelAt(pt(i, s * (edge + Math.min(Wa, edge + 30)) / 2, 0)) : surf !== 'concrete' && Math.abs(Cw[i]) > 1 / 170 && s === (Cw[i] > 0 ? 1 : -1);
+      const outside = gravelAt ? gravelAt(pt(i, s * (edge + Math.min(Wa, edge + 30)) / 2, 0)) : surf !== 'concrete' && s === gSide[i];
       // dégagement : gravier à l'extérieur des virages, herbe ailleurs
       const zone = outside ? gravel : grass;
       const uvw = (k, o) => { const p = pt(k, s * o, 0); return [p[0] / 7, p[2] / 7]; };
@@ -184,13 +200,14 @@ export function buildTrackMeshes(track, scene) {
       lane.quad(pt(i, la - hw, 0.04), pt(i, la + hw, 0.04), pt(j, lb - hw, 0.04), pt(j, lb + hw, 0.04), [0, v0 / 16], [0.45, v0 / 16], [0, v1 / 16], [0.45, v1 / 16]);
       for (const e of [-hw, hw]) paint.quad(pt(i, la + e - 0.12, 0.06), pt(i, la + e + 0.12, 0.06), pt(j, lb + e - 0.12, 0.06), pt(j, lb + e + 0.12, 0.06), [0, 0], [1, 0], [0, 1], [1, 1]);
     }
-    // emplacements : rectangle à la couleur de chaque écurie, côté garages
+    // emplacements (P.slot) : carré à la couleur de chaque écurie, côté garages, cadre blanc (jaune pour le joueur) où il faut s'arrêter
     TEAMS.forEach((t, n) => {
-      const c = new THREE.Color(t.color), k0 = P.box(n) - 2;
-      for (let k = k0; k < k0 + 4; k++) {
-        const i = ip(k), j = ip(k + 1);
-        paint.quad(pt(i, P.lat + 0.6, 0.065), pt(i, P.lat + hw - 0.3, 0.065), pt(j, P.lat + 0.6, 0.065), pt(j, P.lat + hw - 0.3, 0.065), [0, 0], [1, 0], [0, 1], [1, 1], [c.r, c.g, c.b]);
-      }
+      const c = new THREE.Color(t.color), s = P.slot(n), f = n ? [1, 1, 1] : [1, 0.85, 0.1], e = n ? 0.15 : 0.3;
+      const lerpPt = (i, i2, w, o) => { const a = pt(i, o, 0.07), b = pt(i2, o, 0.07); return a.map((v, q) => v + (b[q] - v) * w); };
+      const rect = (ka, kb, la, lb, y, col) => { for (let k = ka; k < kb; k++) { const i = ip(k), j = ip(k + 1); paint.quad(pt(i, la, y), pt(i, lb, y), pt(j, la, y), pt(j, lb, y), [0, 0], [1, 0], [0, 1], [1, 1], col); } };
+      rect(s.k0, s.k1, s.l0, s.l1, 0.065, [c.r, c.g, c.b]);
+      rect(s.k0, s.k1, s.l0 - e, s.l0, 0.07, f); rect(s.k0, s.k1, s.l1, s.l1 + e, 0.07, f);
+      for (const k of [s.k0, s.k1]) { const i = ip(k), i2 = ip(k + (k === s.k0 ? 1 : -1)), w = e / DSm; paint.quad(pt(i, s.l0 - e, 0.07), pt(i, s.l1 + e, 0.07), lerpPt(i, i2, w, s.l0 - e), lerpPt(i, i2, w, s.l1 + e), [0, 0], [1, 0], [0, 1], [1, 1], f); }
     });
     // muret des stands entre la piste et la voie, avec grillage
     const pw = new Geo();
@@ -205,7 +222,7 @@ export function buildTrackMeshes(track, scene) {
     group.add(pw.mesh(L({ color: 0xd9dde2, side: THREE.DoubleSide })));
   }
   if (deck.p.length) group.add(deck.mesh(L({ map: TX.concrete(), vertexColors: true, side: THREE.DoubleSide })));
-  group.add(kerbs.mesh(L({ map: TX.kerb(), polygonOffset: true, polygonOffsetFactor: -1 })));
+  group.add(kerbs.mesh(L({ map: TX.kerb(...kerbColors(def)), polygonOffset: true, polygonOffsetFactor: -1 })));
   group.add(grass.mesh(L({ map: surfTex(), vertexColors: true })));
   group.add(gravel.mesh(L({ map: TX.gravel(), vertexColors: true })));
   const adMat = L({ map: TX.adBoards(), side: THREE.DoubleSide });
@@ -274,6 +291,7 @@ export function buildTrackMeshes(track, scene) {
   const crowdTex = TX.crowd();
   const concrete = L({ color: 0xb4b8bd }), roofMat = L({ color: 0xe6e9ec, emissive: 0x4a4f56, side: THREE.DoubleSide });
   const crowdMat = L({ map: crowdTex, color: 0xc4c4c4 });
+  const occupied = [];   // tribunes et décors déjà posés : [x, z, rayon]
   const stand = (i, s, len, off = (s > 0 ? WR[i] : WL[i]) + 3.5) => {
     const g = new THREE.Group();
     const seats = new THREE.PlaneGeometry(len, Math.hypot(14, 9));
@@ -286,7 +304,7 @@ export function buildTrackMeshes(track, scene) {
     g.add(new THREE.Mesh(box(len + 3, 0.25, 19, 0, 15.6, -6.5, -0.12), roofMat));
     const p = pt(i, s * off, 0);
     g.position.set(p[0], Y[i] - 0.3, p[2]); g.rotation.y = track.H[i] + s * Math.PI / 2;
-    group.add(g);
+    group.add(g); occupied.push([p[0], p[2], len / 2 + 12]);
   };
   const placedStands = [];
   if (def.stands) {   // tribunes placées sur le dessin du circuit : [x, z, longueur]
@@ -318,8 +336,21 @@ export function buildTrackMeshes(track, scene) {
   }
   if (!def.stands) for (const i of picked) stand(i, Cw[i] > 0 ? 1 : -1, 70);
 
-  // Bâtiment des stands (côté droit de la ligne droite)
-  {
+  // Bâtiment des stands (côté droit de la ligne droite) : modules Blender aux couleurs des écuries, motorhomes derrière
+  const pitOff = P.lat + 3.6 + 1.5 + 8;
+  if (hasDecor('garage')) {
+    const gar = [], mh = [], step = Math.max(1, Math.round(12 / DSm)), ry = i => track.H[i] + Math.PI / 2;   // face avant (+z du modèle) tournée vers la piste
+    const teamAt = i => { const k = pitK(i); let b = 0; TEAMS.forEach((t, n) => { if (Math.abs(P.box(n) - k) < Math.abs(P.box(b) - k)) b = n; }); return TEAMS[b]; };
+    for (let k = -4 * 31 + 8 - 15; k <= 1 * 31 + 8 + 15; k += step) {
+      const i = (k + N) % N, p = pt(i, pitOff, 0);
+      gar.push({ x: p[0], y: Y[i], z: p[2], ry: ry(i), color: teamAt(i).color });
+    }
+    TEAMS.forEach((t, n) => {
+      const i = ((-4 * 31 + 8) + n * 18 + N) % N, p = pt(i, pitOff + 8 + 7, 0);
+      mh.push({ x: p[0], y: Y[i], z: p[2], ry: ry(i), color: t.color });
+    });
+    instances(group, 'garage', gar); instances(group, 'motorhome', mh);
+  } else {
     const wm = L({ color: 0xdfe3e8 }), gm = new THREE.MeshStandardMaterial({ color: 0x1d2a38, metalness: 0.6, roughness: 0.2 });
     for (let k = -4; k <= 1; k++) {
       const i = (k * 31 + 8 + N) % N;
@@ -332,6 +363,7 @@ export function buildTrackMeshes(track, scene) {
       glass.position.set(p[0], Y[i] + 10.2, p[2]); glass.rotation.y = b.rotation.y; group.add(glass);
     }
   }
+  for (let k = -4 * 31 + 8 - 15; k <= 1 * 31 + 8 + 15; k += 10) { const p = pt((k + N) % N, pitOff, 0); occupied.push([p[0], p[2], 30]); }
 
   // Arbres instanciés (feuillus texturés + conifères), loin de la piste
   {
@@ -391,6 +423,7 @@ export function buildTrackMeshes(track, scene) {
       const parts = [], cols = [], cc = new THREE.Color();
       const pal = [0xd8d2c4, 0xb9c2cc, 0x9aa8b8, 0xe6e0d4, 0x8f9aa6, 0xc7b299, 0xa7b7c4, 0xd9c7b0];
       let n = 0, tries = 0;
+      const useB = hasDecor('imm-verre-16'), bItems = {};
       while (n < th.city.count && tries++ < th.city.count * 40) {
         const x = minX - 250 + rnd() * (maxX - minX + 500), z = minZ - 250 + rnd() * (maxZ - minZ + 500);
         if (inSea(z)) continue;
@@ -400,6 +433,14 @@ export function buildTrackMeshes(track, scene) {
         if (Math.min(i, N - i) < 200 && d < 90) continue; // stands, voie des stands et tribunes
         const far = Math.min(1, d / 220);
         const hgt = th.city.hmin + (th.city.hmax - th.city.hmin) * Math.pow(rnd(), 1.6) * (0.4 + 0.6 * far);
+        if (useB) {   // immeuble Blender : style selon la hauteur, variante au nombre d'étages le plus proche
+          const r2 = rnd(), kind = hgt > 60 ? 'verre' : hgt > 25 ? (r2 < 0.45 ? 'verre' : 'logements') : (r2 < 0.5 ? 'logements' : 'ancien');
+          const fl = BUILDINGS[kind].reduce((a, f) => Math.abs(Math.log(f * 3.4 / hgt)) < Math.abs(Math.log(a * 3.4 / hgt)) ? f : a);
+          const name = `imm-${kind}-${fl}`;
+          (bItems[name] || (bItems[name] = [])).push({ x, y: Math.min(Y[i], track.ground + 2) - 1, z, ry: track.H[i], sx: bw / 20, sz: bd / 20, sy: hgt / (fl * 3.4),
+            color: kind === 'verre' ? [0xe8ecf0, 0xc9d2da, 0x9fb3c4][(rnd() * 3) | 0] : pal[(rnd() * pal.length) | 0] });
+          blocked.push([x, z, Math.max(bw, bd) * 0.7]); n++; continue;
+        }
         const g = new THREE.BoxGeometry(bw, hgt, bd);
         const uv = g.attributes.uv;
         const dims = [[bd, hgt], [bd, hgt], [0, 0], [0, 0], [bw, hgt], [bw, hgt]];
@@ -413,6 +454,7 @@ export function buildTrackMeshes(track, scene) {
         blocked.push([x, z, Math.max(bw, bd) * 0.7]);
         n++;
       }
+      for (const [name, items] of Object.entries(bItems)) instances(group, name, items);
       if (parts.length) {
         const geo = merge(parts);
         geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
@@ -499,6 +541,76 @@ export function buildTrackMeshes(track, scene) {
     if (mt.near) group.add(ridge(RR - 450, ...mt.near, 33));
   }
 
+  if (hasDecor('panneau')) placeDecor();
   scene.add(group);
   return { group, lights };
+
+  // ---------- décors Blender le long du circuit ----------
+  function placeDecor() {
+    const rd = mulberry(def.id.length * 977 + N), ang = (i, s) => track.H[i] + s * Math.PI / 2;   // face avant (+z) vers la piste
+    const free = (x, z, r) => !occupied.some(o => (o[0] - x) ** 2 + (o[1] - z) ** 2 < (o[2] + r) ** 2);
+    const okAt = (i, s, off) => {
+      if (over[i] || (s > 0 && inPit(i)) || Math.min(i, N - i) < 40) return null;
+      const p = pt(i, s * off, 0);
+      if (others(p[0], p[2], i, w / 2 + 10, () => true)) return null;   // autre portion de piste trop proche
+      return p;
+    };
+    const kc = new THREE.Color(kerbColors(def)[0]).getHex();
+    // panneaux publicitaires derrière le grillage, alternés, plus nombreux à l'extérieur des virages
+    const pan = [], com = [], tyr = [], cam = [], lamp = [];
+    for (let i = 0, side = 1; i < N; i += Math.round((150 + rd() * 90) / DSm)) {
+      const s = Math.abs(Cw[i]) > 1 / 300 ? (Cw[i] > 0 ? 1 : -1) : (side = -side);
+      const off = (s > 0 ? WR[i] : WL[i]) + 6, p = okAt(i, s, off); if (!p || !free(p[0], p[2], 8)) continue;
+      pan.push({ x: p[0], y: Y[i] - 0.4, z: p[2], ry: ang(i, s), ad: (rd() * 8) | 0 }); occupied.push([p[0], p[2], 8]);
+    }
+    // postes de commissaires tous les ~300 m, côté extérieur du virage suivant
+    for (let i = 60; i < N; i += Math.round(300 / DSm)) {
+      let s = 1; for (let k = 0; k < 60; k++) { const c = Cw[(i + k) % N]; if (Math.abs(c) > 1 / 250) { s = c > 0 ? 1 : -1; break; } }
+      const off = (s > 0 ? WR[i] : WL[i]) + 2.6, p = okAt(i, s, off); if (!p || !free(p[0], p[2], 3)) continue;
+      com.push({ x: p[0], y: Y[i] - 0.2, z: p[2], ry: ang(i, s) }); occupied.push([p[0], p[2], 3]);
+    }
+    // murs de pneus devant le mur à l'extérieur des virages les plus serrés (6 m par module)
+    const sharp = [];
+    for (let i = 0; i < N; i++) if (Math.abs(Cw[i]) > 1 / 95) sharp.push(i);
+    for (const i of sharp) {
+      if (tyr.length >= 120 || i % 3) continue;
+      const s = Cw[i] > 0 ? 1 : -1, off = (s > 0 ? WR[i] : WL[i]) - 0.7;
+      if (off < w / 2 + 3) continue;
+      const p = okAt(i, s, off); if (!p) continue;
+      tyr.push({ x: p[0], y: Y[i], z: p[2], ry: ang(i, s), color: kc });
+    }
+    // tours de télévision à l'extérieur des grands virages
+    const big = []; for (let i = 0; i < N; i++) if (Math.abs(Cw[i]) > 1 / 160) big.push(i);
+    big.sort((a, b) => Math.abs(Cw[b]) - Math.abs(Cw[a]));
+    for (const i of big) {   // à l'extérieur, sinon à l'intérieur du virage, 4 au plus, espacées
+      if (cam.length >= 4 || cam.some(c => Math.min(Math.abs(c.i - i), N - Math.abs(c.i - i)) < 120)) continue;
+      for (const s of [Cw[i] > 0 ? 1 : -1, Cw[i] > 0 ? -1 : 1]) {
+        const off = (s > 0 ? WR[i] : WL[i]) + 10, p = okAt(i, s, off);
+        if (p && free(p[0], p[2], 4)) { cam.push({ i, x: p[0], y: Y[i] - 0.3, z: p[2], ry: ang(i, s) }); occupied.push([p[0], p[2], 4]); break; }
+      }
+    }
+    // mâts d'éclairage : course au crépuscule (sinon quelques-uns le long de la ligne droite des stands)
+    const night = th.sun && th.sun[1] < 0.2;
+    for (let i = 0, s = 1; i < N; i += Math.round((night ? 70 : 9999) / DSm), s = -s) {
+      const off = (s > 0 ? WR[i] : WL[i]) + 4, p = okAt(i, s, off);
+      if (p && free(p[0], p[2], 2)) lamp.push({ x: p[0], y: Y[i] - 0.3, z: p[2], ry: ang(i, s) });
+    }
+    instances(group, 'panneau', pan); instances(group, 'commissaires', com); instances(group, 'pneus', tyr);
+    instances(group, 'camera', cam); instances(group, 'projecteur', lamp);
+    // passerelle au-dessus de la plus longue ligne droite (loin du départ)
+    let best = -1, bl = 0;
+    for (let i = 0, run = 0; i < N; i++) {
+      run = Math.abs(C[i]) < 1 / 900 ? run + 1 : 0;
+      const m = (i - (run >> 1) + N) % N;
+      if (run > bl && Math.min(m, N - m) > 120 && !over[m] && !inPit(m)) { bl = run; best = m; }
+    }
+    if (best >= 0 && bl * DSm > 200) {
+      const i = best, wl = WL[i] + 2.2, wr = WR[i] + 2.2, pl = pt(i, -wl, 0), pr = pt(i, wr, 0), c = pt(i, (wr - wl) / 2, 0);
+      const ok = [pl, pr].every(p => free(p[0], p[2], 3));
+      if (ok) {
+        instances(group, 'pilier', [{ x: pl[0], y: Y[i], z: pl[2], ry: track.H[i] }, { x: pr[0], y: Y[i], z: pr[2], ry: track.H[i] }]);
+        instances(group, 'tablier', [{ x: c[0], y: Y[i] + 0.2, z: c[2], ry: track.H[i], sx: (wl + wr) / 20, ad: (rd() * 8) | 0 }]);
+      }
+    }
+  }
 }

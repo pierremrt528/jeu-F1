@@ -1,5 +1,6 @@
 // QG de l'écurie en Slate : recherche (arbres de pièces), installations (bâtiments à 3 niveaux) et chefs de pôle.
 #include "GPMUI.h"
+#include "GrandPrixManager.h"
 #include "GPMHUD.h"
 #include "GPMGameMode.h"
 #include "GPMSeason.h"
@@ -13,6 +14,10 @@
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/SLeafWidget.h"
+#include "Widgets/Layout/SConstraintCanvas.h"
+#include "Widgets/Layout/SWrapBox.h"
+#include "Rendering/DrawElements.h"
 
 using namespace GPMUIColor;
 
@@ -67,6 +72,7 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
 	QGTab = FMath::Clamp(QGTab, 0, 2);
 	if (QGTab == 2) F->EnsureStaff();
+	GM->bFutCar = QGTab == 0 && FutView();   // l'atelier montre la voiture de la prochaine ère
 	const UGPMSaveGame* G = S->State();
 	static const TCHAR* const TabTitles[3] = { TEXT("Recherche et développement"), TEXT("Installations"), TEXT("Chefs de pôle") };
 
@@ -90,7 +96,7 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 	TSharedRef<SWidget> Content = QGTab == 0 ? ResearchTab() : QGTab == 1 ? InfraTab() : ChiefsTab();
 	const FString TeamName = G && G->bCreated ? G->TeamName : FString(TEXT("ton écurie"));
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Title(FString::Printf(TEXT("QG · %s"), *TeamName.ToUpper()), TabTitles[QGTab], Right) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Title(FString::Printf(TEXT("QG · %s"), *GPMUp(TeamName)), TabTitles[QGTab], Right) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
 		[
 			SNew(SHorizontalBox)
@@ -101,68 +107,170 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 	return Page(Body, CRoomBg);
 }
 
-// ---------- onglet Recherche : les 5 arbres de pièces ----------
+// ---------- onglet Recherche : l'arbre de chaque pôle, avec ses branches ----------
+
+namespace GPMUITree
+{
+	struct FLink { FVector2D A, B; FLinearColor Col; float Thick; };
+	/** Liens entre les pièces d'un arbre (prérequis), dessinés sous les fiches : positions en fraction de la zone. */
+	class SLinks : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SLinks) {}
+		SLATE_END_ARGS()
+		TArray<FLink> Links;
+		void Construct(const FArguments&) {}
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(100.f, 100.f); }
+		virtual int32 OnPaint(const FPaintArgs&, const FGeometry& Geo, const FSlateRect&, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle&, bool) const override
+		{
+			const FVector2D Sz = Geo.GetLocalSize();
+			for (const FLink& L : Links)
+			{
+				// coude : descente verticale, palier horizontal à mi-hauteur, puis descente
+				const FVector2D A(L.A.X * Sz.X, L.A.Y * Sz.Y), B(L.B.X * Sz.X, L.B.Y * Sz.Y);
+				const float MidY = (A.Y + B.Y) * 0.5f;
+				TArray<FVector2D> Pts = { A, FVector2D(A.X, MidY), FVector2D(B.X, MidY), B };
+				FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, L.Col, true, L.Thick);
+			}
+			return Layer + 1;
+		}
+	};
+}
+
+bool FGPMUI::FutView() const
+{
+	const UGPMFactorySubsystem* F = FactorySys();
+	return bFutView && F && F->FutureOpen();
+}
 
 TSharedRef<SWidget> FGPMUI::ResearchTab()
 {
 	UGPMFactorySubsystem* F = FactorySys();
 	if (!F || F->Trees().Num() == 0) return SNullWidget::NullWidget;
 	TWeakObjectPtr<UGPMFactorySubsystem> WF = F;
-	const TArray<FGPMTree>& Trees = F->Trees();
+	const bool bFut = FutView();
+	const TArray<FGPMTree>& Trees = F->Trees(bFut);
 	SelTree = FMath::Clamp(SelTree, 0, Trees.Num() - 1);
 	SelPart = FMath::Clamp(SelPart, 0, FMath::Max(0, Trees[SelTree].Parts.Num() - 1));
 	if (Trees[SelTree].Parts.Num() == 0) return SNullWidget::NullWidget;
 	using ES = UGPMFactorySubsystem::EState;
+	const FString King = F->KingDept(bFut);
+	const int32 At = F->ReformYear();
 
-	TSharedRef<SHorizontalBox> Cols = SNew(SHorizontalBox);
+	// onglets des pôles (pôle roi de l'ère en or), puis la voiture de la prochaine ère quand son règlement est publié
+	TSharedRef<SHorizontalBox> TabRow = SNew(SHorizontalBox);
 	for (int32 t = 0; t < Trees.Num(); ++t)
 	{
 		const FGPMTree& Tr = Trees[t];
 		int32 Have = 0;
 		for (const FGPMPart& P : Tr.Parts) if (F->StateOf(P) == ES::Owned) ++Have;
-		const FGPMChief Boss = F->ChiefOf(Tr.Id);
-		TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-		List->AddSlot().AutoHeight()[ Txt(Tr.Name.ToUpper(), 16, Tr.Color, true) ];
-		List->AddSlot().AutoHeight()[ Txt(Boss.IsValid() ? FString::Printf(TEXT("Chef : %s"), *Boss.Name) : FString(TEXT("Pas de chef de pôle")), 12, Boss.IsValid() ? CDim : CFaint) ];
-		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Bar(Tr.Parts.Num() ? float(Have) / Tr.Parts.Num() : 0.f, Tr.Color, 5.f) ];
-		for (int32 k = 0; k < Tr.Parts.Num(); ++k)
-		{
-			const FGPMPart& P = Tr.Parts[k];
-			const ES St = F->StateOf(P);
-			FString InfoTxt;
-			FLinearColor InfoCol = CDim, NameCol = CText;
-			switch (St)
-			{
-			case ES::Owned: InfoTxt = TEXT("installée"); InfoCol = CGood; break;
-			case ES::Running: InfoTxt = FString::Printf(TEXT("en recherche · %.0f j"), F->DaysLeft(P)); InfoCol = CGold; break;
-			case ES::Available: InfoTxt = FString::Printf(TEXT("%.1f M€ · %d j"), F->PriceOf(P), F->DelayOf(P)); InfoCol = CInfo; break;
-			case ES::TooExpensive: InfoTxt = FString::Printf(TEXT("%.1f M€"), F->PriceOf(P)); InfoCol = CBad; NameCol = CDim; break;
-			case ES::Busy: InfoTxt = TEXT("pôle occupé"); NameCol = CDim; break;
-			default: InfoTxt = TEXT("verrouillée"); InfoCol = CFaint; NameCol = CFaint; break;
-			}
-			TSharedRef<SVerticalBox> Tile = SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(P.Name, 14, NameCol, St == ES::Owned || St == ES::Running) ]
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(InfoTxt, 12, InfoCol) ];
-			if (St == ES::Running)
-				Tile->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Bar(1.f - F->DaysLeft(P) / FMath::Max(1.f, F->DaysTotal(P)), CGold, 4.f) ];
-			List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Pick(Tile, t == SelTree && k == SelPart, [this, t, k]() { SelTree = t; SelPart = k; }) ];
-		}
-		Cols->AddSlot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, t + 1 < Trees.Num() ? 10.f : 0.f, 0.f))
-		[
-			Card(SNew(SScrollBox) + SScrollBox::Slot()[ List ], CCardBg, 12.f)
-		];
+		const bool bOn = t == SelTree, bKing = Tr.Id == King;
+		const bool bWip = F->RunningIn(Tr.Id, bFut) > 0;
+		const FLinearColor Bg = bOn ? GPMUIQGText::Dim(Tr.Color, 0.75f) : FLinearColor(1.f, 1.f, 1.f, 0.07f);
+		TSharedRef<SVerticalBox> Lab = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Ital(GPMUp(Tr.Id == TEXT("stand") ? FString(TEXT("Pit stop")) : Tr.Name), 14, bOn ? CText : Tr.Color, 1, true) ]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+			[ Txt(FString::Printf(TEXT("%s%d/%d%s"), bKing ? TEXT("PÔLE ROI · ") : TEXT(""), Have, Tr.Parts.Num(), bWip ? TEXT(" · en cours") : TEXT("")), 11, bKing ? CGold : bOn ? CText : CDim, bKing) ];
+		TabRow->AddSlot().AutoWidth().Padding(FMargin(t ? -10.f : 0.f, 0.f, 0.f, 0.f))
+		[ Hit(Lab, Bg, bOn ? GPMUIStyle::Lift(Bg, 1.15f) : FLinearColor(1.f, 1.f, 1.f, 0.16f), [this, t]() { SelTree = t; SelPart = 0; }, true, 150.f, 56.f, FMargin(26.f, 2.f)) ];
+	}
+	if (F->FutureOpen())
+	{
+		const FLinearColor Gold(0.72f, 0.55f, 0.1f, 1.f);
+		const FLinearColor Bg = bFut ? Gold : FLinearColor(0.72f, 0.55f, 0.1f, 0.22f);
+		TSharedRef<SVerticalBox> Lab = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Ital(bFut ? FString::Printf(TEXT("VOITURE %d"), F->Year()) : FString::Printf(TEXT("VOITURE %d"), At), 14, bFut ? InkOn(Gold) : CGold, 1, true) ]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Txt(bFut ? TEXT("revenir à l'ère actuelle") : TEXT("nouveau règlement"), 11, bFut ? InkOn(Gold) : CGold) ];
+		TabRow->AddSlot().AutoWidth().Padding(FMargin(18.f, 0.f, 0.f, 0.f))
+		[ Hit(Lab, Bg, GPMUIStyle::Lift(Bg, 1.2f), [this]() { bFutView = !bFutView; SelPart = 0; }, true, 190.f, 56.f, FMargin(26.f, 2.f)) ];
 	}
 
+	// l'arbre : une rangée par niveau, trois colonnes, liens des prérequis
+	const FGPMTree& Tr = Trees[SelTree];
+	int32 Rows = 1;
+	for (const FGPMPart& P : Tr.Parts) Rows = FMath::Max(Rows, P.Row);
+	auto Pos = [Rows](const FGPMPart& P) { return FVector2D((FMath::Clamp(P.Col, 1, 3) - 0.5f) / 3.f, (P.Row - 0.5f) / Rows); };
+	TSharedRef<GPMUITree::SLinks> Links = SNew(GPMUITree::SLinks);
+	TSharedRef<SConstraintCanvas> Canvas = SNew(SConstraintCanvas);
+	for (int32 k = 0; k < Tr.Parts.Num(); ++k)
+	{
+		const FGPMPart& P = Tr.Parts[k];
+		const ES St = F->StateOf(P);
+		auto Link = [&](const FString& ReqId, bool bAny)
+		{
+			for (const FGPMPart& Q : Tr.Parts)
+				if (Q.Id == ReqId)
+				{
+					const bool bLit = F->StateOf(Q) == ES::Owned;
+					FLinearColor C = bLit ? Tr.Color : FLinearColor(1.f, 1.f, 1.f, 0.16f);
+					if (bAny && !bLit) C.A = 0.1f;
+					Links->Links.Add({ Pos(Q), Pos(P), C, bLit ? 3.f : 2.f });
+				}
+		};
+		for (const FString& R : P.Req) Link(R, false);
+		for (const FString& R : P.ReqAny) Link(R, true);
+		FString InfoTxt;
+		FLinearColor InfoCol = CDim, NameCol = CText;
+		switch (St)
+		{
+		case ES::Owned: InfoTxt = bFut ? TEXT("prête") : TEXT("installée"); InfoCol = CGood; break;
+		case ES::Running: InfoTxt = FString::Printf(TEXT("en recherche · %.0f j"), F->DaysLeft(P)); InfoCol = CGold; break;
+		case ES::Available: InfoTxt = FString::Printf(TEXT("%.1f M€ · %d j"), F->PriceOf(P), F->DelayOf(P)); InfoCol = CInfo; break;
+		case ES::TooExpensive: InfoTxt = FString::Printf(TEXT("%.1f M€ · trop cher"), F->PriceOf(P)); InfoCol = CBad; NameCol = CDim; break;
+		case ES::Busy: InfoTxt = TEXT("ateliers occupés"); NameCol = CDim; break;
+		default: InfoTxt = P.ReqAny.Num() ? TEXT("verrouillée · une branche suffit") : TEXT("verrouillée"); InfoCol = CFaint; NameCol = CFaint; break;
+		}
+		TSharedRef<SVerticalBox> Tile = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(P.Name)).Font(GPMUIStyle::Face(1, 14)).ColorAndOpacity(FSlateColor(NameCol)).AutoWrapText(true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(InfoTxt, 12, InfoCol) ];
+		if (St == ES::Running)
+			Tile->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Bar(1.f - F->DaysLeft(P) / FMath::Max(1.f, F->DaysTotal(P)), CGold, 4.f) ];
+		// liseré de la couleur du pôle sur les pièces installées
+		TSharedRef<SWidget> Node = SNew(SOverlay)
+			+ SOverlay::Slot()[ Pick(Tile, k == SelPart, [this, k]() { SelPart = k; }) ]
+			+ SOverlay::Slot().HAlign(HAlign_Left)
+			[ SNew(SBox).WidthOverride(4.f)[ Layer(GPMUIStyle::Rounded(2.f), St == ES::Owned ? Tr.Color : St == ES::Running ? CGold : FLinearColor(0.f, 0.f, 0.f, 0.f)) ] ];
+		const FVector2D A = Pos(P);
+		Canvas->AddSlot()
+			.Anchors(FAnchors(A.X, A.Y))
+			.Alignment(FVector2D(0.5f, 0.5f))
+			.Offset(FMargin(0.f, 0.f, 260.f, 66.f))
+			[ Node ];
+	}
+	const FGPMChief Boss = F->ChiefOf(Tr.Id);
+	int32 Have = 0;
+	for (const FGPMPart& P : Tr.Parts) if (F->StateOf(P) == ES::Owned) ++Have;
+	TSharedRef<SWidget> TreeCard = Card(
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[ Ital(FString::Printf(TEXT("%s · %s"), *GPMUp(Tr.Name), bFut ? *FString::Printf(TEXT("VOITURE %d"), At) : *GPMUp(F->CurrentEraName())), 18, Tr.Color, 1) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[ Txt(FString::Printf(TEXT("%d/%d pièces · %s"), Have, Tr.Parts.Num(), Boss.IsValid() ? *FString::Printf(TEXT("chef : %s"), *Boss.Name) : TEXT("pas de chef de pôle")), 13, CDim) ]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 6.f))[ Bar(Tr.Parts.Num() ? float(Have) / Tr.Parts.Num() : 0.f, Tr.Color, 4.f) ]
+		+ SVerticalBox::Slot().FillHeight(1.f)
+		[
+			SNew(SBox).MinDesiredHeight(Rows * 86.f)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot().Padding(FMargin(0.f, 6.f))[ Links ]
+				+ SOverlay::Slot().Padding(FMargin(0.f, 6.f))[ Canvas ]
+			]
+		], CCardBg, 14.f);
+
 	// fiche de la pièce choisie
-	const FGPMPart& P = Trees[SelTree].Parts[SelPart];
+	const FGPMPart& P = Tr.Parts[SelPart];
 	const ES St = F->StateOf(P);
-	TSharedRef<SHorizontalBox> Fx = SNew(SHorizontalBox);
+	TSharedRef<SWrapBox> Fx = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.f, 6.f));
 	for (const TPair<FString, float>& E : P.Fx)
 	{
 		const bool bAbs = E.Key == TEXT("rel") || E.Key == TEXT("pit");
 		const float V = bAbs ? E.Value : E.Value * 100.f;
-		const bool bLowGood = E.Key == TEXT("fuel") || E.Key == TEXT("tyre") || E.Key == TEXT("pit");
-		Fx->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+		const bool bLowGood = E.Key == TEXT("fuel") || E.Key == TEXT("tyre") || E.Key == TEXT("pit") || E.Key == TEXT("wall");
+		Fx->AddSlot()
 		[
 			Chip(GPMUIQGText::EffectName(E.Key), FString::Printf(TEXT("%+.1f%s"), V, E.Key == TEXT("pit") ? TEXT(" s") : bAbs ? TEXT("") : TEXT(" %")),
 				bLowGood ? (V < 0.f ? CGood : CBad) : (V >= 0.f ? CGood : CBad))
@@ -171,38 +279,62 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 	FString StateTxt;
 	switch (St)
 	{
-	case ES::Owned: StateTxt = TEXT("Déjà installée sur la voiture."); break;
+	case ES::Owned: StateTxt = bFut ? FString::Printf(TEXT("Prête : elle sera sur la voiture %d."), At) : FString(TEXT("Déjà installée sur la voiture.")); break;
 	case ES::Running: StateTxt = FString::Printf(TEXT("En cours de recherche : %.0f jours restants."), F->DaysLeft(P)); break;
 	case ES::Available: StateTxt = TEXT("Prête à être lancée."); break;
 	case ES::TooExpensive: StateTxt = TEXT("Budget insuffisant."); break;
 	case ES::Busy: StateTxt = F->PerDept() > 1 ? TEXT("Ce pôle a déjà deux pièces en cours, ou tous les ateliers sont pris.") : TEXT("Ce pôle travaille déjà sur une pièce, ou tous les ateliers sont pris."); break;
-	default: StateTxt = TEXT("Il faut d'abord les pièces précédentes de l'arbre."); break;
+	default: StateTxt = P.ReqAny.Num() ? TEXT("Il faut d'abord une des pièces juste au-dessus (une seule branche suffit).") : TEXT("Il faut d'abord les pièces juste au-dessus dans l'arbre."); break;
 	}
 	const float Base = UGPMFactorySubsystem::Price(P), Now = F->PriceOf(P);
-	FString CostTxt = FString::Printf(TEXT("Prix %.1f M€%s · %d jours · risque d'échec %d %% · retard possible %d %%"), Now,
+	FString CostTxt = FString::Printf(TEXT("%.1f M€%s · %d jours · échec %d %% · retard %d %%"), Now,
 		Now < Base - 0.05f ? *FString::Printf(TEXT(" (au lieu de %.1f)"), Base) : TEXT(""), F->DelayOf(P), F->FailOf(P), F->LateOf(P));
-	const FGPMChief Boss = F->ChiefOf(P.Tree);
-	if (Boss.IsValid()) CostTxt += FString::Printf(TEXT(" · chef %s : prix -%d %%, délai -%d %%, risque -%d %%"), *Boss.Name, Boss.Cost, Boss.Time, Boss.Risk);
+	if (Boss.IsValid()) CostTxt += FString::Printf(TEXT("\nChef %s : prix -%d %%, délai -%d %%, risque -%d %%"), *Boss.Name, Boss.Cost, Boss.Time, Boss.Risk);
 	const FString PartId = P.Id;
-	TSharedRef<SWidget> Detail = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
-		[
-			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(P.Name, 24, CText, true) ]
+	const FLinearColor TC = Tr.Color;
+	TSharedRef<SVerticalBox> Side = SNew(SVerticalBox);
+	Side->AddSlot().AutoHeight()
+	[
+		Card(SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(bFut ? FString::Printf(TEXT("VOITURE %d · %s"), At, *GPMUp(Tr.Name)) : GPMUp(Tr.Name), 12, TC, true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(P.Name)).Font(GPMUIStyle::Face(0, 24)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 8.f))[ Txt(P.Desc, 15, CDim, false, true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Fx ]
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(CostTxt, 14, CDim, false, true) ]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(StateTxt, 14, St == ES::Available ? CGood : St == ES::Running ? CGold : CDim, true, true) ]
-		]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(20.f, 0.f, 0.f, 0.f))
-		[
-			Button(TEXT("LANCER LA RECHERCHE"), Acc, [WF, PartId]() { if (WF.IsValid()) WF->Start(PartId); }, St == ES::Available, 260.f, 58.f, 17)
-		];
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(CostTxt, 13, CDim, false, true) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Txt(StateTxt, 14, St == ES::Available ? CGood : St == ES::Running ? CGold : CDim, true, true) ]
+			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+			[ Button(TEXT("LANCER LA RECHERCHE"), Acc, [WF, PartId]() { if (WF.IsValid()) WF->Start(PartId); }, St == ES::Available, 260.f, 54.f, 16) ],
+			FLinearColor(TC.R * 0.22f, TC.G * 0.22f, TC.B * 0.22f, 0.88f), 18.f)
+	];
+	// l'ère : pôle roi, et la voiture de la prochaine ère (même échelle d'indice que les écuries)
+	{
+		const int32 EI = bFut ? F->NextEraIndex() : F->EraIndex();
+		const UGPMFactorySubsystem::FEra& E = UGPMFactorySubsystem::EraDef(EI);
+		TSharedRef<SVerticalBox> EB = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(bFut ? FString::Printf(TEXT("RÈGLEMENT %d"), At) : FString(TEXT("RÈGLEMENT EN VIGUEUR")), 12, CPurple, true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Ital(bFut ? F->NextEraName() : F->CurrentEraName(), 20, CText, 1) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(E.Focus, 14, CGold, false, true) ];
+		if (bFut)
+		{
+			EB->AddSlot().AutoHeight()[ Txt(E.Desc, 13, CDim, false, true) ];
+			EB->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))
+			[ Txt(FString::Printf(TEXT("Voiture %d : indice %.1f · %d pièce%s prête%s · voiture %d : %.1f"), At, F->PlayerPerf(true) * 100.f, F->FutCount(), F->FutCount() > 1 ? TEXT("s") : TEXT(""), F->FutCount() > 1 ? TEXT("s") : TEXT(""), F->Year(), F->PlayerPerf(false) * 100.f), 14, CText, true, true) ];
+		}
+		else if (F->FutureOpen())
+			EB->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("Refonte totale en %d : développe dès maintenant la voiture %d (onglet doré)."), At, At), 13, CDim, false, true) ];
+		else
+			EB->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("Prochaine grande refonte : pas avant %d."), At - 1), 13, CFaint, false, true) ];
+		Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 12.f, 0.f, 0.f))[ Card(EB, FLinearColor(0.07f, 0.05f, 0.11f, 0.85f), 16.f) ];
+	}
 
-	const FLinearColor TC = Trees[SelTree].Color;
 	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().FillHeight(1.f).Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Cols ]
-		+ SVerticalBox::Slot().AutoHeight()[ Card(Detail, FLinearColor(TC.R * 0.25f, TC.G * 0.25f, TC.B * 0.25f, 0.85f), 18.f) ];
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ TabRow ]
+		+ SVerticalBox::Slot().FillHeight(1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.55f).Padding(FMargin(0.f, 0.f, 14.f, 0.f))[ TreeCard ]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ Side ] ]
+		];
 }
 
 // ---------- onglet Installations : 7 bâtiments à 3 niveaux, un chantier à la fois ----------
@@ -384,7 +516,7 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 	{
 		const FGPMChief Cur = F->ChiefOf(Ds[k].Key);
 		TSharedRef<SVerticalBox> Tile = SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(Ds[k].Value.ToUpper(), 13, DeptColor(Ds[k].Key), true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(GPMUp(Ds[k].Value), 13, DeptColor(Ds[k].Key), true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(Cur.IsValid() ? Cur.Name : FString(TEXT("Poste vacant")), 17, Cur.IsValid() ? CText : CFaint, true) ];
 		if (Cur.IsValid())
 		{
@@ -401,7 +533,7 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 	// chef en poste du pôle choisi
 	const FGPMChief Mine = F->ChiefOf(Dept);
 	TSharedRef<SVerticalBox> Top = SNew(SVerticalBox);
-	Top->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("PÔLE %s · TON CHEF"), *Ds[SelDept].Value.ToUpper()), 13, DeptColor(Dept), true) ];
+	Top->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("PÔLE %s · TON CHEF"), *GPMUp(Ds[SelDept].Value)), 13, DeptColor(Dept), true) ];
 	if (Mine.IsValid())
 	{
 		const int32 Until = G->ChiefUntil.FindRef(Dept);
@@ -431,7 +563,7 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 	for (int32 k = 0; k < Cands.Num(); ++k)
 	{
 		const FGPMChiefOffer& O = Cands[k];
-		const FString Tag = O.Club.IsEmpty() ? (O.bFresh ? FString(TEXT("NOUVEAU")) : FString(TEXT("LIBRE"))) : FString::Printf(TEXT("CHEZ %s"), *O.Club.ToUpper());
+		const FString Tag = O.Club.IsEmpty() ? (O.bFresh ? FString(TEXT("NOUVEAU")) : FString(TEXT("LIBRE"))) : FString::Printf(TEXT("CHEZ %s"), *GPMUp(O.Club));
 		const FLinearColor TagCol = O.Club.IsEmpty() ? (O.bFresh ? CGold : CGood) : CInfo;
 		TSharedRef<SWidget> Line = SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
@@ -469,7 +601,7 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 		if (!Offer.Club.IsEmpty()) CostWhy += FString::Printf(TEXT(", %.1f M€ d'indemnité à %s"), UGPMFactorySubsystem::ChiefFee(Offer.C), *Offer.Club);
 		const float Rel = F->ReleaseCost(Dept);
 		if (Rel > 0.f) CostWhy += FString::Printf(TEXT(", %.1f M€ pour libérer %s"), Rel, *Mine.Name);
-		Det->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("ENGAGER %s"), *Offer.C.Name.ToUpper()), 14, CGold, true) ];
+		Det->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("ENGAGER %s"), *GPMUp(Offer.C.Name)), 14, CGold, true) ];
 		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(Cmp, 14, CText, false, true) ];
 		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 10.f))[ Txt(CostWhy + TEXT("."), 13, CDim, false, true) ];
 		TSharedRef<SHorizontalBox> Btns = SNew(SHorizontalBox);

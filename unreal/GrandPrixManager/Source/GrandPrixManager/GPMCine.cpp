@@ -8,6 +8,7 @@
 #include "GPMDataSubsystem.h"
 #include "GPMCareer.h"
 #include "GPMSeason.h"
+#include "GPMFactory.h"
 #include "GPMEngineSound.h"
 #include "Engine/DirectionalLight.h"
 #include "Components/DirectionalLightComponent.h"
@@ -218,6 +219,12 @@ void AGPMGameMode::UpdateRoom()
 					if (G->bCreated && !G->TeamName.IsEmpty()) Name = G->TeamName;
 			Showroom->SetTeam(Data->Teams[0].Color, Data->Teams[0].Accent, Name);
 		}
+	// usine : la voiture de la prochaine ère sur le plateau
+	if (AGPMCar* D = Showroom->DisplayCar())
+	{
+		const UGPMFactorySubsystem* Fac = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+		D->SyncModel(bFutCar && Phase == EPhase::Factory && Fac ? Fac->CarEraId(true) : FString());
+	}
 	const int32 Kind = Cine == ECine::Meet ? 1 : Cine == ECine::Sign ? 2 : 0;
 	if (Kind != 0 || RoomScene != 0) Showroom->PlayScene(Kind, CineT);
 	RoomScene = Kind;

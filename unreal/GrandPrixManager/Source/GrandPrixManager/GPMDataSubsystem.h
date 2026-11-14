@@ -32,8 +32,10 @@ public:
 	/** Section brute : File = nom du fichier sans .json (ex. "garage"), Key = tableau exporté (ex. "TREES"). */
 	TSharedPtr<FJsonValue> GetRaw(const FString& File, const FString& Key);
 
-	/** Modèle 3D de la monoplace (chargé une fois). */
-	const FGPMCarModel* GetCarModel();
+	/** Modèle 3D de la monoplace d'une ère du règlement (car_<ère>.json, chargé une fois) ; ère vide = ère en cours (CarEra). */
+	const FGPMCarModel* GetCarModel(const FString& Era = FString());
+	/** Ère du règlement en cours (id de reglement.js) : choisit la monoplace. */
+	FString CarEra = TEXT("fondation");
 
 	static FString DataDir();
 
@@ -44,5 +46,5 @@ private:
 	TMap<FString, TSharedPtr<FGPMTrackData>> TrackCache;   // pointeurs stables : la voiture et le circuit les gardent
 	TArray<FString> CircuitIds;
 	TMap<FString, TSharedPtr<FJsonObject>> CircuitDefs;   // définitions de data.js (nom, type, thème)
-	TSharedPtr<FGPMCarModel> CarModel;
+	TMap<FString, TSharedPtr<FGPMCarModel>> CarModels;
 };

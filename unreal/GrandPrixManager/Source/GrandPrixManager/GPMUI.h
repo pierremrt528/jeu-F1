@@ -77,6 +77,8 @@ private:
 	bool bConfirmNew = false;
 	int32 SelTree = 0, SelPart = 0, SeasonTab = 0;
 	int32 QGTab = 0, SelInfra = 0, SelDept = 0, SelCand = 0;   // QG : onglet, bâtiment, pôle et candidat choisis
+	bool bFutView = false;   // usine : voiture de la prochaine ère
+	bool FutView() const;
 	int32 SelMail = -1, MailFilt = 0, MailN = 0;   // boîte mail : message ouvert, filtre (0 tous, 1 non lus, 2+ type)
 	int32 KeyPhase = -1;   // phase vue à l'image précédente : une touche qui change d'écran ne compte pas deux fois
 	FLinearColor Acc = FLinearColor(0.85f, 0.12f, 0.12f, 1.f);
@@ -138,6 +140,7 @@ private:
 	TSharedRef<SWidget> PerfPanel();
 	TSharedRef<SWidget> InboxPanel();
 	TSharedRef<SWidget> MissionCard();
+	TSharedRef<SWidget> EraCard(AGPMGameMode* GM);
 	TSharedRef<SWidget> ChampScreen(AGPMGameMode* GM);
 	TSharedRef<SWidget> QualiScreen(AGPMGameMode* GM);
 	TSharedRef<SWidget> ResultsScreen(AGPMGameMode* GM);

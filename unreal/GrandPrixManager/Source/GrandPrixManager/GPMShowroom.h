@@ -32,6 +32,7 @@ class GRANDPRIXMANAGER_API AGPMShowroom : public AActor
 	GENERATED_BODY()
 
 public:
+	AGPMCar* DisplayCar() const { return Display; }
 	AGPMShowroom();
 	virtual void Tick(float DeltaSeconds) override;
 	/** Construit la pièce et la voiture d'exposition (une fois). */

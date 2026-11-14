@@ -1,5 +1,6 @@
 // Grands écrans de gestion en Slate : saison, usine, mercato, création de l'écurie, qualifications, résultats, sacre.
 #include "GPMUI.h"
+#include "GrandPrixManager.h"
 #include "GPMHUD.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
@@ -143,7 +144,7 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 			[
 				SNew(STextBlock).Text(FText::FromString(Kick)).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -5.f, 0.f, 0.f))[ Ital(TeamName.ToUpper(), 38, CText) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -5.f, 0.f, 0.f))[ Ital(GPMUp(TeamName), 38, CText) ]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Nav ];
 
@@ -162,6 +163,7 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 	TSharedRef<SScrollBox> LeftCol = SNew(SScrollBox);
 	LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ HeroNext(GM) ];
 	LeftCol->AddSlot()[ MissionCard() ];
+	if (bTeam) LeftCol->AddSlot()[ EraCard(GM) ];
 	if (bTeam) LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Glass(Board) ];
 	if (Lines->NumSlots()) LeftCol->AddSlot()[ Glass(Lines) ];
 

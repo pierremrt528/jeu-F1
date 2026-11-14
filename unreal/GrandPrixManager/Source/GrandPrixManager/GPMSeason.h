@@ -130,6 +130,17 @@ public:
 	// Contrat de l'équipier : primes par podium et par victoire
 	UPROPERTY() float MatePod = 0.f;
 	UPROPERTY() float MateWin = 0.f;
+	// Grandes refontes du règlement (reglement.js) : ère en cours (ERAS), génération, année de la refonte (0 = pas encore tirée),
+	// ère suivante ; voiture de la prochaine ère (pièces prêtes ; recherches rangées dans DevPart sous « F:pôle ») ; avance des rivaux
+	UPROPERTY() int32 EraI = 0;
+	UPROPERTY() int32 EraGen = 0;
+	UPROPERTY() int32 EraAt = 0;
+	UPROPERTY() int32 EraNi = 1;
+	UPROPERTY() TArray<FString> FutOwned;
+	UPROPERTY() TMap<FString, float> RivalFut;
+	UPROPERTY() TArray<FString> Reg;              // règlement annuel : pôles remis à zéro à l'intersaison
+	UPROPERTY() int32 ReformYear = 0;             // bandeau « nouvelle ère » de l'écran de saison
+	UPROPERTY() FString ReformText;
 };
 
 /** Une ligne de classement. */

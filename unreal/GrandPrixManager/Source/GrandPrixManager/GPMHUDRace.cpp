@@ -1,6 +1,7 @@
 // HUD de course : tour des positions façon télé, compte-tours au centre en bas, tour et chronos, messages,
 // mini-carte, commandes tactiles et menu pause (Échap / P, ou le bouton II sous la mini-carte).
 #include "GPMHUD.h"
+#include "GrandPrixManager.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
 #include "GPMCareer.h"
@@ -34,7 +35,7 @@ FString AGPMHUD::Code3(const FString& Driver) const
 	FString Full = Nm(Driver).TrimStartAndEnd();
 	int32 Sp = INDEX_NONE;
 	if (Full.FindLastChar(TEXT(' '), Sp)) Full = Full.Mid(Sp + 1);
-	return Full.Left(3).ToUpper();
+	return GPMUp(Full.Left(3));
 }
 
 void AGPMHUD::SetPaused(bool bPause)

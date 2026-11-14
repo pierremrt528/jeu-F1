@@ -1,6 +1,7 @@
 // Écrans de gestion en Slate : socle (affichage, reconstruction, briques communes) et petits écrans
 // (accueil, course solo, réglages, fenêtres à choix, licenciement). Les grands écrans sont dans GPMUIScreens.cpp.
 #include "GPMUI.h"
+#include "GrandPrixManager.h"
 #include "GPMHUD.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
@@ -192,7 +193,7 @@ namespace GPMUIStyle
 		}
 		if (Out.Len() == 1) Out += Rest.Left(2);
 		else if (Out.Len() == 2) Out += Rest.Left(1);
-		return Out.IsEmpty() ? FString(TEXT("GPM")) : Out.ToUpper();
+		return Out.IsEmpty() ? FString(TEXT("GPM")) : GPMUp(Out);
 	}
 
 	FSlateFontInfo Face(int32 Kind, int32 Size)
@@ -259,7 +260,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
-	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt));
+	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
 	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
@@ -335,12 +336,12 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		const bool bEnter = PC->WasInputKeyJustPressed(EKeys::Enter);
 		if (QGTab == 0)
 		{
-			const int32 NT = F->Trees().Num();
+			const int32 NT = F->Trees(FutView()).Num();
 			if (NT == 0) return;
 			if (bL) { SelTree = (SelTree + NT - 1) % NT; SelPart = 0; }
 			if (bR) { SelTree = (SelTree + 1) % NT; SelPart = 0; }
 			SelTree = FMath::Clamp(SelTree, 0, NT - 1);
-			const TArray<FGPMPart>& Parts = F->Trees()[SelTree].Parts;
+			const TArray<FGPMPart>& Parts = F->Trees(FutView())[SelTree].Parts;
 			if (bU) SelPart = FMath::Max(0, SelPart - 1);
 			if (bD) SelPart = FMath::Min(Parts.Num() - 1, SelPart + 1);
 			if (bEnter && Parts.IsValidIndex(SelPart) && F->StateOf(Parts[SelPart]) == UGPMFactorySubsystem::EState::Available) { F->Start(Parts[SelPart].Id); Touch(); }
@@ -378,6 +379,13 @@ bool FGPMUI::Update(AGPMGameMode* GM)
 	if (!H || !GM) return false;
 	using EP = AGPMGameMode::EPhase;
 	using EC = AGPMGameMode::ECine;
+	if (GM->UiRequest >= 0)
+	{
+		if (GM->UiRequest < 10) SeasonTab = GM->UiRequest;
+		else { QGTab = 0; bFutView = GM->UiRequest == 10; SelPart = 0; }
+		GM->UiRequest = -1;
+		Touch();
+	}
 	const bool bCine = GM->Cine != EC::None && GM->Cine != EC::Menu;
 	const bool bWant = !bCine && (GM->InMenu() || GM->Phase == EP::QualiDone || GM->Phase == EP::Done);
 	if (!bAdded)
@@ -533,7 +541,7 @@ TSharedRef<SWidget> FGPMUI::Chip(const FString& Label, const FString& Value, con
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
 			[
-				SNew(STextBlock).Text(FText::FromString(Label.ToUpper())).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
+				SNew(STextBlock).Text(FText::FromString(GPMUp(Label))).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 			[
@@ -590,7 +598,7 @@ TSharedRef<SWidget> FGPMUI::Title(const FString& Kicker, const FString& Main, co
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Text(FText::FromString(Kicker.ToUpper())).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
+				SNew(STextBlock).Text(FText::FromString(GPMUp(Kicker))).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -4.f, 0.f, 0.f))[ Ital(Main, 36, CText) ]
 		]
@@ -713,7 +721,7 @@ TSharedRef<SWidget> FGPMUI::StatBlock(const FString& Label, const FString& Value
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
-			SNew(STextBlock).Text(FText::FromString(Label.ToUpper())).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
+			SNew(STextBlock).Text(FText::FromString(GPMUp(Label))).Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(CDim))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -2.f, 0.f, 0.f))[ Ital(Value, 28, Col) ];
 	if (!Sub.IsEmpty()) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, -2.f, 0.f, 0.f))[ Txt(Sub, 12, CFaint) ];
@@ -788,7 +796,7 @@ TSharedRef<SWidget> FGPMUI::HomeScreen(AGPMGameMode* GM)
 	Add(TEXT("RÉGLAGES"), TEXT("Graphismes, son, aides au pilotage, niveau des IA"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Settings; }, false);
 
 	// logo : deux lignes en très gras italique serrées l'une contre l'autre
-	const FString Kick = bHasCareer ? FString::Printf(TEXT("SAISON %d  ·  %s"), S->Year(), *Sv->TeamName.ToUpper()) : FString(TEXT("NOUVELLE SAISON"));
+	const FString Kick = bHasCareer ? FString::Printf(TEXT("SAISON %d  ·  %s"), S->Year(), *GPMUp(Sv->TeamName)) : FString(TEXT("NOUVELLE SAISON"));
 	TSharedRef<SWidget> Logo = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -872,7 +880,7 @@ TSharedRef<SWidget> FGPMUI::HomeScreen(AGPMGameMode* GM)
 						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("PROCHAIN GRAND PRIX · %d / %d"), S->Round() + 1, S->NumRounds())))
 						.Font(GPMUIStyle::Face(2, 11)).ColorAndOpacity(FSlateColor(Bright()))
 					]
-					+ SVerticalBox::Slot().AutoHeight()[ Ital(T->Name.ToUpper(), 20, CText) ]
+					+ SVerticalBox::Slot().AutoHeight()[ Ital(GPMUp(T->Name), 20, CText) ]
 					+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("%s%s%.2f km"), *T->Type, T->Type.IsEmpty() ? TEXT("") : TEXT(" · "), T->WX.Num() * 2.f / 1000.f), 12, CDim) ]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))[ TrackMap(NextId, Bright(), 130.f, 86.f) ]
@@ -1071,7 +1079,7 @@ TSharedRef<SWidget> FGPMUI::DialogScreen(AGPMGameMode* GM)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
 			SNew(SBorder).BorderImage(GPMUIStyle::Rounded(40.f)).BorderBackgroundColor(FSlateColor(Dl->Color)).Padding(FMargin(14.f, 5.f))
-			[ Txt(Dl->Kicker.ToUpper(), 14, InkOn(Dl->Color), true) ]
+			[ Txt(GPMUp(Dl->Kicker), 14, InkOn(Dl->Color), true) ]
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SSpacer) ]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Chips() ], 18.f);

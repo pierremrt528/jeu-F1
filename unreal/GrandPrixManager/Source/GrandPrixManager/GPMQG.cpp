@@ -434,10 +434,10 @@ float UGPMFactorySubsystem::RenewStaff(int32 NewYear)
 
 // ---------- courbes de performance ----------
 
-float UGPMFactorySubsystem::PlayerPerf() const
+float UGPMFactorySubsystem::PlayerPerf(bool bFut) const
 {
 	UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
-	const FGPMUpgrades U = Upgrades();
+	const FGPMUpgrades U = Upgrades(bFut);
 	const float Base = Data && Data->Teams.Num() ? Data->Teams[0].Perf : 0.96f;
 	return Base * (1.f + 0.6f * (U.VTop - 1.f) + 0.15f * (U.Acc - 1.f) + 0.08f * (U.Kd - 1.f) + 0.25f * (U.Mu - 1.f) + 0.04f * (U.Brake - 1.f) + 0.04f * (U.Steer - 1.f));
 }

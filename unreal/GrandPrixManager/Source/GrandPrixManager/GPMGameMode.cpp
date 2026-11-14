@@ -566,6 +566,10 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	UpdatePerf(DeltaSeconds);
 	if (Cars.Num() == 0) return;
 	UpdateAudio(DeltaSeconds);
+	// grande refonte du règlement : monoplaces de la nouvelle ère
+	if (UGPMFactorySubsystem* Fac = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>()) Fac->Trees();
+	if (const UGPMDataSubsystem* DataE = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (DataE->CarEra != CarsEra) { CarsEra = DataE->CarEra; for (AGPMCar* C : Cars) if (C) C->SyncModel(); }
 	UpdateRoom();
 	UpdateCine(DeltaSeconds);
 	UpdateSky(DeltaSeconds);
@@ -938,7 +942,7 @@ void AGPMGameMode::RecordResult()
 	// les écuries rivales progressent un peu à chaque course
 	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
 		for (int32 t = 1; t < Data->Teams.Num(); ++t)
-			G->RivalDev.FindOrAdd(Data->Teams[t].Name) += (0.0012f + FMath::FRand() * 0.0018f) * 0.67f * Factory->RivalDevMul(Data->Teams[t].Name);
+			Factory->RivalGain(Data->Teams[t].Name, (0.0012f + FMath::FRand() * 0.0018f) * 0.67f * Factory->RivalDevMul(Data->Teams[t].Name));
 	// l'usine avance jusqu'au GP suivant (GAPS de season.js, en jours)
 	G->News.Reset();
 	int32 Days = 30;
@@ -970,7 +974,11 @@ void AGPMGameMode::RecordResult()
 		for (int32 k = 0; k < Order.Num(); ++k) if (!G->MisWho.IsEmpty() && Order[k]->DriverName == G->MisWho) R.RivalPos = k + 1;
 		LastLines = Career->AfterRace(R);
 		if (!Built.IsEmpty()) LastLines.Add(Built);
+		// règlement : rumeurs de refonte, règlement de l'an prochain
+		TArray<TPair<FString, FString>> RegMails;
+		Factory->EraAfterRace(G->Round, Season->NumRounds(), Season->IsOver(), RegMails, LastLines);
 		Career->RaceMails(R, LastLines);
+		for (const TPair<FString, FString>& M : RegMails) Career->SendMail(TEXT("reglement"), TEXT("Instance dirigeante du championnat"), M.Key, M.Value);
 	}
 	Season->Save();
 }
@@ -1020,7 +1028,18 @@ void AGPMGameMode::Continue()
 		{
 			// intersaison : nouvelle saison, puis l'écran de saison sur le premier circuit
 			if (Career) Career->Intersaison();
-			Season->NewSeason(true);
+			// grande refonte du règlement (nouvelle ère) ou règlement annuel, puis la nouvelle saison
+			FString RegSubj, RegBody, PubSubj, PubBody;
+			if (UGPMFactorySubsystem* Fac = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>())
+			{
+				Fac->Intersaison(Season->Year() + 1, RegSubj, RegBody);
+				Season->NewSeason(true);
+				Fac->EraPublished(PubSubj, PubBody);
+			}
+			else Season->NewSeason(true);
+			if (Career && !RegSubj.IsEmpty()) Career->SendMail(TEXT("reglement"), TEXT("Instance dirigeante du championnat"), RegSubj, RegBody);
+			if (Career && !PubSubj.IsEmpty()) Career->SendMail(TEXT("reglement"), TEXT("Instance dirigeante du championnat"), PubSubj, PubBody);
+			Season->Save();
 			bChampShown = false;
 			bGridReady = false; SetupK = -1; Stints.Reset();
 			IntroSeen.Reset();

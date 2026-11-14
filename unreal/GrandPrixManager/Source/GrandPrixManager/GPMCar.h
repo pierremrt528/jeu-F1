@@ -41,6 +41,9 @@ public:
 
 	/** Couleurs de l'écurie (provisoire : modèle en formes simples). */
 	UFUNCTION(BlueprintCallable, Category = "GPM") void SetLivery(FLinearColor Main, FLinearColor Accent);
+	/** Monoplace de l'ère voulue (vide = ère en cours du règlement) : reconstruit le modèle s'il a changé. */
+	void SyncModel(const FString& Era = FString());
+	FString ModelEra, ModelWant;
 
 	/** Commandes (−1..1 pour la direction, 0..1 pour les pédales). Remplies au clavier ici, par le tactile à l'étape 5, par l'IA à l'étape 6. */
 	UPROPERTY(BlueprintReadWrite, Category = "GPM") float Steer = 0.f;

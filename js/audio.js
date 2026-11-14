@@ -16,7 +16,7 @@ function loadSamples() {
   for (const id in ENG) for (const [l] of ENG[id].layers) fetch(`sons/${id}-${l}.wav`).then(r => r.ok ? r.arrayBuffer() : Promise.reject())
     .then(a => new Promise((ok, ko) => ctx.decodeAudioData(a, ok, ko))).then(b => { bufs[id + l] = b; }).catch(() => {});
 }
-const ready = id => ENG[id].layers.every(([l]) => bufs[id + l]);
+const ready = id => !!ENG[id]?.layers.every(([l]) => bufs[id + l]);
 // un groupe = un moteur : ses boucles -> passe-bas -> volume. Créé à la demande, arrêté quand on change de moteur.
 function group(vol) {
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 3000; f.Q.value = 0.7;

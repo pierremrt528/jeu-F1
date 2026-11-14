@@ -145,7 +145,7 @@ namespace GPMRoomGeo
 			const TCHAR* Hit = FCString::Strchr(From, Ch);
 			Out.AppendChar(Hit ? To[Hit - From] : (Ch < 128 ? Ch : TCHAR('-')));
 		}
-		return Out.ToUpper();
+		return GPMUp(Out);
 	}
 }
 

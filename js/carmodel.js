@@ -1,4 +1,5 @@
-// Modèle 3D de monoplace (design original) : carrosserie lissée par sections (coque, nez, pontons, capot),
+// Modèle 3D de monoplace (design original). Un modèle détaillé par ère du règlement, fait dans Blender
+// (assets/cars/<id>.bin, voir tools/blender/) ; s'il n'est pas chargé, modèle procédural : carrosserie lissée par sections (coque, nez, pontons, capot),
 // ailerons à profils d'aile, halo tubulaire, suspensions, livrée par sommet. Tout est fusionné en une géométrie
 // à couleurs par sommet ; roues (pneus arrondis + flancs/jantes texturés) ; ombre douce. 3 appels de rendu par voiture.
 import * as THREE from '../lib/three.module.min.js';
@@ -93,8 +94,79 @@ function rod(a, b, r = 0.016) {
   return g;
 }
 
+// forme de la monoplace selon le règlement en vigueur (reglement.js) : nez, ailerons, pontons, dérive
+const SHAPE0 = { nose: 1, fwEl: 3, fwSpan: 1, pod: 1, podH: 1, fin: 1, rwW: 1, rwH: 0, beam: 1 };
+export const CAR_SHAPE = { ...SHAPE0 };
+let eraId = 'fondation';
+const FORCE = new URLSearchParams(location.search).get('ere');   // test : ?ere=effet-sol (toutes les voitures de cette ère)
+export function setCarShape(s, id) { Object.assign(CAR_SHAPE, SHAPE0, s || {}); eraId = FORCE || id || 'fondation'; }
+
+// ---------- modèles Blender (une monoplace par ère : ERAS[k].id dans reglement.js) ----------
+// Fichier binaire : 'GPMC', taille de l'en-tête JSON { nv, ni, ranges, meta.wheels }, positions int16 (1/8000 m),
+// normales int8, indice de palette K par sommet (0 livrée, 1 accent, 2 casque, puis PAL), indices uint16.
+const ERA_IDS = ['fondation', 'effet-sol', 'hybride', 'aero-active', 'securite'];
+const PAL = [0, 0, 0, 0x17191d, 0x08090a, 0x0d1013, 0x1f9e55, 0x5d6c7c, 0xff2a2a, 0x2a2d33, 0x1a1a1c];
+const MODELS = {};
+function parseModel(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x434d5047) return null;   // 'GPMC'
+  const hl = dv.getUint32(4, true), head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, hl)));
+  const nv = head.nv, ni = head.ni; let o = 8 + hl;
+  const qp = new Int16Array(buf, o, nv * 3); o += nv * 6;
+  const qn = new Int8Array(buf, o, nv * 3); o += nv * 3;
+  const k = new Uint8Array(buf, o, nv).slice(); o += nv; o += (4 - (nv * 10) % 4) % 4;
+  const index = new Uint16Array(buf, o, ni).slice();
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3);
+  for (let i = 0; i < nv; i++) {
+    const x = qn[i * 3], y = qn[i * 3 + 1], z = qn[i * 3 + 2], l = Math.hypot(x, y, z) || 1;
+    nor[i * 3] = x / l; nor[i * 3 + 1] = y / l; nor[i * 3 + 2] = z / l;
+    for (let a = 0; a < 3; a++) pos[i * 3 + a] = qp[i * 3 + a] / 8000;
+  }
+  // ailerons : plages de sommets (contiguës) pour les dégâts, et plages d'indices pour le morceau qui se détache
+  const ranges = {}, iranges = head.ranges || {};
+  for (const [t, [s, n]] of Object.entries(iranges)) {
+    let a = 1e9, b = -1; for (let i = s; i < s + n; i++) { a = Math.min(a, index[i]); b = Math.max(b, index[i]); }
+    ranges[t] = [a, b - a + 1];
+  }
+  const nAttr = new THREE.BufferAttribute(nor, 3), iAttr = new THREE.BufferAttribute(index, 1);
+  return { pos, nAttr, iAttr, k, ranges, iranges, wheels: head.meta?.wheels };
+}
+// chargés au démarrage ; l'atelier se reconstruit quand ils arrivent (showroom.js)
+export const modelsReady = Promise.all(ERA_IDS.map(id => fetch(`assets/cars/${id}.bin`)
+  .then(r => r.ok ? r.arrayBuffer() : null).then(b => { const m = b && parseModel(b); if (m) MODELS[id] = m; }).catch(() => {})));
+
+function modelMesh(md, color, accent, helmet) {
+  const m = mats(), n = md.k.length;
+  const hm = typeof helmet === 'object' && helmet, hf = hm && helmetFn(hm, 0, 0.84, 0.3, 0.15);
+  const col = new Float32Array(n * 3), c = new THREE.Color();
+  const fixed = [color, accent, hm ? 0 : helmet];
+  for (let i = 0; i < n; i++) {
+    const k = md.k[i];
+    c.setHex(k === 2 && hf ? hf(md.pos[i * 3], md.pos[i * 3 + 1], md.pos[i * 3 + 2]) : k < 3 ? fixed[k] : PAL[k] ?? 0);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(md.pos.slice(), 3));   // propre à chaque voiture (ailerons tordus)
+  geo.setAttribute('normal', md.nAttr);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(md.iAttr);
+  geo.computeBoundingSphere();
+  const group = new THREE.Group();
+  group.rotation.order = 'YXZ';
+  group.add(new THREE.Mesh(geo, m.body));
+  group.userData = { ranges: md.ranges, iranges: md.iranges, base: md.pos.slice() };
+  group.add(new THREE.Mesh(wheels(md.wheels), [m.tread, m.side]));
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 5.9), m.blob);
+  sh.rotation.x = -Math.PI / 2; sh.position.set(0, 0.03, 0.1); sh.renderOrder = 1;
+  group.add(sh);
+  return group;
+}
+
 export function buildCarMesh(color, accent, helmet) {
-  const m = mats();
+  if (FORCE) eraId = FORCE;
+  if (MODELS[eraId]) return modelMesh(MODELS[eraId], color, accent, helmet);
+  const m = mats(), S = CAR_SHAPE;
+  const NZ = z => z > 2.1 ? 2.1 + (z - 2.1) * S.nose : z;   // nez plus long ou plus court
   const parts = [];
   let tag = null;   // 'fw' / 'rw' : ailerons avant / arrière (peuvent se tordre ou se détacher, voir debris.js)
   const add = (geo, col, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
@@ -106,7 +178,7 @@ export function buildCarMesh(color, accent, helmet) {
   const carbon = 0x17191d, black = 0x08090a, dark = 0x2a2d33;
   // livrée : bas de caisse en carbone, bandeau de couleur d'accent sur l'arête du capot
   const livery = (x, y, z) => y < 0.235 ? carbon : (Math.abs(x) < 0.07 && y > 0.62 && z < 0.2 && z > -1.9) ? accent : color;
-  const nose = (x, y, z) => z > 3.38 ? accent : y < 0.21 ? carbon : color;
+  const nose = (x, y, z) => z > NZ(3.38) ? accent : y < 0.21 ? carbon : color;
 
   // fond plat (contour vu de dessus) + bords relevés
   {
@@ -132,6 +204,7 @@ export function buildCarMesh(color, accent, helmet) {
     { z: 0.4, y0: 0.13, y1: 0.7, ym: 0.44, w: 0.8, wb: 0.56 },
     { z: -0.25, y0: 0.13, y1: 0.66, ym: 0.42, w: 0.78, wb: 0.56, n: 2.8 },
   ];
+  for (const r of tub) r.z = NZ(r.z);
   add(loft(tub, 18).toNonIndexed(), nose); add(cap(tub[0], true), accent);
   // ouverture du cockpit + appuie-tête
   {
@@ -153,7 +226,8 @@ export function buildCarMesh(color, accent, helmet) {
   add(cap({ z: 0.125, y0: 0.9, y1: 1.03, w: 0.26, n: 2.4 }, true), black);   // prise d'air
   for (const s of [-1, 1]) add(cap({ z: 0.122, x: s * 0.13, y0: 0.62, y1: 0.78, w: 0.1, n: 2 }, true), black);
   // dérive (aileron de requin)
-  add(plate([[-0.3, 1.02], [-1.6, 0.66], [-2.1, 0.55], [-2.1, 0.72], [-1.4, 0.9], [-0.6, 1.04]], 0.016), color);
+  if (S.fin === 1) add(plate([[-0.3, 1.02], [-1.6, 0.66], [-2.1, 0.55], [-2.1, 0.72], [-1.4, 0.9], [-0.6, 1.04]], 0.016), color);
+  if (S.fin === 2) add(plate([[-0.3, 1.04], [-1.7, 0.8], [-2.25, 0.86 + S.rwH], [-2.25, 1.08 + S.rwH], [-1.4, 1.06], [-0.6, 1.1]], 0.016), color);
   // pontons avec contre-dépouille
   for (const s of [-1, 1]) {
     const pod = [
@@ -164,6 +238,7 @@ export function buildCarMesh(color, accent, helmet) {
       { z: -1.2, x: s * 0.44, y0: 0.15, y1: 0.4, ym: 0.32, w: 0.3, wb: 0.18 },
       { z: -1.85, x: s * 0.3, y0: 0.16, y1: 0.28, ym: 0.24, w: 0.14, wb: 0.1, n: 2.2 },
     ];
+    for (const r of pod) { r.x *= 0.6 + 0.4 * S.pod; r.w *= S.pod; r.y1 = 0.15 + (r.y1 - 0.15) * S.podH; r.ym = 0.15 + (r.ym - 0.15) * S.podH; }
     add(loft(pod, 14).toNonIndexed(), livery);
     add(cap({ ...pod[0], z: 0.885, w: 0.3, y0: 0.31, y1: 0.57 }, true), black);
   }
@@ -195,24 +270,27 @@ export function buildCarMesh(color, accent, helmet) {
 
   // aileron avant : 3 éléments, plaques latérales
   tag = 'fw';
-  add(airfoil(0.42, 0.09, 1.92, -0.05), carbon, 0, 0.1, 3.66, 0.06);
-  add(airfoil(0.26, 0.09, 1.78, -0.08), color, 0, 0.15, 3.3, 0.35);
-  add(airfoil(0.18, 0.09, 1.6, -0.08), accent, 0, 0.22, 3.12, 0.7);
+  const fs = S.fwSpan, dz = NZ(3.4) - 3.4;
+  add(airfoil(0.42, 0.09, 1.92 * fs, -0.05), carbon, 0, 0.1, 3.66 + dz, 0.06);
+  add(airfoil(0.26, 0.09, 1.78 * fs, -0.08), color, 0, 0.15, 3.3 + dz, 0.35);
+  if (S.fwEl > 2) add(airfoil(0.18, 0.09, 1.6 * fs, -0.08), accent, 0, 0.22, 3.12 + dz, 0.7);
+  if (S.fwEl > 3) add(airfoil(0.13, 0.09, 1.4 * fs, -0.08), color, 0, 0.29, 3.0 + dz, 0.95);
   for (const s of [-1, 1]) {
-    add(plate([[3.72, 0.08], [3.72, 0.2], [3.45, 0.33], [2.98, 0.34], [2.92, 0.08]], 0.02), color, s * 0.97, 0, 0);
-    add(new THREE.BoxGeometry(0.05, 0.02, 0.5), carbon, s * 0.94, 0.08, 3.3);
+    add(plate([[3.72, 0.08], [3.72, 0.2], [3.45, 0.33], [2.98, 0.34], [2.92, 0.08]], 0.02), color, s * 0.97 * fs, 0, dz);
+    add(new THREE.BoxGeometry(0.05, 0.02, 0.5), carbon, s * 0.94 * fs, 0.08, 3.3 + dz);
   }
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.14, 0.32), carbon, s * 0.09, 0.15, 3.42);   // supports sous le nez
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.14, 0.32), carbon, s * 0.09, 0.15, 3.42 + dz);   // supports sous le nez
   tag = null;
 
   // aileron arrière : plan principal, volet, plaques latérales, aileron de poutre, support central
   tag = 'rw';
-  add(airfoil(0.38, 0.1, 1.0, -0.07), carbon, 0, 0.88, -2.2, 0.15);
-  add(airfoil(0.24, 0.09, 1.0, -0.08), accent, 0, 1.0, -2.52, 0.7);
+  const rw = S.rwW, rh = S.rwH;
+  add(airfoil(0.38, 0.1, 1.0 * rw, -0.07), carbon, 0, 0.88 + rh, -2.2, 0.15);
+  add(airfoil(0.24, 0.09, 1.0 * rw, -0.08), accent, 0, 1.0 + rh, -2.52, 0.7);
   for (const s of [-1, 1]) {
-    add(plate([[-2.18, 0.5], [-2.12, 0.98], [-2.22, 1.18], [-2.72, 1.18], [-2.76, 0.86], [-2.6, 0.5]], 0.022), color, s * 0.51, 0, 0);
+    add(plate([[-2.18, 0.5], [-2.12, 0.98 + rh], [-2.22, 1.18 + rh], [-2.72, 1.18 + rh], [-2.76, 0.86 + rh], [-2.6, 0.5]], 0.022), color, s * 0.51 * rw, 0, 0);
   }
-  add(airfoil(0.2, 0.1, 0.88, -0.05), carbon, 0, 0.5, -2.32, 0.1);
+  if (S.beam) add(airfoil(0.2, 0.1, 0.88, -0.05), carbon, 0, 0.5, -2.32, 0.1);
   add(plate([[-2.32, 0.4], [-2.4, 0.95], [-2.55, 0.95], [-2.55, 0.4]], 0.04), carbon);
   tag = null;
   add(new THREE.BoxGeometry(0.11, 0.07, 0.03), 0xff2a2a, 0, 0.33, -2.62);   // feu de pluie
@@ -263,12 +341,14 @@ export function buildCarMesh(color, accent, helmet) {
   return group;
 }
 
-// Roues : pneu arrondi (révolution) + flancs/jantes texturés
-let WHEELS = null;
-function wheels() {
-  if (WHEELS) return WHEELS;
+// Roues : pneu arrondi (révolution) + flancs/jantes texturés ; ax = [[voie, z, rayon, largeur] avant, arrière] selon le modèle
+const WHEELS = {};
+const AX0 = [[0.83, 1.75, 0.33, 0.35], [0.8, -1.6, 0.36, 0.43]];
+function wheels(ax = AX0) {
+  const key = JSON.stringify(ax);
+  if (WHEELS[key]) return WHEELS[key];
   const treads = [], sides = [];
-  for (const [x, z, r, w] of [[0.83, 1.75, 0.33, 0.35], [-0.83, 1.75, 0.33, 0.35], [0.8, -1.6, 0.36, 0.43], [-0.8, -1.6, 0.36, 0.43]]) {
+  for (const [x, z, r, w] of ax.flatMap(([t, z, r, w]) => [[t, z, r, w], [-t, z, r, w]])) {
     const ri = r * 0.66, b = 0.05, h = w / 2, prof = [];
     prof.push(new THREE.Vector2(ri, -h));
     for (let k = 0; k <= 2; k++) prof.push(new THREE.Vector2(r - b + b * Math.sin(Math.PI / 4 * k), -h + b - b * Math.cos(Math.PI / 4 * k)));
@@ -283,5 +363,5 @@ function wheels() {
   const g = merge([a, bb]);
   g.addGroup(0, a.attributes.position.count, 0);
   g.addGroup(a.attributes.position.count, bb.attributes.position.count, 1);
-  return (WHEELS = g);
+  return (WHEELS[key] = g);
 }

@@ -26,3 +26,7 @@ namespace GPMArt
 	 */
 	GRANDPRIXMANAGER_API UMaterialInstanceDynamic* Surface(const FString& Kind, float Scale, UObject* Outer);
 }
+
+#include "Internationalization/Text.h"
+/** Majuscules avec les accents (FString::ToUpper ne traite que l'ASCII : « Aéro » donnait « AéRO »). */
+inline FString GPMUp(const FString& S) { return FText::FromString(S).ToUpper().ToString(); }

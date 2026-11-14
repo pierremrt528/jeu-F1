@@ -81,6 +81,8 @@ export function detachWing(c, part) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   g.setAttribute('color', new THREE.BufferAttribute(cc, 3));
+  const ir = w.ud.iranges?.[part], idx = w.geo.index;   // modèle Blender indexé : triangles de l'aileron
+  if (idx && ir) { const a = new Uint16Array(ir[1]); for (let i = 0; i < ir[1]; i++) a[i] = idx.getX(ir[0] + i) - s; g.setIndex(new THREE.BufferAttribute(a, 1)); }
   const mesh = new THREE.Mesh(g, c.mesh.children[0].material);
   c.mesh.updateMatrixWorld();
   mesh.position.set(cx, cy, cz).applyMatrix4(c.mesh.matrixWorld);

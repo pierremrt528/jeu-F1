@@ -1,6 +1,7 @@
 // Écran de saison en Slate : onglets des classements, du calendrier par mois (calendarHTML de season.js) et des courbes
 // de performance (perfChartHTML), carte de la mission du sponsor (missionHTML d'events.js).
 #include "GPMUI.h"
+#include "GrandPrixManager.h"
 #include "GPMHUD.h"
 #include "GPMCar.h"
 #include "GPMGameMode.h"
@@ -238,11 +239,11 @@ TSharedRef<SWidget> FGPMUI::HeroNext(AGPMGameMode* GM)
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Tag(FString::Printf(TEXT("MANCHE %02d"), S->Round() + 1)) ]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))
-					[ Kicker(FString::Printf(TEXT("%s  ·  SUR %d"), *GPMUISeasonCal::FmtDate(Day).ToUpper(), S->NumRounds()), CDim) ]
+					[ Kicker(FString::Printf(TEXT("%s  ·  SUR %d"), *GPMUp(GPMUISeasonCal::FmtDate(Day)), S->NumRounds()), CDim) ]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))
 				[
-					SNew(STextBlock).Text(FText::FromString((T ? T->Name : Id).ToUpper())).Font(GPMUIStyle::Face(0, 34)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(GPMUp(T ? T->Name : Id))).Font(GPMUIStyle::Face(0, 34)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))
 				[
@@ -388,7 +389,7 @@ TSharedRef<SWidget> FGPMUI::CalendarPanel()
 			Month = It.At.GetMonth();
 			List->AddSlot().AutoHeight().Padding(FMargin(2.f, bFirstMonth ? 0.f : 14.f, 0.f, 6.f))
 			[
-				Txt(FString::Printf(TEXT("%s %d"), GPMUISeasonCal::MoisLong[FMath::Clamp(Month, 1, 12) - 1], Yr).ToUpper(), 14, CDim, true)
+				Txt(GPMUp(FString::Printf(TEXT("%s %d"), GPMUISeasonCal::MoisLong[FMath::Clamp(Month, 1, 12) - 1], Yr)), 14, CDim, true)
 			];
 		}
 		if (It.K < 0)
@@ -539,7 +540,7 @@ TSharedRef<SWidget> FGPMUI::MissionCard()
 	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
-			SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("MISSION DU SPONSOR  ·  %s"), *G->MisSponsor.ToUpper()))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(CGold))
+			SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("MISSION DU SPONSOR  ·  %s"), *GPMUp(G->MisSponsor)))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(CGold))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))
 		[
@@ -559,6 +560,64 @@ TSharedRef<SWidget> FGPMUI::MissionCard()
 			+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.03f, 0.028f, 0.02f, 0.82f)) ]
 			+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(0.72f, 0.55f, 0.1f, 0.3f)) ]
 			+ SOverlay::Slot().HAlign(HAlign_Left)[ SNew(SBox).WidthOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), CGold) ] ]
+			+ SOverlay::Slot().Padding(FMargin(18.f, 14.f, 16.f, 14.f))[ Box ]
+		];
+}
+
+// grandes refontes du règlement : annonce un an avant (voiture de la nouvelle ère à développer), début de la nouvelle ère,
+// règlement annuel (eraHTML et regHTML de main.js)
+TSharedRef<SWidget> FGPMUI::EraCard(AGPMGameMode* GM)
+{
+	UGPMFactorySubsystem* F = FactorySys();
+	UGPMSeasonSubsystem* S = SeasonSys();
+	const UGPMSaveGame* G = S ? S->State() : nullptr;
+	if (!F || !G || !G->bCreated) return SNullWidget::NullWidget;
+	const FLinearColor Vio(0.55f, 0.32f, 0.95f, 1.f);
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	const int32 At = F->ReformYear();
+	bool bAny = false;
+	if (F->FutureOpen())
+	{
+		bAny = true;
+		const UGPMFactorySubsystem::FEra& E = UGPMFactorySubsystem::EraDef(F->NextEraIndex());
+		const int32 N = F->FutCount();
+		Box->AddSlot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("GRANDE REFONTE DU RÈGLEMENT %d"), At))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(GPMUIStyle::Lift(Vio, 1.4f))) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Ital(F->NextEraName(), 22, CText, 1) ];
+		Box->AddSlot().AutoHeight()[ Txt(E.Focus, 14, CGold, true, true) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(FString::Printf(TEXT("%s Au 1er janvier %d, toutes les pièces de toutes les écuries repartent de zéro et les arbres changent. Développe dès maintenant la voiture %d : mêmes ateliers et même budget que la voiture %d."), E.Desc, At, At, G->Year), 13, CDim, false, true) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 10.f))[ Txt(FString::Printf(TEXT("%d pièce%s prête%s pour la voiture %d."), N, N > 1 ? TEXT("s") : TEXT(""), N > 1 ? TEXT("s") : TEXT(""), At), 14, CText, true) ];
+		TWeakObjectPtr<AGPMGameMode> WGM = GM;
+		Box->AddSlot().AutoHeight().HAlign(HAlign_Left)
+		[
+			Button(FString::Printf(TEXT("VOIR LA VOITURE %d"), At), Vio, [this, WGM]() { bFutView = true; QGTab = 0; SelPart = 0; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 44.f, 15)
+		];
+	}
+	else if (G->ReformYear == G->Year && G->Round < 3 && !G->ReformText.IsEmpty())
+	{
+		bAny = true;
+		Box->AddSlot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(TEXT("NOUVELLE ÈRE"))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(GPMUIStyle::Lift(Vio, 1.4f))) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(G->ReformText, 14, CText, false, true) ];
+	}
+	if (G->Reg.Num())
+	{
+		bAny = true;
+		FString Names;
+		for (int32 k = 0; k < G->Reg.Num(); ++k)
+			for (const FGPMTree& T : F->Trees()) if (T.Id == G->Reg[k]) Names += (k ? TEXT(" et ") : TEXT("")) + T.Name;
+		const bool bTwo = G->Reg.Num() > 1;
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, Box->NumSlots() ? 10.f : 0.f, 0.f, 0.f))
+		[ SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("RÈGLEMENT %d"), G->Year + 1))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(GPMUIStyle::Lift(Vio, 1.4f))) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f))
+		[ Txt(FString::Printf(TEXT("Nouvelles règles pour %s : toutes les écuries repartiront de zéro %s, tes pièces %s seront retirées à l'intersaison. Inutile d'y investir gros d'ici là !"),
+			*Names, bTwo ? TEXT("dans ces domaines") : TEXT("dans ce domaine"), bTwo ? TEXT("de ces pôles") : TEXT("de ce pôle")), 13, CText, false, true) ];
+	}
+	if (!bAny) return SNullWidget::NullWidget;
+	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+		[
+			SNew(SOverlay)
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Rounded(0.f), FLinearColor(0.03f, 0.02f, 0.05f, 0.84f)) ]
+			+ SOverlay::Slot()[ Layer(GPMUIStyle::Ramp(0), FLinearColor(Vio.R, Vio.G, Vio.B, 0.3f)) ]
+			+ SOverlay::Slot().HAlign(HAlign_Left)[ SNew(SBox).WidthOverride(3.f)[ Layer(GPMUIStyle::Rounded(0.f), Vio) ] ]
 			+ SOverlay::Slot().Padding(FMargin(18.f, 14.f, 16.f, 14.f))[ Box ]
 		];
 }
@@ -678,7 +737,7 @@ TSharedRef<SWidget> FGPMUI::InboxPanel()
 		Reader = SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), Tags[T].Name, *When(M, G->Year).ToUpper()))).Font(GPMUIStyle::Face(2, 12))
+				SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), Tags[T].Name, *GPMUp(When(M, G->Year))))).Font(GPMUIStyle::Face(2, 12))
 					.ColorAndOpacity(FSlateColor(Tags[T].Col))
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))

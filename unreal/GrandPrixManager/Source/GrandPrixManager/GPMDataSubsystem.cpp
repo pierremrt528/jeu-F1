@@ -231,11 +231,16 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 	return Ptr.Get();
 }
 
-const FGPMCarModel* UGPMDataSubsystem::GetCarModel()
+const FGPMCarModel* UGPMDataSubsystem::GetCarModel(const FString& InEra)
 {
-	if (CarModel.IsValid()) return CarModel->P.Num() ? CarModel.Get() : nullptr;
-	CarModel = MakeShared<FGPMCarModel>();
-	TSharedPtr<FJsonObject> O = LoadFile(TEXT("car.json"));
+	const FString Era = InEra.IsEmpty() ? CarEra : InEra;
+	if (const TSharedPtr<FGPMCarModel>* Found = CarModels.Find(Era)) return (*Found)->P.Num() ? Found->Get() : nullptr;
+	TSharedPtr<FGPMCarModel> CarModel = MakeShared<FGPMCarModel>();
+	CarModels.Add(Era, CarModel);
+	// une monoplace modélisée dans Blender par ère (tools/blender) ; car.json en secours
+	FString File = FString::Printf(TEXT("car_%s.json"), *Era);
+	TSharedPtr<FJsonObject> O = LoadFile(File);
+	if (!O.IsValid()) { File = TEXT("car.json"); O = LoadFile(File); }
 	if (!O.IsValid()) return nullptr;
 	TArray<float> P, N, K;
 	ReadFloats(O, TEXT("P"), P);
@@ -269,8 +274,8 @@ const FGPMCarModel* UGPMDataSubsystem::GetCarModel()
 				if (First >= 0 && Count > 0 && First + Count <= M.P.Num()) { M.Wing[w][0] = First; M.Wing[w][1] = Count; }
 			}
 		}
-	Files.Remove(TEXT("car.json"));
-	UE_LOG(LogGPM, Log, TEXT("Monoplace : %d triangles"), M.P.Num() / 3);
+	Files.Remove(File);
+	UE_LOG(LogGPM, Log, TEXT("Monoplace %s : %d triangles"), *Era, M.P.Num() / 3);
 	return M.P.Num() ? &M : nullptr;
 }
 
