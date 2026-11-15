@@ -1,0 +1,81 @@
+{
+ "INFRA": [
+  {
+   "id": "rd",
+   "name": "Centre de R&D",
+   "icon": "🔬",
+   "desc": "Les pièces du garage coûtent moins cher.",
+   "lv": [
+    "−10 % sur les pièces",
+    "−20 % sur les pièces",
+    "−30 % sur les pièces"
+   ]
+  },
+  {
+   "id": "wind",
+   "name": "Soufflerie",
+   "icon": "🌬️",
+   "desc": "Les pièces sont livrées plus vite.",
+   "lv": [
+    "Recherches −15 % de temps",
+    "Recherches −25 % de temps",
+    "−30 % et 2 pièces en même temps par pôle"
+   ]
+  },
+  {
+   "id": "hosp",
+   "name": "Espace partenaires",
+   "icon": "🤝",
+   "desc": "Attire plus de sponsors : revenus à chaque Grand Prix.",
+   "lv": [
+    "+1 M€ par GP",
+    "+2 M€ par GP",
+    "+3,5 M€ par GP"
+   ]
+  },
+  {
+   "id": "media",
+   "name": "Centre médias",
+   "icon": "📺",
+   "desc": "Plus de visibilité : primes de course et réputation.",
+   "lv": [
+    "Primes +10 %",
+    "Primes +20 %",
+    "Primes +30 %"
+   ]
+  },
+  {
+   "id": "acad",
+   "name": "Académie de pilotes",
+   "icon": "🎓",
+   "desc": "Ton équipier progresse plus vite, les salaires baissent.",
+   "lv": [
+    "Progression ×1,5 · salaires −5 %",
+    "Progression ×2 · salaires −10 %",
+    "Progression ×2,5 · salaires −15 %"
+   ]
+  },
+  {
+   "id": "shop",
+   "name": "Ateliers",
+   "icon": "🏭",
+   "desc": "Plus de recherches en même temps dans l’usine (tous pôles confondus).",
+   "lv": [
+    "+1 atelier",
+    "+2 ateliers",
+    "+3 ateliers"
+   ]
+  },
+  {
+   "id": "pitc",
+   "name": "Centre des mécaniciens",
+   "icon": "🔧",
+   "desc": "Des arrêts au stand plus rapides.",
+   "lv": [
+    "Arrêts −0,3 s",
+    "Arrêts −0,6 s",
+    "Arrêts −1 s"
+   ]
+  }
+ ]
+}

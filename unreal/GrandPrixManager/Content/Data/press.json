@@ -1,0 +1,1852 @@
+{
+ "OUTLETS": [
+  [
+   "Claire Fontanel",
+   "Le Paddock",
+   "#e5483b"
+  ],
+  [
+   "Hugo Marchetti",
+   "Vitesse Hebdo",
+   "#3aa0ff"
+  ],
+  [
+   "Inès Rouvière",
+   "Gazette des Circuits",
+   "#f2b632"
+  ],
+  [
+   "Mats Elling",
+   "Radio Grand Tour",
+   "#3ddc84"
+  ],
+  [
+   "Sofia Lindgren",
+   "Grille de Départ TV",
+   "#b06cff"
+  ],
+  [
+   "Bastien Kerloc'h",
+   "Moteur & Passion",
+   "#ff8a3d"
+  ],
+  [
+   "Nadia Belkacem",
+   "L’Écho des Stands",
+   "#00c2c7"
+  ],
+  [
+   "Tomás Ibarra",
+   "Pole Position Mag",
+   "#ff5fa2"
+  ],
+  [
+   "Elsa Dumont",
+   "Radio Chicane",
+   "#9bd13d"
+  ],
+  [
+   "Viktor Haas",
+   "Le Quotidien du Sport",
+   "#6f8cff"
+  ]
+ ],
+ "QUESTIONS": [
+  {
+   "res": true,
+   "a": [
+    [
+     "Toute l'équipe a fait un travail énorme, cette victoire est la leur.",
+     {
+      "moral": 10,
+      "rep": 4
+     }
+    ],
+    [
+     "J'étais simplement le plus rapide. Les autres devront s'habituer.",
+     {
+      "moral": 5,
+      "rep": -4,
+      "perf": {
+       "acc": 0.015
+      }
+     }
+    ],
+    [
+     "Nos partenaires nous ont donné les moyens de gagner, merci à eux.",
+     {
+      "budget": 1.8,
+      "rep": 2
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "Un podium, ça se savoure. On progresse course après course.",
+     {
+      "moral": 6,
+      "rep": 3
+     }
+    ],
+    [
+     null,
+     {
+      "moral": 4,
+      "rep": -3,
+      "perf": {
+       "vtop": 0.008
+      }
+     }
+    ],
+    [
+     "Il nous manque encore un peu de vitesse, on va pousser les ingénieurs.",
+     {
+      "moral": -2,
+      "perf": {
+       "acc": 0.012
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "Pas du tout. On analyse les données et on reviendra plus forts.",
+     {
+      "moral": 3,
+      "rep": 2
+     }
+    ],
+    [
+     "La voiture n'était pas au niveau, il faut que ça change vite.",
+     {
+      "moral": -8,
+      "rep": -2,
+      "perf": {
+       "mu": 0.01
+      }
+     }
+    ],
+    [
+     "C'est ma faute, j'ai fait trop d'erreurs. Je m'excuse auprès de l'équipe.",
+     {
+      "moral": 6,
+      "rep": 4,
+      "perf": {
+       "vtop": -0.004
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "Ce sont des points précieux, on construit notre saison.",
+     {
+      "moral": 4,
+      "rep": 2
+     }
+    ],
+    [
+     null,
+     {
+      "moral": -2,
+      "rep": 3,
+      "perf": {
+       "acc": 0.01
+      }
+     }
+    ],
+    [
+     "On a pris des risques en stratégie, ça n'a pas payé cette fois.",
+     {
+      "moral": 1,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Celui au premier virage, j'ai freiné très tard.",
+     {
+      "moral": 6,
+      "rep": 4
+     }
+    ],
+    [
+     "Je préfère garder mes secrets pour la prochaine course.",
+     {
+      "moral": 3,
+      "perf": {
+       "brake": 0.01
+      }
+     }
+    ],
+    [
+     "Les autres pilotes étaient trop prudents, voilà tout.",
+     {
+      "moral": 4,
+      "rep": -4,
+      "perf": {
+       "vtop": 0.006
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "J'ai eu du mal à trouver le bon rythme, on doit comprendre pourquoi.",
+     {
+      "moral": -2,
+      "rep": 2,
+      "perf": {
+       "mu": 0.008
+      }
+     }
+    ],
+    [
+     "On a été gênés en piste, certains pilotes conduisent dangereusement.",
+     {
+      "moral": 2,
+      "rep": -4
+     }
+    ],
+    [
+     "Le moteur manquait de puissance, j'attends des réponses de l'usine.",
+     {
+      "moral": -4,
+      "budget": 1.2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     null,
+     {
+      "rep": 5,
+      "moral": 1
+     }
+    ],
+    [
+     "Un rival ? Il faudrait déjà qu'il arrive à me suivre.",
+     {
+      "rep": -5,
+      "moral": 4,
+      "perf": {
+       "acc": 0.01
+      }
+     }
+    ],
+    [
+     "Je ne regarde que ma propre course.",
+     {
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Excellente, on se pousse mutuellement et l'écurie en profite.",
+     {
+      "moral": 5,
+      "rep": 3
+     }
+    ],
+    [
+     null,
+     {
+      "moral": 2,
+      "rep": -2,
+      "perf": {
+       "vtop": 0.005
+      }
+     }
+    ],
+    [
+     "Je préfère ne pas parler de ça.",
+     {
+      "moral": -3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, et les nouvelles pièces vont encore nous aider.",
+     {
+      "moral": 5,
+      "rep": 3
+     }
+    ],
+    [
+     "Le potentiel est là, mais il faut plus d'investissements.",
+     {
+      "budget": 2.1,
+      "rep": -1
+     }
+    ],
+    [
+     "Un meilleur tour ne rapporte pas de trophée. On veut gagner.",
+     {
+      "moral": 3,
+      "perf": {
+       "acc": 0.01
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "C'est ma faute, j'ai poussé au-delà de la limite.",
+     {
+      "moral": 4,
+      "rep": 3,
+      "conf": 1
+     }
+    ],
+    [
+     "La voiture m'a lâché. L'usine doit se remettre en question.",
+     {
+      "moral": -6,
+      "rep": -2,
+      "conf": -3
+     }
+    ],
+    [
+     "La malchance fait partie de la course. On repart de l'avant.",
+     {
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Sous la pluie, c'est le pilote qui fait la différence. J'adore.",
+     {
+      "moral": 4,
+      "rep": 2,
+      "perf": {
+       "mu": 0.006
+      }
+     }
+    ],
+    [
+     "Trop dangereux, on aurait dû attendre derrière la voiture de sécurité.",
+     {
+      "rep": -2,
+      "moral": 1
+     }
+    ],
+    [
+     "Le choix des pneus était un vrai casse-tête pour le muret.",
+     {
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, des pneus frais au bon moment, c'est ce qui a payé.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ],
+    [
+     "On a été trop prudents. Il faudra oser plus.",
+     {
+      "moral": -2,
+      "perf": {
+       "acc": 0.008
+      }
+     }
+    ],
+    [
+     "Le muret a pris les décisions, je fais confiance aux ingénieurs.",
+     {
+      "moral": 4,
+      "conf": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Qui ne tente rien n’a rien. Les pneus ont tenu.",
+     {
+      "moral": 4,
+      "rep": 3
+     }
+    ],
+    [
+     "On savait que les pneus tiendraient, tout était calculé.",
+     {
+      "rep": 2,
+      "conf": 1
+     }
+    ],
+    [
+     "J'avais les pneus en lambeaux à la fin, plus jamais !",
+     {
+      "moral": 2,
+      "rep": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, on a voulu aller trop loin. Leçon retenue.",
+     {
+      "moral": 2,
+      "rep": 3
+     }
+    ],
+    [
+     "Les pneus de ce manufacturier ne sont pas fiables.",
+     {
+      "rep": -4,
+      "moral": 2
+     }
+    ],
+    [
+     "C'est la course. On aura plus de chance la prochaine fois.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "On a su saisir l’occasion au bon moment, c’est du travail d’équipe.",
+     {
+      "moral": 4,
+      "rep": 2
+     }
+    ],
+    [
+     "Elle m'a volé une meilleure place, c'est frustrant.",
+     {
+      "moral": -2,
+      "rep": -1
+     }
+    ],
+    [
+     "Ça fait partie du spectacle.",
+     {
+      "rep": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, j'ai fait une erreur, je l'assume.",
+     {
+      "rep": 4,
+      "moral": -1
+     }
+    ],
+    [
+     "Non, les commissaires se sont trompés.",
+     {
+      "rep": -5,
+      "moral": 3
+     }
+    ],
+    [
+     "Pas de commentaire, je ne veux pas d'amende.",
+     {
+      "moral": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "On prend course après course, rien n’est fait.",
+     {
+      "moral": 4,
+      "rep": 3,
+      "conf": 2
+     }
+    ],
+    [
+     "Le titre est pour nous, les autres le savent.",
+     {
+      "moral": 6,
+      "rep": -4,
+      "perf": {
+       "vtop": 0.006
+      }
+     }
+    ],
+    [
+     "La pression est sur les autres, pas sur nous.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Bien sûr, tant que les maths le permettent on y croit.",
+     {
+      "moral": 5,
+      "conf": 2
+     }
+    ],
+    [
+     "Il faudra des nouvelles pièces rapidement.",
+     {
+      "budget": 1.2,
+      "moral": -1
+     }
+    ],
+    [
+     "On vise d’abord le podium du championnat.",
+     {
+      "moral": 2,
+      "rep": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Positif, on progresse et l’usine travaille bien.",
+     {
+      "moral": 4,
+      "conf": 2
+     }
+    ],
+    [
+     "Mitigé. On doit frapper fort au mercato.",
+     {
+      "moral": -2,
+      "rep": 2,
+      "conf": -1
+     }
+    ],
+    [
+     "Je ne fais les bilans qu’à la fin.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Finir fort pour préparer l’an prochain.",
+     {
+      "moral": 3,
+      "conf": 2
+     }
+    ],
+    [
+     "Tout donner, il reste des points à prendre.",
+     {
+      "moral": 4,
+      "perf": {
+       "acc": 0.008
+      }
+     }
+    ],
+    [
+     "Penser déjà à la voiture de l’an prochain.",
+     {
+      "moral": -2,
+      "budget": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Merci à tous, cette saison restera gravée.",
+     {
+      "moral": 8,
+      "rep": 3
+     }
+    ],
+    [
+     "On n'a pas été à la hauteur, il faudra tout changer.",
+     {
+      "moral": -6,
+      "conf": 3
+     }
+    ],
+    [
+     "Vivement l’année prochaine !",
+     {
+      "moral": 4
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Les consignes servent l’écurie, il le comprend.",
+     {
+      "conf": 2,
+      "moral": -1
+     }
+    ],
+    [
+     "Il aura sa chance s’il est plus rapide que moi.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ],
+    [
+     "Je préfère ne pas commenter la stratégie interne.",
+     {
+      "moral": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Il l'a mérité, je dois faire mieux.",
+     {
+      "moral": 3,
+      "rep": 3
+     }
+    ],
+    [
+     "Sur la piste, il n’y a pas de numéro 1.",
+     {
+      "moral": 2,
+      "rep": -2,
+      "perf": {
+       "vtop": 0.005
+      }
+     }
+    ],
+    [
+     "Ça changera vite, croyez-moi.",
+     {
+      "moral": 4,
+      "conf": -2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Je sais que les résultats doivent arriver. Ils arriveront.",
+     {
+      "conf": 3,
+      "moral": 2
+     }
+    ],
+    [
+     "La direction devrait plutôt nous donner plus de moyens.",
+     {
+      "conf": -6,
+      "budget": 2,
+      "rep": 1
+     }
+    ],
+    [
+     "Je ne lis pas les rumeurs.",
+     {
+      "moral": -2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Chaque géant a commencé petit. Rendez-vous dans deux ans.",
+     {
+      "rep": 4,
+      "moral": 3
+     }
+    ],
+    [
+     "Il nous faut de nouveaux partenaires, l’appel est lancé.",
+     {
+      "budget": 2,
+      "rep": -2
+     }
+    ],
+    [
+     "On est là pour apprendre, sans pression.",
+     {
+      "moral": 3,
+      "conf": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui. Nous sommes là pour gagner, point.",
+     {
+      "conf": 3,
+      "moral": -2,
+      "perf": {
+       "acc": 0.008
+      }
+     }
+    ],
+    [
+     "L'argent ne fait pas tout, la concurrence est rude.",
+     {
+      "conf": -3,
+      "rep": 2
+     }
+    ],
+    [
+     "Nous visons le titre, et nous travaillons pour.",
+     {
+      "conf": 2,
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, nos ingénieurs ont déjà des idées.",
+     {
+      "moral": 4,
+      "conf": 1
+     }
+    ],
+    [
+     "C’est un coût énorme pour les petites écuries.",
+     {
+      "budget": 1.5,
+      "rep": 1
+     }
+    ],
+    [
+     "On verra en début de saison prochaine.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Intox. Je suis bien ici et je veux gagner avec cette équipe.",
+     {
+      "moral": 8,
+      "rep": 2
+     }
+    ],
+    [
+     "Je ne ferme aucune porte. Le meilleur projet gagnera.",
+     {
+      "moral": -8,
+      "budget": 2.4,
+      "rep": 2
+     }
+    ],
+    [
+     "Pas de commentaire.",
+     {
+      "moral": -2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Bien sûr, nos partenaires sont essentiels.",
+     {
+      "budget": 3,
+      "moral": -4
+     }
+    ],
+    [
+     "Je préfère rester concentré sur le pilotage.",
+     {
+      "moral": 4,
+      "perf": {
+       "mu": 0.006
+      }
+     }
+    ],
+    [
+     "Seulement si ça finance les nouvelles pièces au garage.",
+     {
+      "budget": 1.5,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "L'argent ne fait pas tout. On travaille plus intelligemment.",
+     {
+      "moral": 5,
+      "rep": 4
+     }
+    ],
+    [
+     "Oui, et on a besoin de nouveaux partenaires. L'appel est lancé !",
+     {
+      "budget": 2.4,
+      "rep": -3
+     }
+    ],
+    [
+     "On va prouver sur la piste qu'on mérite plus.",
+     {
+      "moral": 3,
+      "perf": {
+       "vtop": 0.005
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Un tracé magnifique, les fans ici sont incroyables.",
+     {
+      "rep": 5
+     }
+    ],
+    [
+     "Un peu trop dangereux à mon goût, la sécurité doit progresser.",
+     {
+      "rep": -2,
+      "moral": 2
+     }
+    ],
+    [
+     "Il faut y être parfait au freinage, c'est ce que j'adore.",
+     {
+      "moral": 3,
+      "perf": {
+       "brake": 0.008
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, un nouvel aileron arrive. On a hâte de l'essayer.",
+     {
+      "moral": 4,
+      "perf": {
+       "kd": 0.03
+      }
+     }
+    ],
+    [
+     "Je ne peux rien dire, mais on travaille jour et nuit.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ],
+    [
+     "Pas encore, il faut plus de moyens pour développer la voiture.",
+     {
+      "budget": 1.5,
+      "moral": -3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Ils font un métier difficile, je leur fais confiance.",
+     {
+      "rep": 5
+     }
+    ],
+    [
+     "Certaines décisions étaient incompréhensibles.",
+     {
+      "rep": -5,
+      "moral": 3
+     }
+    ],
+    [
+     "Je préfère parler de pilotage.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, la jeunesse fait avancer ce sport.",
+     {
+      "rep": 4,
+      "moral": 1
+     }
+    ],
+    [
+     "L'expérience compte plus que tout en course.",
+     {
+      "rep": -1,
+      "moral": 2
+     }
+    ],
+    [
+     "Notre académie va justement en accueillir.",
+     {
+      "rep": 2,
+      "budget": -0.5,
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Les fans en veulent toujours plus, on est là pour eux.",
+     {
+      "rep": 4,
+      "moral": -2
+     }
+    ],
+    [
+     "Les mécaniciens sont épuisés, il faut les protéger.",
+     {
+      "moral": 6,
+      "rep": 1,
+      "conf": -1
+     }
+    ],
+    [
+     "Plus de courses, plus de revenus.",
+     {
+      "budget": 1,
+      "rep": -2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, un plafond de dépenses serait juste.",
+     {
+      "rep": 3
+     }
+    ],
+    [
+     "Chacun investit comme il veut.",
+     {
+      "rep": -2,
+      "budget": 0.8
+     }
+    ],
+    [
+     "Nous, on compte chaque euro.",
+     {
+      "conf": 2,
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Merci pour votre soutien, on se bat pour vous.",
+     {
+      "rep": 4,
+      "moral": 2
+     }
+    ],
+    [
+     "Venez nombreux au prochain Grand Prix !",
+     {
+      "rep": 2,
+      "budget": 0.6
+     }
+    ],
+    [
+     "Restez patients, les grands moments arrivent.",
+     {
+      "moral": 3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "L'impatience. Je veux toujours dépasser trop tôt.",
+     {
+      "rep": 3,
+      "moral": 1
+     }
+    ],
+    [
+     "Je n'en ai pas.",
+     {
+      "rep": -4,
+      "moral": 4
+     }
+    ],
+    [
+     "La gestion des pneus, j’y travaille.",
+     {
+      "moral": 1,
+      "perf": {
+       "mu": 0.005
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Je reste avec mes mécaniciens, ça me détend.",
+     {
+      "moral": 6
+     }
+    ],
+    [
+     "Je n'ai pas de pression, c'est aux autres d'en avoir.",
+     {
+      "rep": -3,
+      "moral": 3,
+      "perf": {
+       "acc": 0.008
+      }
+     }
+    ],
+    [
+     "Je fais de la méditation et je visualise chaque virage.",
+     {
+      "moral": 3,
+      "perf": {
+       "steer": 0.03
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "La qualification, c’était le plus dur. Le reste a suivi.",
+     {
+      "moral": 3,
+      "rep": 2
+     }
+    ],
+    [
+     null,
+     {
+      "moral": 1,
+      "perf": {
+       "mu": 0.006
+      }
+     }
+    ],
+    [
+     "Une pole, c’est un message envoyé aux autres.",
+     {
+      "moral": 3,
+      "rep": -2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, il faut que je trouve plus de confiance sur un tour.",
+     {
+      "moral": -1,
+      "perf": {
+       "steer": 0.02
+      }
+     }
+    ],
+    [
+     "La course, c’est le dimanche. Le samedi ne paie pas.",
+     {
+      "moral": 2,
+      "rep": -1
+     }
+    ],
+    [
+     "La voiture est difficile à exploiter sur un tour lancé.",
+     {
+      "moral": 1,
+      "conf": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     null,
+     {
+      "rep": 2
+     }
+    ],
+    [
+     "Personne n’est imbattable. On le prouvera.",
+     {
+      "moral": 2,
+      "perf": {
+       "acc": 0.005
+      }
+     }
+    ],
+    [
+     "Je ne parle pas des autres pilotes.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     null,
+     {
+      "moral": 3,
+      "rep": 2
+     }
+    ],
+    [
+     "Il a eu la meilleure voiture ce week-end.",
+     {
+      "moral": -3,
+      "rep": -1
+     }
+    ],
+    [
+     "Un jour sans, ça arrive à tout le monde.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Discrète, mais sans erreur. C’est comme ça qu’on gagne des titres.",
+     {
+      "moral": 2,
+      "conf": 1
+     }
+    ],
+    [
+     "On voulait plus, la voiture était difficile à suivre dans l’air sale.",
+     {
+      "moral": -1,
+      "perf": {
+       "kd": 0.02
+      }
+     }
+    ],
+    [
+     "Le travail des mécaniciens a fait la différence.",
+     {
+      "moral": 3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Parfaitement, le timing était idéal.",
+     {
+      "moral": 2,
+      "conf": 1
+     }
+    ],
+    [
+     "On aurait pu tenter un arrêt de plus.",
+     {
+      "moral": -1,
+      "perf": {
+       "mu": 0.005
+      }
+     }
+    ],
+    [
+     "Je gérais les pneus, le muret gérait le reste.",
+     {
+      "moral": 2,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "J’ai grandi en roulant sous la pluie, ça aide.",
+     {
+      "rep": 3,
+      "moral": 2
+     }
+    ],
+    [
+     "Le choix des pneus du muret était parfait.",
+     {
+      "moral": 3,
+      "conf": 1
+     }
+    ],
+    [
+     "La pluie ne fait pas peur aux vrais pilotes.",
+     {
+      "rep": -2,
+      "moral": 3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Le rythme était là, la voiture de sécurité n’a rien changé.",
+     {
+      "moral": 2,
+      "rep": -1
+     }
+    ],
+    [
+     "Elle nous a aidés, il faut le reconnaître.",
+     {
+      "rep": 3
+     }
+    ],
+    [
+     "On ne refait pas la course avec des « si ».",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Prometteuse, on n’a pas tout montré.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ],
+    [
+     "Il y a du travail, l’usine le sait.",
+     {
+      "moral": -1,
+      "perf": {
+       "acc": 0.005
+      }
+     }
+    ],
+    [
+     "Je préfère juger après cinq courses.",
+     {
+      "moral": 1,
+      "conf": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Marquer des points régulièrement et grimper.",
+     {
+      "moral": 2,
+      "conf": 1
+     }
+    ],
+    [
+     "Un podium cette saison, je le veux.",
+     {
+      "moral": 3,
+      "rep": 1
+     }
+    ],
+    [
+     "Construire pour la saison prochaine.",
+     {
+      "moral": -1,
+      "conf": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Je suis bien ici, on en parlera au bon moment.",
+     {
+      "conf": 2,
+      "moral": 1
+     }
+    ],
+    [
+     "Mon prix a augmenté, ils le savent.",
+     {
+      "conf": -2,
+      "budget": 0.6
+     }
+    ],
+    [
+     "Je ne pense qu’à la prochaine course.",
+     {
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "Un peu de vitesse en ligne droite.",
+     {
+      "perf": {
+       "vtop": 0.005
+      },
+      "moral": 1
+     }
+    ],
+    [
+     "Un meilleur départ, j’ai perdu du temps au premier virage.",
+     {
+      "perf": {
+       "acc": 0.005
+      },
+      "moral": 1
+     }
+    ],
+    [
+     "Rien, c’était notre place aujourd’hui.",
+     {
+      "moral": 2,
+      "conf": 1
+     }
+    ]
+   ]
+  },
+  {
+   "res": true,
+   "a": [
+    [
+     "Chaque point compte au classement des écuries.",
+     {
+      "moral": 2,
+      "conf": 1
+     }
+    ],
+    [
+     "On doit accélérer le développement.",
+     {
+      "moral": -1,
+      "perf": {
+       "kd": 0.02
+      }
+     }
+    ],
+    [
+     "Le milieu de peloton est très serré, on le savait.",
+     {
+      "moral": 1,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Les jeunes qui arrivent de Formule B, ils n’ont peur de rien.",
+     {
+      "rep": 2,
+      "moral": 1
+     }
+    ],
+    [
+     "Moi-même, et je ne plaisante qu’à moitié.",
+     {
+      "rep": -2,
+      "moral": 3
+     }
+    ],
+    [
+     "Mon équipier, on apprend beaucoup ensemble.",
+     {
+      "moral": 3
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Un vrai lien avec les fans, j’adore.",
+     {
+      "rep": 3,
+      "moral": 1
+     }
+    ],
+    [
+     "Une corvée, je laisse ça à mon équipe.",
+     {
+      "rep": -1,
+      "moral": 2
+     }
+    ],
+    [
+     "Nos partenaires y tiennent, alors je joue le jeu.",
+     {
+      "budget": 0.5,
+      "moral": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, c’est un de mes préférés.",
+     {
+      "moral": 3
+     }
+    ],
+    [
+     "Pas vraiment, mais on va travailler les réglages.",
+     {
+      "moral": -1,
+      "perf": {
+       "mu": 0.005
+      }
+     }
+    ],
+    [
+     "Tous les circuits se gagnent.",
+     {
+      "moral": 1,
+      "rep": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Oui, l’aspiration devrait être plus forte.",
+     {
+      "rep": 2
+     }
+    ],
+    [
+     "Un dépassement rare a plus de valeur.",
+     {
+      "rep": 1,
+      "moral": 1
+     }
+    ],
+    [
+     "Moi, je dépasse déjà assez.",
+     {
+      "rep": -2,
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Il me connaît par cœur, un regard suffit.",
+     {
+      "moral": 4
+     }
+    ],
+    [
+     "On se dispute parfois, c’est bon signe.",
+     {
+      "moral": 1,
+      "perf": {
+       "brake": 0.006
+      }
+     }
+    ],
+    [
+     "Il doit encore apprendre à m’écouter.",
+     {
+      "moral": -3,
+      "rep": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Un peu, mais la priorité reste cette saison.",
+     {
+      "conf": 1,
+      "moral": 1
+     }
+    ],
+    [
+     "Oui, et elle sera spectaculaire.",
+     {
+      "rep": 2,
+      "moral": 1
+     }
+    ],
+    [
+     "Secret industriel.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "La concurrence interne nous rend meilleurs.",
+     {
+      "moral": 1,
+      "rep": 1
+     }
+    ],
+    [
+     "Personne ne prendra ma place.",
+     {
+      "moral": 3,
+      "rep": -1
+     }
+    ],
+    [
+     "C’est le travail de la direction, pas le mien.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Énormément, on apprend tout le week-end.",
+     {
+      "rep": 1,
+      "perf": {
+       "mu": 0.004
+      }
+     }
+    ],
+    [
+     "Non, le simulateur fait le travail.",
+     {
+      "moral": 1,
+      "perf": {
+       "steer": 0.015
+      }
+     }
+    ],
+    [
+     "Moins d’essais, moins de dépenses.",
+     {
+      "budget": 0.4
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Des arrêts rapides et zéro erreur.",
+     {
+      "moral": 3,
+      "conf": 1
+     }
+    ],
+    [
+     "Ils ont travaillé toute la nuit sur la voiture.",
+     {
+      "moral": 4,
+      "rep": 1
+     }
+    ],
+    [
+     "Il faut encore gagner quelques dixièmes au stand.",
+     {
+      "moral": -1,
+      "perf": {
+       "acc": 0.004
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Ça prouve qu’on fait peur.",
+     {
+      "moral": 3,
+      "rep": -1
+     }
+    ],
+    [
+     "Nos ingénieurs n’ont besoin de copier personne.",
+     {
+      "rep": 2,
+      "moral": 1
+     }
+    ],
+    [
+     "Pas de commentaire.",
+     {}
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Les urbains : aucune erreur permise.",
+     {
+      "moral": 2,
+      "perf": {
+       "brake": 0.005
+      }
+     }
+    ],
+    [
+     "Les rapides : la vitesse pure, rien de tel.",
+     {
+      "moral": 2,
+      "perf": {
+       "vtop": 0.004
+      }
+     }
+    ],
+    [
+     "Peu importe, tant que je gagne.",
+     {
+      "rep": 1,
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Avec plaisir, c’est pour eux qu’on court.",
+     {
+      "rep": 3,
+      "budget": -0.3
+     }
+    ],
+    [
+     "Si un sponsor la finance, pourquoi pas.",
+     {
+      "budget": 0.6
+     }
+    ],
+    [
+     "La livrée actuelle est parfaite.",
+     {
+      "moral": 1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Je passe du temps à l’usine avec les ingénieurs.",
+     {
+      "moral": 3,
+      "conf": 1
+     }
+    ],
+    [
+     "Du sport, beaucoup de sport.",
+     {
+      "moral": 2,
+      "perf": {
+       "steer": 0.01
+      }
+     }
+    ],
+    [
+     "Je déconnecte totalement, c’est vital.",
+     {
+      "moral": 2,
+      "conf": -1
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "On a beaucoup progressé, mais il reste à faire.",
+     {
+      "rep": 2
+     }
+    ],
+    [
+     "Certains dégagements sont trop petits.",
+     {
+      "rep": 1,
+      "moral": 1
+     }
+    ],
+    [
+     "Le danger fait partie de ce sport.",
+     {
+      "rep": -2,
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Prudente, peut-être. Efficace, sûrement.",
+     {
+      "conf": 1,
+      "moral": 1
+     }
+    ],
+    [
+     "Oui, il faudra prendre plus de risques.",
+     {
+      "moral": 1,
+      "perf": {
+       "acc": 0.004
+      }
+     }
+    ],
+    [
+     "Je fais confiance au muret.",
+     {
+      "moral": 2
+     }
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "Des discussions ont lieu, je ne peux rien dire.",
+     {
+      "rep": 2
+     }
+    ],
+    [
+     "Oui, et ça va changer beaucoup de choses.",
+     {
+      "rep": 1,
+      "budget": 0.5,
+      "conf": -1
+     }
+    ],
+    [
+     "Je n’en sais pas plus que vous.",
+     {}
+    ]
+   ]
+  },
+  {
+   "a": [
+    [
+     "La peur au départ, puis le bonheur à l’arrivée.",
+     {
+      "rep": 2,
+      "moral": 2
+     }
+    ],
+    [
+     "Un abandon au premier tour, ça forge le caractère.",
+     {
+      "moral": 2
+     }
+    ],
+    [
+     "Aucun, je regarde devant.",
+     {
+      "moral": 1,
+      "rep": -1
+     }
+    ]
+   ]
+  }
+ ]
+}

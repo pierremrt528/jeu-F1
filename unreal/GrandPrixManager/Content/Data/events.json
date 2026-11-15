@@ -1,0 +1,1992 @@
+{
+ "EVENTS": [
+  {
+   "id": "fire",
+   "icon": "🔥",
+   "title": "Incendie à l’usine",
+   "ch": [
+    {
+     "t": "Tout reconstruire tout de suite (6 M€)",
+     "fx": {
+      "budget": -6,
+      "moral": 3
+     },
+     "out": "L’atelier tourne de nouveau 48 heures plus tard."
+    },
+    {
+     "t": "Réparer au minimum (2 M€)",
+     "fx": {
+      "budget": -2,
+      "dev": 10,
+      "moral": -4
+     },
+     "out": "Les recherches prennent dix jours de retard."
+    },
+    {
+     "t": "Attendre l’assurance",
+     "fx": {
+      "budget": 1,
+      "dev": 18,
+      "conf": -4
+     },
+     "out": "L’assurance paie, mais l’usine reste à l’arrêt près de trois semaines."
+    }
+   ]
+  },
+  {
+   "id": "neon",
+   "icon": "⚡",
+   "title": "Un sponsor tapageur",
+   "ch": [
+    {
+     "t": "Accepter : 1,5 M€ par Grand Prix pendant 6 courses",
+     "fx": {
+      "deal": {
+       "name": "Fulgor",
+       "gp": 1.5,
+       "n": 6
+      },
+      "rep": -4
+     },
+     "out": "La voiture se voit de loin… les puristes grincent des dents."
+    },
+    {
+     "t": "Négocier une livrée discrète (0,8 M€ par GP)",
+     "fx": {
+      "deal": {
+       "name": "Fulgor",
+       "gp": 0.8,
+       "n": 6
+      },
+      "rep": 1
+     },
+     "out": "Un petit logo élégant sur l’aileron arrière."
+    },
+    {
+     "t": "Refuser : notre image avant tout",
+     "fx": {
+      "rep": 5,
+      "conf": -3
+     },
+     "out": "Les fans applaudissent, le directeur financier beaucoup moins."
+    }
+   ]
+  },
+  {
+   "id": "raise",
+   "icon": "💰",
+   "title": "Ton équipier veut plus",
+   "ch": [
+    {
+     "t": "Augmenter son salaire de 1,5 M€ par saison",
+     "fx": {
+      "wage": 1.5,
+      "moral": 6
+     },
+     "out": "Il se dit « heureux et respecté »."
+    },
+    {
+     "t": "Lui offrir le statut de N°1",
+     "fx": {
+      "role": "n1",
+      "moral": 3,
+      "conf": -2
+     },
+     "out": "Il aura la priorité sur toi en course."
+    },
+    {
+     "t": "Refuser : un contrat est un contrat",
+     "fx": {
+      "moral": -8,
+      "mate": {
+       "spd": -1
+      }
+     },
+     "out": "Il boude et perd un peu de motivation."
+    }
+   ]
+  },
+  {
+   "id": "spy",
+   "icon": "🕵️",
+   "title": "Des plans à vendre",
+   "ch": [
+    {
+     "t": "Acheter les plans (3 M€)",
+     "fx": {
+      "budget": -3,
+      "perf": {
+       "kd": 0.05
+      },
+      "flag": "spied"
+     },
+     "out": "L’aileron copié sera prêt pour le prochain GP.",
+     "risk": {
+      "p": 0.35,
+      "fx": {
+       "budget": -3,
+       "rep": -12,
+       "conf": -12
+      },
+      "out": "Scandale ! La fédération l’apprend : amende de 3 M€ et réputation au plus bas."
+     }
+    },
+    {
+     "t": "Refuser et prévenir la fédération",
+     "fx": {
+      "rep": 8,
+      "conf": 3
+     },
+     "out": "Ton intégrité est saluée dans tout le paddock."
+    },
+    {
+     "t": "Refuser discrètement",
+     "fx": {
+      "moral": 1
+     },
+     "out": "L’affaire en reste là."
+    }
+   ]
+  },
+  {
+   "id": "fans",
+   "icon": "🎉",
+   "title": "Journée des fans",
+   "ch": [
+    {
+     "t": "Ouvrir grand les portes",
+     "fx": {
+      "rep": 5,
+      "moral": 4,
+      "dev": 3
+     },
+     "out": "Des milliers de fans, des sourires partout, un peu de retard à l’usine."
+    },
+    {
+     "t": "Une visite rapide, l’usine tourne",
+     "fx": {
+      "rep": 2
+     },
+     "out": "Une visite express appréciée."
+    },
+    {
+     "t": "Annuler : on doit travailler",
+     "fx": {
+      "rep": -4,
+      "dev": -2
+     },
+     "out": "Les fans sont déçus, les ingénieurs gagnent deux jours."
+    }
+   ]
+  },
+  {
+   "id": "poach",
+   "icon": "🎯",
+   "title": "Ton chef est convoité",
+   "ch": [
+    {},
+    {
+     "t": "Le laisser partir contre une indemnité"
+    },
+    {
+     "t": "Lui promettre plus de moyens",
+     "fx": {
+      "moral": 1
+     },
+     "out": "Il accepte de rester… pour l’instant.",
+     "risk": {
+      "p": 0.5
+     }
+    }
+   ]
+  },
+  {
+   "id": "strike",
+   "icon": "🪧",
+   "title": "Grogne des mécaniciens",
+   "ch": [
+    {
+     "t": "Verser une prime (2 M€)",
+     "fx": {
+      "budget": -2,
+      "moral": 6
+     },
+     "out": "L’ambiance au garage est au beau fixe."
+    },
+    {
+     "t": "Accorder des jours de repos",
+     "fx": {
+      "dev": 5,
+      "moral": 3
+     },
+     "out": "Repos mérité, l’usine ralentit un peu."
+    },
+    {
+     "t": "Refuser",
+     "fx": {
+      "moral": -10,
+      "perf": {
+       "acc": -0.012
+      }
+     },
+     "out": "Les mécaniciens traînent des pieds : le prochain GP sera compliqué."
+    }
+   ]
+  },
+  {
+   "id": "docu",
+   "icon": "🎬",
+   "title": "Un documentaire",
+   "ch": [
+    {
+     "t": "Accepter : tout filmer",
+     "fx": {
+      "budget": 4,
+      "rep": 6,
+      "moral": -6,
+      "flag": "docu"
+     },
+     "out": "Les caméras sont partout, même à la cantine."
+    },
+    {
+     "t": "Accepter avec des zones interdites",
+     "fx": {
+      "budget": 2,
+      "rep": 3,
+      "flag": "docu"
+     },
+     "out": "Un compromis qui convient à tout le monde."
+    },
+    {
+     "t": "Refuser",
+     "fx": {
+      "moral": 3
+     },
+     "out": "L’équipe garde ses secrets."
+    }
+   ]
+  },
+  {
+   "id": "engine",
+   "icon": "⚙️",
+   "title": "Moteur fatigué",
+   "ch": [
+    {
+     "t": "Moteur neuf : 5 places de pénalité",
+     "fx": {
+      "grid": 5,
+      "perf": {
+       "vtop": 0.006
+      }
+     },
+     "out": "Départ plus loin, mais toute la puissance."
+    },
+    {
+     "t": "Garder le moteur usé",
+     "fx": {
+      "perf": {
+       "vtop": -0.01,
+       "acc": -0.015
+      }
+     },
+     "out": "Il faudra ménager la mécanique au prochain GP."
+    },
+    {
+     "t": "Payer un moteur de rechange hors quota (4 M€)",
+     "fx": {
+      "budget": -4,
+      "conf": -2
+     },
+     "out": "Problème réglé, à prix d’or."
+    }
+   ]
+  },
+  {
+   "id": "prodigy",
+   "icon": "🎓",
+   "title": "Un prodige frappe à la porte",
+   "ch": [
+    {
+     "t": "L’accueillir comme réserviste (1 M€)",
+     "fx": {
+      "budget": -1,
+      "rep": 3,
+      "mate": {
+       "spd": 1
+      },
+      "flag": "prodigy"
+     },
+     "out": "Son énergie pousse ton équipier à se dépasser."
+    },
+    {
+     "t": "Le recommander à une autre écurie",
+     "fx": {
+      "rep": 2
+     },
+     "out": "Le paddock apprécie le geste."
+    },
+    {
+     "t": "Ignorer sa demande",
+     "fx": {},
+     "out": "Il ira voir ailleurs."
+    }
+   ]
+  },
+  {
+   "id": "audit",
+   "icon": "📑",
+   "title": "Audit financier",
+   "ch": [
+    {
+     "t": "Coopérer totalement",
+     "fx": {
+      "conf": 3,
+      "dev": 4
+     },
+     "out": "Tout est en règle, mais les ingénieurs ont passé des jours sur la paperasse."
+    },
+    {
+     "t": "Engager des avocats (2 M€)",
+     "fx": {
+      "budget": -2
+     },
+     "out": "Les avocats gèrent, l’usine continue."
+    },
+    {
+     "t": "Cacher quelques factures",
+     "fx": {
+      "budget": 2
+     },
+     "out": "Personne n’a rien vu.",
+     "risk": {
+      "p": 0.4,
+      "fx": {
+       "budget": -6,
+       "rep": -10,
+       "conf": -10
+      },
+      "out": "Fraude découverte : 6 M€ d’amende et une réputation entachée."
+     }
+    }
+   ]
+  },
+  {
+   "id": "buyout",
+   "icon": "🏦",
+   "title": "Un fonds veut entrer au capital",
+   "ch": [
+    {
+     "t": "Accepter : +15 M€",
+     "fx": {
+      "budget": 15,
+      "conf": -15
+     },
+     "out": "Les caisses sont pleines, la direction fulmine."
+    },
+    {
+     "t": "Refuser poliment",
+     "fx": {
+      "conf": 5
+     },
+     "out": "La direction apprécie ta fidélité."
+    },
+    {
+     "t": "Faire monter les enchères",
+     "fx": {
+      "budget": 22,
+      "conf": -12
+     },
+     "out": "Le fonds cède : 22 M€ !",
+     "risk": {
+      "p": 0.5,
+      "fx": {
+       "rep": -4,
+       "conf": -4
+      },
+      "out": "Le fonds se retire, vexé, et la presse s’en mêle."
+     }
+    }
+   ]
+  },
+  {
+   "id": "crisis",
+   "icon": "📉",
+   "title": "L’écurie à la dérive ?",
+   "ch": [
+    {
+     "t": "Conférence de presse offensive",
+     "fx": {
+      "moral": 5,
+      "rep": -3
+     },
+     "out": "Le ton monte, l’équipe se resserre."
+    },
+    {
+     "t": "Réunion de crise avec la direction",
+     "fx": {
+      "moral": 2,
+      "conf": 5
+     },
+     "out": "La direction apprécie ta lucidité."
+    },
+    {
+     "t": "Remanier l’équipe technique (2 M€)",
+     "fx": {
+      "budget": -2,
+      "dev": -5,
+      "moral": -5
+     },
+     "out": "Sang neuf à l’usine : les recherches accélèrent."
+    }
+   ]
+  },
+  {
+   "id": "party",
+   "icon": "🥂",
+   "title": "Soirée des partenaires",
+   "ch": [
+    {
+     "t": "Grande fête !",
+     "fx": {
+      "moral": 8,
+      "budget": -1.5,
+      "rep": 2,
+      "perf": {
+       "acc": -0.006
+      }
+     },
+     "out": "Mémorable… les lendemains piquent un peu."
+    },
+    {
+     "t": "Petite célébration avec l’équipe",
+     "fx": {
+      "moral": 4
+     },
+     "out": "Un moment simple et chaleureux."
+    },
+    {
+     "t": "On reste concentrés",
+     "fx": {
+      "moral": -2,
+      "perf": {
+       "mu": 0.008
+      }
+     },
+     "out": "Retour au travail dès ce soir."
+    }
+   ]
+  },
+  {
+   "id": "sim",
+   "icon": "🕹️",
+   "title": "Simulateur dernier cri",
+   "ch": [
+    {
+     "t": "L’acheter (5 M€)",
+     "fx": {
+      "budget": -5,
+      "mate": {
+       "spd": 2,
+       "strat": 1
+      }
+     },
+     "out": "Ton équipier y passe ses nuits : il progresse."
+    },
+    {
+     "t": "Le louer pour un GP (1 M€)",
+     "fx": {
+      "budget": -1,
+      "perf": {
+       "mu": 0.008,
+       "brake": 0.01
+      }
+     },
+     "out": "Réglages affinés pour la prochaine course."
+    },
+    {
+     "t": "Non merci",
+     "fx": {},
+     "out": "On garde l’ancien."
+    }
+   ]
+  },
+  {
+   "id": "injury",
+   "icon": "🤕",
+   "title": "Ton équipier blessé",
+   "ch": [
+    {
+     "t": "Il court quand même",
+     "fx": {
+      "mate": {
+       "spd": -2
+      },
+      "moral": 2
+     },
+     "out": "Il serre les dents, mais il a perdu un peu de vitesse."
+    },
+    {
+     "t": "Le meilleur spécialiste (2 M€)",
+     "fx": {
+      "budget": -2,
+      "moral": 3
+     },
+     "out": "Guéri en un temps record."
+    },
+    {
+     "t": "Le recadrer publiquement",
+     "fx": {
+      "moral": -6,
+      "rep": 2,
+      "mate": {
+       "spd": -1
+      }
+     },
+     "out": "Le message est passé… l’ambiance en prend un coup."
+    }
+   ]
+  },
+  {
+   "id": "tyretest",
+   "icon": "🛞",
+   "title": "Pneus prototypes",
+   "ch": [
+    {
+     "t": "Accepter (+3 M€)",
+     "fx": {
+      "budget": 3,
+      "dev": 4
+     },
+     "out": "De l’argent frais, mais les ingénieurs sont mobilisés."
+    },
+    {
+     "t": "Accepter contre des données (+0 M€)",
+     "fx": {
+      "perf": {
+       "mu": 0.01
+      }
+     },
+     "out": "Tu connaîtras mieux les pneus au prochain GP."
+    },
+    {
+     "t": "Refuser",
+     "fx": {},
+     "out": "Pas le moment."
+    }
+   ]
+  },
+  {
+   "id": "taunt",
+   "icon": "🗯️",
+   "title": "Provocation",
+   "ch": [
+    {
+     "t": "Porter réclamation (1 M€)",
+     "fx": {
+      "budget": -1,
+      "rep": 3
+     },
+     "out": "La fédération confirme : ta voiture est conforme."
+    },
+    {
+     "t": "Répondre sur la piste",
+     "fx": {
+      "moral": 4,
+      "perf": {
+       "vtop": 0.006
+      }
+     },
+     "out": "Toute l’équipe est remontée à bloc."
+    },
+    {
+     "t": "Ignorer",
+     "fx": {
+      "moral": -2,
+      "rep": 2
+     },
+     "out": "La polémique s’éteint d’elle-même."
+    }
+   ]
+  },
+  {
+   "id": "software",
+   "icon": "💻",
+   "title": "Partenaire technologique",
+   "ch": [
+    {
+     "t": "Signer (3 M€)",
+     "fx": {
+      "budget": -3,
+      "dev": -6,
+      "conf": 2
+     },
+     "out": "Les recherches avancent bien plus vite."
+    },
+    {
+     "t": "Essai gratuit d’un mois",
+     "fx": {
+      "dev": -2
+     },
+     "out": "Un petit coup de pouce."
+    },
+    {
+     "t": "Refuser",
+     "fx": {},
+     "out": "Les ingénieurs gardent leurs habitudes."
+    }
+   ]
+  },
+  {
+   "id": "leak",
+   "icon": "📰",
+   "title": "Fuite dans la presse",
+   "ch": [
+    {
+     "t": "Trouver le responsable",
+     "fx": {
+      "moral": -4,
+      "rep": 2
+     },
+     "out": "Un stagiaire trop bavard est remercié."
+    },
+    {
+     "t": "Accélérer pour garder l’avance (2 M€)",
+     "fx": {
+      "budget": -2,
+      "dev": -5
+     },
+     "out": "L’usine passe en 3×8."
+    },
+    {
+     "t": "Démentir",
+     "fx": {
+      "rep": -2
+     },
+     "out": "Personne n’y croit vraiment."
+    }
+   ]
+  },
+  {
+   "id": "mainsponsor",
+   "icon": "📉",
+   "title": "Le sponsor principal s’impatiente",
+   "ch": [
+    {
+     "t": "Promettre de meilleurs résultats",
+     "fx": {
+      "conf": -3,
+      "moral": 2
+     },
+     "out": "Il te laisse une chance… la pression monte."
+    },
+    {
+     "t": "Lui offrir plus de visibilité",
+     "fx": {
+      "rep": -3,
+      "budget": 1
+     },
+     "out": "Son logo grandit sur la voiture."
+    },
+    {
+     "t": "Accepter la baisse de soutien",
+     "fx": {
+      "budget": -4
+     },
+     "out": "Moins d’argent, mais l’honneur est sauf."
+    }
+   ]
+  },
+  {
+   "id": "alliance",
+   "icon": "🤝",
+   "title": "Alliance technique",
+   "ch": [
+    {
+     "t": "Louer la soufflerie (+4 M€)",
+     "fx": {
+      "budget": 4,
+      "dev": 4
+     },
+     "out": "De l’argent frais, mais moins de créneaux pour tes pièces."
+    },
+    {
+     "t": "Échanger nos données",
+     "fx": {
+      "dev": -3,
+      "rep": -2
+     },
+     "out": "Échange fructueux, même si certains critiquent."
+    },
+    {
+     "t": "Refuser",
+     "fx": {},
+     "out": "Chacun chez soi."
+    }
+   ]
+  },
+  {
+   "id": "charity",
+   "icon": "💚",
+   "title": "Gala de charité",
+   "ch": [
+    {
+     "t": "Donner l’aileron et participer",
+     "fx": {
+      "rep": 6,
+      "moral": 3,
+      "budget": -0.5
+     },
+     "out": "Un moment fort, salué par tous."
+    },
+    {
+     "t": "Envoyer un représentant",
+     "fx": {
+      "rep": 2
+     },
+     "out": "Un geste apprécié."
+    },
+    {
+     "t": "Décliner",
+     "fx": {
+      "rep": -3
+     },
+     "out": "Certains médias le relèvent."
+    }
+   ]
+  },
+  {
+   "id": "rainset",
+   "icon": "🌧️",
+   "title": "Pari sur la météo",
+   "ch": [
+    {
+     "t": "Réglages pluie",
+     "fx": {
+      "perf": {
+       "mu": 0.012,
+       "vtop": -0.006
+      }
+     },
+     "out": "Plus d’adhérence, un peu moins de vitesse."
+    },
+    {
+     "t": "Réglages vitesse",
+     "fx": {
+      "perf": {
+       "vtop": 0.008,
+       "mu": -0.006
+      }
+     },
+     "out": "Taillée pour les lignes droites."
+    },
+    {
+     "t": "Garder un réglage équilibré",
+     "fx": {},
+     "out": "Pas de pari."
+    }
+   ]
+  },
+  {
+   "id": "cantine",
+   "lite": true,
+   "icon": "🍝",
+   "title": "Révolution à la cantine",
+   "ch": [
+    {
+     "t": "Menu performance pour tous",
+     "fx": {
+      "moral": -2,
+      "perf": {
+       "mu": 0.003
+      }
+     },
+     "out": "Les ingénieurs râlent, les pilotes s’affûtent."
+    },
+    {
+     "t": "Garder les desserts le vendredi",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Compromis sucré, tout le monde est content."
+    },
+    {
+     "t": "Laisser chacun choisir",
+     "fx": {
+      "moral": 1,
+      "budget": -0.2
+     },
+     "out": "Deux menus, un peu plus cher."
+    }
+   ]
+  },
+  {
+   "id": "influ",
+   "lite": true,
+   "icon": "📱",
+   "title": "Un influenceur au garage",
+   "ch": [
+    {
+     "t": "Accès total au garage",
+     "fx": {
+      "rep": 3,
+      "moral": -2,
+      "flag": "influ"
+     },
+     "out": "La vidéo cartonne… et montre un peu trop de choses."
+    },
+    {
+     "t": "Une interview dans le motorhome",
+     "fx": {
+      "rep": 1,
+      "budget": 0.3
+     },
+     "out": "Une vidéo sympa, sans risque."
+    },
+    {
+     "t": "Refuser",
+     "fx": {
+      "moral": 1
+     },
+     "out": "Les mécaniciens travaillent tranquilles."
+    }
+   ]
+  },
+  {
+   "id": "influbad",
+   "lite": true,
+   "icon": "🙈",
+   "title": "La vidéo fait jaser",
+   "ch": [
+    {
+     "t": "Demander de flouter l’image",
+     "fx": {
+      "rep": -1,
+      "dev": 1
+     },
+     "out": "Trop tard pour certains, mais l’essentiel est caché."
+    },
+    {
+     "t": "En rire publiquement",
+     "fx": {
+      "rep": 2,
+      "moral": 1
+     },
+     "out": "« Ce ne sont que des données d’il y a un mois ! » Le paddock sourit."
+    },
+    {
+     "t": "Changer tous les mots de passe",
+     "fx": {
+      "dev": 2,
+      "moral": -1
+     },
+     "out": "Une journée perdue en informatique, mais l’usine est blindée."
+    }
+   ]
+  },
+  {
+   "id": "livery",
+   "lite": true,
+   "icon": "🎨",
+   "title": "Livrée spéciale",
+   "ch": [
+    {
+     "t": "L’adopter (0,4 M€)",
+     "fx": {
+      "budget": -0.4,
+      "rep": 3
+     },
+     "out": "Les fans adorent, les photos font le tour du monde."
+    },
+    {
+     "t": "L’adapter aux couleurs du sponsor",
+     "fx": {
+      "budget": 0.4,
+      "rep": 1
+     },
+     "out": "Tout le monde y trouve son compte."
+    },
+    {
+     "t": "Garder notre livrée",
+     "fx": {
+      "rep": -1,
+      "moral": 1
+     },
+     "out": "Fidèle à l’identité de l’écurie."
+    }
+   ]
+  },
+  {
+   "id": "storm",
+   "lite": true,
+   "icon": "🌪️",
+   "title": "Tempête sur le fret",
+   "ch": [
+    {
+     "t": "Affréter un camion express (0,6 M€)",
+     "fx": {
+      "budget": -0.6
+     },
+     "out": "Les caisses arrivent à temps."
+    },
+    {
+     "t": "Faire avec les pièces sur place",
+     "fx": {
+      "perf": {
+       "kd": -0.004
+      },
+      "moral": -1
+     },
+     "out": "On roulera avec l’ancien aileron."
+    },
+    {
+     "t": "Fabriquer sur place avec les mécaniciens",
+     "fx": {
+      "moral": 2,
+      "dev": 1
+     },
+     "out": "Nuit blanche, mais l’équipe en sort soudée."
+    }
+   ]
+  },
+  {
+   "id": "interns",
+   "lite": true,
+   "icon": "🧑‍🎓",
+   "title": "Stagiaires ingénieurs",
+   "ch": [
+    {
+     "t": "Les accueillir",
+     "fx": {
+      "dev": -2,
+      "moral": -1
+     },
+     "out": "Ils apportent des idées fraîches… et quelques erreurs."
+    },
+    {
+     "t": "En prendre un seul",
+     "fx": {
+      "dev": -1
+     },
+     "out": "Le meilleur des cinq rejoint l’usine."
+    },
+    {
+     "t": "Pas cette année",
+     "fx": {},
+     "out": "L’école ira voir ailleurs."
+    }
+   ]
+  },
+  {
+   "id": "coffee",
+   "lite": true,
+   "icon": "☕",
+   "title": "Panne de machine à café",
+   "ch": [
+    {
+     "t": "Machine haut de gamme (0,1 M€)",
+     "fx": {
+      "budget": -0.1,
+      "moral": 3
+     },
+     "out": "Le meilleur café du paddock !"
+    },
+    {
+     "t": "Une cafetière en attendant",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Le café est tiède, l’ambiance aussi."
+    },
+    {
+     "t": "Une boîte de thé",
+     "fx": {
+      "moral": -2,
+      "perf": {
+       "steer": 0.004
+      }
+     },
+     "out": "Zénitude forcée…"
+    }
+   ]
+  },
+  {
+   "id": "radioleak",
+   "lite": true,
+   "icon": "🎙️",
+   "title": "Message radio diffusé",
+   "ch": [
+    {
+     "t": "L’excuser : la tension de la course",
+     "fx": {
+      "moral": 2,
+      "rep": -1
+     },
+     "out": "L’équipier apprécie ton soutien."
+    },
+    {
+     "t": "Le recadrer en interne",
+     "fx": {
+      "moral": -1,
+      "conf": 1
+     },
+     "out": "Le message est passé, discrètement."
+    },
+    {
+     "t": "En faire un produit dérivé",
+     "fx": {
+      "budget": 0.5,
+      "rep": 1
+     },
+     "out": "Les t-shirts se vendent comme des petits pains."
+    }
+   ]
+  },
+  {
+   "id": "kart",
+   "lite": true,
+   "icon": "🏎️",
+   "title": "Course de karting caritative",
+   "ch": [
+    {
+     "t": "Participer à fond",
+     "fx": {
+      "rep": 2,
+      "moral": 2
+     },
+     "out": "Victoire au karting et sourires partout.",
+     "risk": {
+      "p": 0.15,
+      "fx": {
+       "rep": 1,
+       "moral": -2,
+       "perf": {
+        "steer": -0.004
+       }
+      },
+      "out": "Petite chute : une épaule douloureuse pour le prochain GP."
+     }
+    },
+    {
+     "t": "Faire un don (0,2 M€)",
+     "fx": {
+      "budget": -0.2,
+      "rep": 2
+     },
+     "out": "Un geste apprécié."
+    },
+    {
+     "t": "Décliner",
+     "fx": {
+      "rep": -1
+     },
+     "out": "Repos bien mérité."
+    }
+   ]
+  },
+  {
+   "id": "gym",
+   "lite": true,
+   "icon": "🏋️",
+   "title": "Nouveau préparateur physique",
+   "ch": [
+    {
+     "t": "Programme intensif",
+     "fx": {
+      "moral": -1,
+      "perf": {
+       "steer": 0.006
+      }
+     },
+     "out": "Courbatures, mais des réflexes affûtés."
+    },
+    {
+     "t": "Programme doux",
+     "fx": {
+      "moral": 1,
+      "perf": {
+       "steer": 0.002
+      }
+     },
+     "out": "Progrès tranquilles."
+    },
+    {
+     "t": "Garder l’ancien",
+     "fx": {},
+     "out": "On ne change pas une équipe qui roule."
+    }
+   ]
+  },
+  {
+   "id": "merch",
+   "lite": true,
+   "icon": "🧢",
+   "title": "Ruée sur la boutique",
+   "ch": [
+    {
+     "t": "Commander en urgence (0,2 M€)",
+     "fx": {
+      "budget": 0.4,
+      "rep": 1
+     },
+     "out": "Stock refait : les ventes repartent."
+    },
+    {
+     "t": "Édition limitée numérotée",
+     "fx": {
+      "budget": 0.6,
+      "rep": -1
+     },
+     "out": "Les collectionneurs paient cher, certains fans râlent."
+    },
+    {
+     "t": "Attendre la prochaine production",
+     "fx": {
+      "rep": -1
+     },
+     "out": "Les fans patienteront."
+    }
+   ]
+  },
+  {
+   "id": "heat",
+   "lite": true,
+   "icon": "🌡️",
+   "title": "Canicule annoncée",
+   "ch": [
+    {
+     "t": "Refroidissement renforcé",
+     "fx": {
+      "perf": {
+       "vtop": -0.003,
+       "mu": 0.004
+      }
+     },
+     "out": "Moins de vitesse, mais les pneus et le moteur respirent."
+    },
+    {
+     "t": "Garder le réglage standard",
+     "fx": {},
+     "out": "On verra sur place."
+    },
+    {
+     "t": "Gilets réfrigérants pour l’équipe (0,1 M€)",
+     "fx": {
+      "budget": -0.1,
+      "moral": 2
+     },
+     "out": "L’équipe garde la tête froide."
+    }
+   ]
+  },
+  {
+   "id": "rookieday",
+   "lite": true,
+   "icon": "🔰",
+   "title": "Journée des jeunes pilotes",
+   "ch": [
+    {
+     "t": "Faire rouler un jeune prometteur",
+     "fx": {
+      "rep": 2,
+      "perf": {
+       "mu": -0.002
+      }
+     },
+     "out": "Il impressionne, mais tu perds une séance de réglages."
+    },
+    {
+     "t": "Faire rouler le pilote de réserve",
+     "fx": {
+      "moral": 1
+     },
+     "out": "Séance tranquille."
+    },
+    {
+     "t": "Le jeune d’un sponsor (+0,5 M€)",
+     "fx": {
+      "budget": 0.5,
+      "rep": -1
+     },
+     "out": "Il paie bien… et part en tête-à-queue."
+    }
+   ]
+  },
+  {
+   "id": "paint",
+   "lite": true,
+   "icon": "🖌️",
+   "title": "Peinture plus légère",
+   "ch": [
+    {
+     "t": "L’essayer (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "perf": {
+       "acc": 0.004
+      }
+     },
+     "out": "Quelques grammes de gagnés : chaque millième compte."
+    },
+    {
+     "t": "Peindre seulement les ailerons",
+     "fx": {
+      "budget": -0.1,
+      "perf": {
+       "acc": 0.002
+      }
+     },
+     "out": "Petit gain, petit prix."
+    },
+    {
+     "t": "Non merci",
+     "fx": {},
+     "out": "La livrée reste comme elle est."
+    }
+   ]
+  },
+  {
+   "id": "podcast",
+   "lite": true,
+   "icon": "🎧",
+   "title": "Invitation dans un podcast",
+   "ch": [
+    {
+     "t": "Tout raconter, sans filtre",
+     "fx": {
+      "rep": 3,
+      "conf": -2
+     },
+     "out": "Interview passionnante… la direction a moins aimé certains passages."
+    },
+    {
+     "t": "Langue de bois",
+     "fx": {
+      "conf": 1
+     },
+     "out": "Rien à signaler."
+    },
+    {
+     "t": "Envoyer le chef technique",
+     "fx": {
+      "rep": 1,
+      "dev": 1
+     },
+     "out": "Le chef parle aéro pendant deux heures."
+    }
+   ]
+  },
+  {
+   "id": "scout",
+   "lite": true,
+   "icon": "🔭",
+   "title": "Rapport d’espionnage légal",
+   "ch": [
+    {
+     "t": "Essayer l’idée à l’usine",
+     "fx": {
+      "dev": 2,
+      "perf": {
+       "kd": 0.004
+      }
+     },
+     "out": "L’idée marche à moitié, mais ça valait le coup."
+    },
+    {
+     "t": "Garder l’idée pour plus tard",
+     "fx": {
+      "dev": -1
+     },
+     "out": "Les ingénieurs restent concentrés sur leur plan."
+    },
+    {
+     "t": "Signaler un doute à la fédération",
+     "fx": {
+      "rep": -1,
+      "conf": 1
+     },
+     "out": "La fédération jettera un œil."
+    }
+   ]
+  },
+  {
+   "id": "hotel",
+   "lite": true,
+   "icon": "🏨",
+   "title": "Hôtel surbooké",
+   "ch": [
+    {
+     "t": "Hôtel de luxe en urgence (0,4 M€)",
+     "fx": {
+      "budget": -0.4,
+      "moral": 2
+     },
+     "out": "Piscine et spa pour tout le monde."
+    },
+    {
+     "t": "Camping-cars au paddock",
+     "fx": {
+      "moral": -2,
+      "budget": 0.1
+     },
+     "out": "Ambiance colonie de vacances…"
+    },
+    {
+     "t": "Dormir chez les fans",
+     "fx": {
+      "rep": 2,
+      "moral": -1
+     },
+     "out": "Les fans n’en reviennent pas !"
+    }
+   ]
+  },
+  {
+   "id": "tyrebet",
+   "lite": true,
+   "icon": "🎲",
+   "title": "Allocation de pneus",
+   "ch": [
+    {
+     "t": "Plus de tendres",
+     "fx": {
+      "perf": {
+       "mu": 0.004,
+       "vtop": -0.002
+      }
+     },
+     "out": "De quoi attaquer en qualifications."
+    },
+    {
+     "t": "Plus de durs",
+     "fx": {
+      "perf": {
+       "vtop": 0.003
+      }
+     },
+     "out": "Une course plus sereine."
+    },
+    {
+     "t": "L’allocation standard",
+     "fx": {},
+     "out": "Pas de surprise."
+    }
+   ]
+  },
+  {
+   "id": "mechbday",
+   "lite": true,
+   "icon": "🎂",
+   "title": "Anniversaire au garage",
+   "ch": [
+    {
+     "t": "Fête surprise à l’usine (0,1 M€)",
+     "fx": {
+      "budget": -0.1,
+      "moral": 4,
+      "dev": 1
+     },
+     "out": "Émotion et gâteau géant."
+    },
+    {
+     "t": "Un cadeau de toute l’équipe",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Il a la larme à l’œil."
+    },
+    {
+     "t": "Un simple message",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Il aurait aimé un peu plus."
+    }
+   ]
+  },
+  {
+   "id": "eco",
+   "lite": true,
+   "icon": "🌱",
+   "title": "Bilan carbone",
+   "ch": [
+    {
+     "t": "Panneaux solaires à l’usine (0,8 M€)",
+     "fx": {
+      "budget": -0.8,
+      "rep": 3,
+      "conf": 1
+     },
+     "out": "L’écurie se met au vert."
+    },
+    {
+     "t": "Compenser par des plantations",
+     "fx": {
+      "budget": -0.2,
+      "rep": 1
+     },
+     "out": "Un geste symbolique."
+    },
+    {
+     "t": "Ignorer",
+     "fx": {
+      "rep": -2
+     },
+     "out": "La polémique dure quelques jours."
+    }
+   ]
+  },
+  {
+   "id": "vip",
+   "lite": true,
+   "icon": "🎟️",
+   "title": "Invités de marque",
+   "ch": [
+    {
+     "t": "Visite VIP complète",
+     "fx": {
+      "budget": 0.6,
+      "moral": -1
+     },
+     "out": "Il repart conquis… les mécaniciens un peu moins."
+    },
+    {
+     "t": "Visite après la séance",
+     "fx": {
+      "budget": 0.3
+     },
+     "out": "Tout le monde est content."
+    },
+    {
+     "t": "Refuser poliment",
+     "fx": {
+      "moral": 1,
+      "rep": -1
+     },
+     "out": "Concentration maximale."
+    }
+   ]
+  },
+  {
+   "id": "fuelsup",
+   "lite": true,
+   "icon": "⛽",
+   "title": "Nouveau carburant",
+   "ch": [
+    {
+     "t": "L’utiliser dès le prochain GP",
+     "fx": {
+      "perf": {
+       "vtop": 0.004
+      }
+     },
+     "out": "Quelques chevaux en plus.",
+     "risk": {
+      "p": 0.15,
+      "fx": {
+       "perf": {
+        "vtop": -0.004
+       },
+       "rep": -1
+      },
+      "out": "Le carburant encrasse le moteur : moins de puissance."
+     }
+    },
+    {
+     "t": "Le tester au banc d’abord",
+     "fx": {
+      "dev": 1
+     },
+     "out": "Prudence d’ingénieur."
+    },
+    {
+     "t": "Garder le carburant actuel",
+     "fx": {},
+     "out": "On ne touche à rien."
+    }
+   ]
+  },
+  {
+   "id": "wind",
+   "lite": true,
+   "icon": "🌬️",
+   "title": "Données de soufflerie faussées",
+   "ch": [
+    {
+     "t": "Refaire tous les essais",
+     "fx": {
+      "dev": 3
+     },
+     "out": "Trois jours de retard, mais des données fiables."
+    },
+    {
+     "t": "Corriger par calcul",
+     "fx": {
+      "dev": 1,
+      "perf": {
+       "kd": -0.002
+      }
+     },
+     "out": "Presque juste."
+    },
+    {
+     "t": "Faire venir un expert (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "dev": 1
+     },
+     "out": "Réglé en une journée."
+    }
+   ]
+  },
+  {
+   "id": "fanletter",
+   "lite": true,
+   "icon": "✉️",
+   "title": "Lettre d’un jeune fan",
+   "ch": [
+    {
+     "t": "Amener la voiture à l’hôpital",
+     "fx": {
+      "rep": 3,
+      "moral": 3,
+      "budget": -0.2
+     },
+     "out": "Un moment inoubliable pour tout le monde."
+    },
+    {
+     "t": "L’inviter au prochain GP",
+     "fx": {
+      "rep": 2,
+      "moral": 2
+     },
+     "out": "Il a passé la journée au muret."
+    },
+    {
+     "t": "Envoyer un casque dédicacé",
+     "fx": {
+      "rep": 1
+     },
+     "out": "Il ne le quitte plus."
+    }
+   ]
+  },
+  {
+   "id": "gearbox",
+   "lite": true,
+   "icon": "🔩",
+   "title": "Boîte de vitesses suspecte",
+   "ch": [
+    {
+     "t": "La changer (0,5 M€)",
+     "fx": {
+      "budget": -0.5
+     },
+     "out": "Boîte neuve, esprit tranquille."
+    },
+    {
+     "t": "Ménager les passages de rapports",
+     "fx": {
+      "perf": {
+       "acc": -0.004
+      }
+     },
+     "out": "Un peu moins vif au prochain GP."
+    },
+    {
+     "t": "Croiser les doigts",
+     "fx": {},
+     "out": "Ça devrait tenir…",
+     "risk": {
+      "p": 0.3,
+      "fx": {
+       "perf": {
+        "acc": -0.008
+       },
+       "moral": -2
+      },
+      "out": "Elle accroche les rapports : prochain GP compliqué."
+     }
+    }
+   ]
+  },
+  {
+   "id": "rivalpraise",
+   "lite": true,
+   "icon": "👏",
+   "title": "Compliments d’un rival",
+   "ch": [
+    {
+     "t": "Le remercier chaleureusement",
+     "fx": {
+      "rep": 2
+     },
+     "out": "Le paddock apprécie la classe des deux camps."
+    },
+    {
+     "t": "« Il a raison d’avoir peur »",
+     "fx": {
+      "moral": 2,
+      "rep": -1
+     },
+     "out": "Les mécaniciens adorent la réplique."
+    },
+    {
+     "t": "Se méfier : il prépare quelque chose",
+     "fx": {
+      "conf": 1
+     },
+     "out": "Prudence, prudence…"
+    }
+   ]
+  },
+  {
+   "id": "nightshift",
+   "lite": true,
+   "icon": "🌙",
+   "title": "Équipe de nuit",
+   "ch": [
+    {
+     "t": "Oui (0,5 M€)",
+     "fx": {
+      "budget": -0.5,
+      "dev": -2,
+      "moral": -1
+     },
+     "out": "Les pièces avancent, les yeux se ferment."
+    },
+    {
+     "t": "Seulement deux nuits",
+     "fx": {
+      "budget": -0.2,
+      "dev": -1
+     },
+     "out": "Un petit coup d’accélérateur."
+    },
+    {
+     "t": "Non, on respecte les horaires",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Les ingénieurs dorment bien."
+    }
+   ]
+  },
+  {
+   "id": "photo",
+   "lite": true,
+   "icon": "📸",
+   "title": "Photo virale",
+   "ch": [
+    {
+     "t": "En faire une affiche officielle",
+     "fx": {
+      "budget": 0.3,
+      "rep": 2
+     },
+     "out": "L’affiche se vend partout."
+    },
+    {
+     "t": "Retrouver et créditer le photographe",
+     "fx": {
+      "rep": 3
+     },
+     "out": "Le photographe devient un ami de l’écurie."
+    },
+    {
+     "t": "Ne rien faire",
+     "fx": {},
+     "out": "Le buzz retombe."
+    }
+   ]
+  },
+  {
+   "id": "simrace",
+   "lite": true,
+   "icon": "🎮",
+   "title": "Course virtuelle",
+   "ch": [
+    {
+     "t": "Créer l’équipe officielle (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "rep": 3
+     },
+     "out": "Des milliers de jeunes fans découvrent l’écurie."
+    },
+    {
+     "t": "Prêter seulement le nom (+0,3 M€)",
+     "fx": {
+      "budget": 0.3,
+      "rep": 1
+     },
+     "out": "Facile et rentable."
+    },
+    {
+     "t": "Refuser",
+     "fx": {},
+     "out": "Les jeux vidéo, ce n’est pas pour nous."
+    }
+   ]
+  },
+  {
+   "id": "brakes",
+   "lite": true,
+   "icon": "🛑",
+   "title": "Nouveaux disques de frein",
+   "ch": [
+    {
+     "t": "Les monter au prochain GP",
+     "fx": {
+      "perf": {
+       "brake": 0.006
+      }
+     },
+     "out": "Freinages plus tardifs en vue.",
+     "risk": {
+      "p": 0.2,
+      "fx": {
+       "perf": {
+        "brake": -0.004
+       }
+      },
+      "out": "Ils chauffent trop : il faudra freiner plus tôt."
+     }
+    },
+    {
+     "t": "Les tester en essais libres seulement",
+     "fx": {
+      "perf": {
+       "brake": 0.002
+      }
+     },
+     "out": "Un petit gain sans risque."
+    },
+    {
+     "t": "Garder nos freins",
+     "fx": {},
+     "out": "On reste sur du connu."
+    }
+   ]
+  },
+  {
+   "id": "umbrella",
+   "lite": true,
+   "icon": "☂️",
+   "title": "Parapluies pour les fans",
+   "ch": [
+    {
+     "t": "Accepter (+0,3 M€)",
+     "fx": {
+      "budget": 0.3,
+      "rep": 2
+     },
+     "out": "Une marée de parapluies à tes couleurs."
+    },
+    {
+     "t": "Les payer nous-mêmes (0,2 M€)",
+     "fx": {
+      "budget": -0.2,
+      "rep": 3
+     },
+     "out": "Les fans s’en souviendront."
+    },
+    {
+     "t": "Non",
+     "fx": {},
+     "out": "Ils ont des capuches."
+    }
+   ]
+  },
+  {
+   "id": "docuair",
+   "lite": true,
+   "icon": "📺",
+   "title": "Le documentaire est diffusé",
+   "ch": [
+    {
+     "t": "Assumer : c’est la passion",
+     "fx": {
+      "rep": 3,
+      "moral": -1
+     },
+     "out": "Le public adore cette sincérité."
+    },
+    {
+     "t": "Demander de couper la scène",
+     "fx": {
+      "rep": -1,
+      "moral": 2
+     },
+     "out": "L’équipe apprécie, la plateforme beaucoup moins."
+    },
+    {
+     "t": "Organiser une avant-première",
+     "fx": {
+      "budget": 0.5,
+      "rep": 2
+     },
+     "out": "Tapis rouge et partenaires ravis."
+    }
+   ]
+  },
+  {
+   "id": "prodigywin",
+   "lite": true,
+   "icon": "🏆",
+   "title": "Ton protégé gagne",
+   "ch": [
+    {
+     "t": "Le féliciter publiquement",
+     "fx": {
+      "rep": 3,
+      "moral": 2
+     },
+     "out": "L’académie de l’écurie gagne en prestige."
+    },
+    {
+     "t": "Lui offrir un roulage en essais (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "rep": 2,
+      "mate": {
+       "spd": 1
+      }
+     },
+     "out": "Il pousse ton équipier dans ses retranchements."
+    },
+    {
+     "t": "Garder ça discret",
+     "fx": {
+      "conf": 1
+     },
+     "out": "Pas de pression sur ses épaules."
+    }
+   ]
+  },
+  {
+   "id": "spyprobe",
+   "lite": true,
+   "icon": "🔎",
+   "title": "Questions gênantes",
+   "ch": [
+    {
+     "t": "Nier en bloc",
+     "fx": {
+      "rep": -1
+     },
+     "out": "L’affaire s’essouffle… pour l’instant.",
+     "risk": {
+      "p": 0.25,
+      "fx": {
+       "rep": -4,
+       "conf": -3
+      },
+      "out": "L’article sort : le paddock murmure."
+     }
+    },
+    {
+     "t": "Offrir une exclusivité sur un autre sujet",
+     "fx": {
+      "budget": -0.2,
+      "rep": 1
+     },
+     "out": "Le journaliste change de piste."
+    },
+    {
+     "t": "Retirer discrètement l’aileron",
+     "fx": {
+      "perf": {
+       "kd": -0.004
+      },
+      "rep": 1
+     },
+     "out": "Plus de preuve, un peu moins d’appui."
+    }
+   ]
+  },
+  {
+   "id": "launch",
+   "pre": true,
+   "icon": "🚗",
+   "title": "Présentation de la voiture",
+   "ch": [
+    {
+     "t": "Grand show devant les fans (2 M€)",
+     "fx": {
+      "budget": -2,
+      "rep": 5,
+      "moral": 4
+     },
+     "out": "Jeux de lumière, pilotes sur scène : la livrée fait le tour des réseaux."
+    },
+    {
+     "t": "Annoncer de grandes ambitions",
+     "fx": {
+      "rep": 3,
+      "conf": 6,
+      "moral": 3
+     },
+     "out": "La direction adore ton discours. Il faudra maintenant l’assumer en piste.",
+     "risk": {
+      "p": 0.3,
+      "fx": {
+       "rep": -3,
+       "conf": -3
+      },
+      "out": "Les journalistes se moquent : « Encore une écurie qui promet la lune… »"
+     }
+    },
+    {
+     "t": "Une simple vidéo en ligne : l’argent va à l’usine",
+     "fx": {
+      "budget": 1.5,
+      "dev": -4,
+      "rep": -2
+     },
+     "out": "Présentation discrète : les 1,5 M€ économisés font gagner quatre jours aux recherches."
+    }
+   ]
+  },
+  {
+   "id": "tests",
+   "pre": true,
+   "icon": "🧪",
+   "title": "Essais hivernaux",
+   "ch": [
+    {
+     "t": "Simulations de course : pneus et réglages",
+     "fx": {
+      "perf": {
+       "mu": 0.006
+      },
+      "moral": 2
+     },
+     "out": "Des relais longs sans souci : la voiture sera bien réglée pour le premier GP."
+    },
+    {
+     "t": "Tours rapides à vide pour impressionner",
+     "fx": {
+      "rep": 4,
+      "moral": 3
+     },
+     "out": "Meilleur temps de la matinée : la presse s’emballe !",
+     "risk": {
+      "p": 0.3,
+      "fx": {
+       "budget": -1.5,
+       "dev": 6,
+       "moral": -3
+      },
+      "out": "Tête-à-queue dans le mur : 1,5 M€ de réparations et six jours de retard à l’usine."
+     }
+    },
+    {}
+   ]
+  }
+ ],
+ "EXPECT": {
+  "new": 14,
+  "mid": 9,
+  "top": 4
+ }
+}

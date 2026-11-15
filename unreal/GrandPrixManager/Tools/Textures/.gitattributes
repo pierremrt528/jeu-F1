@@ -1,0 +1,2 @@
+# Photos du jeu : petits fichiers, gardés dans Git sans LFS
+*.jpg -filter -diff -merge binary

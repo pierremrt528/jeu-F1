@@ -1,0 +1,2566 @@
+{
+ "EXTRA": [
+  {
+   "id": "sticker",
+   "icon": "🏷️",
+   "lite": true,
+   "title": "Autocollant oublié",
+   "ch": [
+    {
+     "t": "S’excuser et offrir une visite VIP",
+     "fx": {
+      "budget": -0.1,
+      "rep": 1
+     },
+     "out": "Le sponsor est ravi."
+    },
+    {
+     "t": "Doubler la taille du logo au prochain GP",
+     "fx": {
+      "rep": -1
+     },
+     "out": "Le logo est énorme… et un peu ridicule."
+    },
+    {
+     "t": "Faire comme si de rien n’était",
+     "fx": {
+      "budget": -0.3
+     },
+     "out": "Le sponsor réduit son chèque."
+    }
+   ]
+  },
+  {
+   "id": "lost",
+   "icon": "🧳",
+   "lite": true,
+   "title": "Bagages perdus",
+   "ch": [
+    {
+     "t": "En faire fabriquer en urgence (0,2 M€)",
+     "fx": {
+      "budget": -0.2
+     },
+     "out": "Prêtes juste à temps."
+    },
+    {
+     "t": "Emprunter celles de l’an dernier",
+     "fx": {
+      "rep": -1,
+      "moral": 1
+     },
+     "out": "Les fans repèrent l’ancien design."
+    },
+    {
+     "t": "Rouler avec les combinaisons d’essai",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Pas très élégant."
+    }
+   ]
+  },
+  {
+   "id": "rivalboss",
+   "icon": "☕",
+   "title": "Café avec un rival",
+   "ch": [
+    {
+     "t": "Accepter et l’écouter",
+     "fx": {
+      "rep": 1
+     },
+     "out": "Il propose une alliance pour faire baisser les coûts."
+    },
+    {
+     "t": "Lui soutirer des infos",
+     "fx": {
+      "perf": {
+       "vtop": 0.002
+      },
+      "rep": -1
+     },
+     "out": "Quelques confidences utiles…"
+    },
+    {
+     "t": "Décliner",
+     "fx": {},
+     "out": "Pas de fraternisation."
+    }
+   ]
+  },
+  {
+   "id": "drone",
+   "icon": "🛸",
+   "lite": true,
+   "title": "Drone au-dessus du garage",
+   "ch": [
+    {
+     "t": "Bâcher la voiture",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Plus rien à voir."
+    },
+    {
+     "t": "Montrer de fausses pièces",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Les espions vont s’arracher les cheveux."
+    },
+    {
+     "t": "Prévenir la sécurité",
+     "fx": {
+      "conf": 1
+     },
+     "out": "Le drone disparaît."
+    }
+   ]
+  },
+  {
+   "id": "sleep",
+   "icon": "😴",
+   "lite": true,
+   "title": "Décalage horaire",
+   "ch": [
+    {
+     "t": "Repos imposé le premier jour",
+     "fx": {
+      "moral": 2,
+      "perf": {
+       "mu": -0.002
+      }
+     },
+     "out": "Frais, mais moins de préparation."
+    },
+    {
+     "t": "Café et travail",
+     "fx": {
+      "moral": -2,
+      "perf": {
+       "mu": 0.002
+      }
+     },
+     "out": "Les yeux piquent, la voiture est prête."
+    },
+    {
+     "t": "Faire venir un spécialiste du sommeil (0,1 M€)",
+     "fx": {
+      "budget": -0.1,
+      "moral": 1
+     },
+     "out": "Une astuce de luminothérapie qui marche."
+    }
+   ]
+  },
+  {
+   "id": "helmet",
+   "icon": "⛑️",
+   "lite": true,
+   "title": "Casque spécial",
+   "ch": [
+    {
+     "t": "Accepter, et le vendre aux enchères ensuite",
+     "fx": {
+      "budget": 0.3,
+      "rep": 2
+     },
+     "out": "Une œuvre d’art à 300 km/h."
+    },
+    {
+     "t": "Le garder en souvenir",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Il trônera dans ton salon."
+    },
+    {
+     "t": "Garder mon casque habituel",
+     "fx": {},
+     "out": "Superstitieux ?"
+    }
+   ]
+  },
+  {
+   "id": "kids",
+   "icon": "🧒",
+   "lite": true,
+   "title": "Classe en visite",
+   "ch": [
+    {
+     "t": "Grande visite guidée",
+     "fx": {
+      "rep": 2,
+      "dev": 1
+     },
+     "out": "Trente futurs ingénieurs repartent ravis."
+    },
+    {
+     "t": "Une vidéo pour la classe",
+     "fx": {
+      "rep": 1
+     },
+     "out": "Les enfants adorent."
+    },
+    {
+     "t": "Pas le temps",
+     "fx": {
+      "rep": -1
+     },
+     "out": "Dommage."
+    }
+   ]
+  },
+  {
+   "id": "cooling",
+   "icon": "❄️",
+   "lite": true,
+   "title": "Surchauffe des freins",
+   "ch": [
+    {
+     "t": "Ouvrir les écopes",
+     "fx": {
+      "perf": {
+       "brake": 0.004,
+       "vtop": -0.002
+      }
+     },
+     "out": "Freins frais, un peu de traînée."
+    },
+    {
+     "t": "Garder la configuration",
+     "fx": {},
+     "out": "On reste sur le réglage connu."
+    },
+    {
+     "t": "Fermer pour la vitesse",
+     "fx": {
+      "perf": {
+       "vtop": 0.003,
+       "brake": -0.003
+      }
+     },
+     "out": "Attention aux longs freinages."
+    }
+   ]
+  },
+  {
+   "id": "translator",
+   "icon": "🌍",
+   "lite": true,
+   "title": "Problème de traduction",
+   "ch": [
+    {
+     "t": "Démentir avec humour",
+     "fx": {
+      "rep": 2
+     },
+     "out": "La « brouette » devient un mème sympathique."
+    },
+    {
+     "t": "Exiger un correctif officiel",
+     "fx": {
+      "rep": 1,
+      "moral": -1
+     },
+     "out": "Le journal publie un rectificatif."
+    },
+    {
+     "t": "Ignorer",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Les ingénieurs sont vexés."
+    }
+   ]
+  },
+  {
+   "id": "pitcrew",
+   "icon": "🏃",
+   "title": "Concours d’arrêt au stand",
+   "ch": [
+    {
+     "t": "Participer à fond",
+     "fx": {
+      "moral": 3,
+      "rep": 2
+     },
+     "out": "Deuxième place, à un centième de la victoire !",
+     "risk": {
+      "p": 0.3,
+      "fx": {
+       "moral": -2,
+       "rep": 1
+      },
+      "out": "Une roue mal serrée en direct… fous rires garantis."
+     }
+    },
+    {
+     "t": "Envoyer l’équipe B",
+     "fx": {
+      "moral": 1
+     },
+     "out": "Elle s’amuse sans pression."
+    },
+    {
+     "t": "Décliner",
+     "fx": {
+      "rep": -1
+     },
+     "out": "Les mécaniciens auraient bien aimé."
+    }
+   ]
+  },
+  {
+   "id": "prototype",
+   "icon": "🔋",
+   "title": "Batterie expérimentale",
+   "ch": [
+    {
+     "t": "La monter",
+     "fx": {
+      "perf": {
+       "acc": 0.005
+      }
+     },
+     "out": "Une meilleure relance en sortie de virage.",
+     "risk": {
+      "p": 0.2,
+      "fx": {
+       "perf": {
+        "acc": -0.004
+       }
+      },
+      "out": "Elle surchauffe : le moteur bride la puissance."
+     }
+    },
+    {
+     "t": "Attendre la version finale",
+     "fx": {},
+     "out": "Prudence."
+    },
+    {
+     "t": "Participer au développement (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "dev": -1
+     },
+     "out": "Tes ingénieurs apprennent beaucoup."
+    }
+   ]
+  },
+  {
+   "id": "mascot",
+   "icon": "🐕",
+   "lite": true,
+   "title": "Une mascotte",
+   "ch": [
+    {
+     "t": "L’adopter comme mascotte",
+     "fx": {
+      "moral": 3,
+      "rep": 2
+     },
+     "out": "Il a son propre badge du paddock."
+    },
+    {
+     "t": "Lui trouver une famille",
+     "fx": {
+      "rep": 1
+     },
+     "out": "Un mécanicien l’adopte."
+    },
+    {
+     "t": "Appeler la fourrière",
+     "fx": {
+      "moral": -2,
+      "rep": -1
+     },
+     "out": "Personne n’est fier."
+    }
+   ]
+  },
+  {
+   "id": "payrise",
+   "icon": "💶",
+   "title": "Revendication des ingénieurs",
+   "ch": [
+    {
+     "t": "Augmenter les salaires (1 M€)",
+     "fx": {
+      "budget": -1,
+      "moral": 3,
+      "dev": -1
+     },
+     "out": "Ils restent et travaillent avec entrain."
+    },
+    {
+     "t": "Primes aux résultats",
+     "fx": {
+      "moral": 1
+     },
+     "out": "Un compromis motivant."
+    },
+    {
+     "t": "Refuser",
+     "fx": {
+      "moral": -3
+     },
+     "out": "Deux ingénieurs envoient leur CV ailleurs.",
+     "risk": {
+      "p": 0.3,
+      "fx": {
+       "moral": -2,
+       "dev": 2
+      },
+      "out": "Un ingénieur clé part chez un rival."
+     }
+    }
+   ]
+  },
+  {
+   "id": "track",
+   "icon": "🗺️",
+   "lite": true,
+   "title": "Reconnaissance à vélo",
+   "ch": [
+    {
+     "t": "Y aller avec les ingénieurs",
+     "fx": {
+      "perf": {
+       "brake": 0.003
+      },
+      "moral": 1
+     },
+     "out": "Une bosse au freinage du virage 3 est notée."
+    },
+    {
+     "t": "Y aller en trottinette",
+     "fx": {
+      "moral": 2
+     },
+     "out": "Fous rires et peu de données."
+    },
+    {
+     "t": "Rester au motorhome",
+     "fx": {},
+     "out": "Les données suffiront."
+    }
+   ]
+  },
+  {
+   "id": "loan",
+   "icon": "🏦",
+   "title": "Proposition de la banque",
+   "ch": [
+    {
+     "t": "Emprunter 3 M€ (remboursés 0,5 M€ par GP)",
+     "fx": {
+      "budget": 3,
+      "deal": {
+       "name": "Remboursement du prêt",
+       "gp": -0.55,
+       "n": 6
+      }
+     },
+     "out": "De l’argent tout de suite, à rembourser ensuite."
+    },
+    {
+     "t": "Emprunter 1 M€",
+     "fx": {
+      "budget": 1,
+      "deal": {
+       "name": "Remboursement du prêt",
+       "gp": -0.2,
+       "n": 6
+      }
+     },
+     "out": "Un petit coup de pouce."
+    },
+    {
+     "t": "Refuser",
+     "fx": {
+      "conf": 1
+     },
+     "out": "Pas de dettes."
+    }
+   ]
+  },
+  {
+   "id": "fanzone",
+   "icon": "🎪",
+   "lite": true,
+   "title": "Fan zone",
+   "ch": [
+    {
+     "t": "Grand stand avec simulateur (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "rep": 3
+     },
+     "out": "La file d’attente fait le tour du stand."
+    },
+    {
+     "t": "Un petit stand de produits dérivés",
+     "fx": {
+      "budget": 0.2
+     },
+     "out": "Les ventes sont correctes."
+    },
+    {
+     "t": "Pas de stand",
+     "fx": {},
+     "out": "Les fans iront voir les autres."
+    }
+   ]
+  },
+  {
+   "id": "aero",
+   "icon": "✈️",
+   "title": "Ingénieur venu de l’aviation",
+   "ch": [
+    {
+     "t": "L’embaucher (0,5 M€)",
+     "fx": {
+      "budget": -0.5,
+      "dev": -2
+     },
+     "out": "Ses calculs accélèrent la soufflerie."
+    },
+    {
+     "t": "Une mission de conseil (0,2 M€)",
+     "fx": {
+      "budget": -0.2,
+      "dev": -1
+     },
+     "out": "Un coup de pouce ponctuel."
+    },
+    {
+     "t": "Non",
+     "fx": {},
+     "out": "Les avions, c’est autre chose."
+    }
+   ]
+  },
+  {
+   "id": "weather",
+   "icon": "🌦️",
+   "lite": true,
+   "title": "Météorologue",
+   "ch": [
+    {
+     "t": "L’engager pour la saison (0,2 M€)",
+     "fx": {
+      "budget": -0.2,
+      "perf": {
+       "mu": 0.002
+      }
+     },
+     "out": "Le muret anticipe mieux les averses."
+    },
+    {
+     "t": "Juste pour le prochain GP (0,05 M€)",
+     "fx": {
+      "budget": -0.1
+     },
+     "out": "Prévisions en poche."
+    },
+    {
+     "t": "Nos applis suffisent",
+     "fx": {},
+     "out": "Espérons qu’il ne pleuve pas."
+    }
+   ]
+  },
+  {
+   "id": "chairs",
+   "icon": "🪑",
+   "lite": true,
+   "title": "Nouveau baquet",
+   "ch": [
+    {
+     "t": "L’essayer (0,1 M€)",
+     "fx": {
+      "budget": -0.1,
+      "perf": {
+       "steer": 0.004
+      }
+     },
+     "out": "Tu sens mieux la voiture."
+    },
+    {
+     "t": "Garder l’ancien",
+     "fx": {},
+     "out": "On ne change rien."
+    },
+    {
+     "t": "Pour l’équipier seulement",
+     "fx": {
+      "mate": {
+       "tyre": 1
+      }
+     },
+     "out": "Il ménage mieux ses pneus."
+    }
+   ]
+  },
+  {
+   "id": "rumor",
+   "icon": "🗞️",
+   "lite": true,
+   "title": "Rumeur de départ",
+   "ch": [
+    {
+     "t": "Démentir",
+     "fx": {
+      "moral": 1
+     },
+     "out": "La rumeur s’éteint."
+    },
+    {
+     "t": "Laisser planer le doute",
+     "fx": {
+      "mate": {
+       "spd": 1
+      },
+      "moral": -1
+     },
+     "out": "Il pousse pour se montrer."
+    },
+    {
+     "t": "Ne rien dire",
+     "fx": {},
+     "out": "Les journalistes en parlent encore."
+    }
+   ]
+  },
+  {
+   "id": "pitwall",
+   "icon": "🖥️",
+   "lite": true,
+   "title": "Écrans du muret",
+   "ch": [
+    {
+     "t": "Tout remplacer (0,3 M€)",
+     "fx": {
+      "budget": -0.3,
+      "conf": 1
+     },
+     "out": "Le muret est flambant neuf."
+    },
+    {
+     "t": "Réparer avec les moyens du bord",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Ça tient avec du scotch."
+    },
+    {
+     "t": "Demander au sponsor technologique",
+     "fx": {
+      "rep": -1,
+      "budget": 0.1
+     },
+     "out": "Il fournit… en échange de pub."
+    }
+   ]
+  },
+  {
+   "id": "veteran",
+   "icon": "👴",
+   "title": "Le doyen des mécaniciens",
+   "ch": [
+    {
+     "t": "Lui organiser une soirée d’adieu",
+     "fx": {
+      "moral": 3,
+      "budget": -0.1
+     },
+     "out": "Émotion garantie."
+    },
+    {
+     "t": "Lui proposer de former les jeunes",
+     "fx": {
+      "dev": -1,
+      "moral": 1
+     },
+     "out": "Il transmet son savoir."
+    },
+    {
+     "t": "Le remercier simplement",
+     "fx": {
+      "moral": -1
+     },
+     "out": "Il aurait aimé un peu plus."
+    }
+   ]
+  },
+  {
+   "id": "trackday",
+   "icon": "🎟️",
+   "title": "Journée clients",
+   "ch": [
+    {
+     "t": "Organiser la journée (+0,8 M€)",
+     "fx": {
+      "budget": 0.8,
+      "dev": 1
+     },
+     "out": "Les clients repartent comblés, les mécaniciens épuisés."
+    },
+    {
+     "t": "Une version courte (+0,3 M€)",
+     "fx": {
+      "budget": 0.3
+     },
+     "out": "Une matinée bien rentable."
+    },
+    {
+     "t": "Refuser",
+     "fx": {},
+     "out": "Les vieilles voitures restent au musée."
+    }
+   ]
+  },
+  {
+   "id": "clash",
+   "icon": "🤬",
+   "lite": true,
+   "title": "Altercation en piste",
+   "ch": [
+    {
+     "t": "Aller s’excuser",
+     "fx": {
+      "rep": 2
+     },
+     "out": "Il accepte tes excuses."
+    },
+    {
+     "t": "Répondre sèchement",
+     "fx": {
+      "rep": -1,
+      "moral": 1
+     },
+     "out": "La tension monte."
+    },
+    {
+     "t": "Laisser les commissaires juger",
+     "fx": {},
+     "out": "Pas de sanction."
+    }
+   ]
+  },
+  {
+   "id": "gloves",
+   "icon": "🧤",
+   "lite": true,
+   "title": "Gants connectés",
+   "ch": [
+    {
+     "t": "Les tester (+0,2 M€)",
+     "fx": {
+      "budget": 0.2,
+      "rep": 1
+     },
+     "out": "Les téléspectateurs voient ton cœur battre en direct."
+    },
+    {
+     "t": "Seulement en essais",
+     "fx": {
+      "perf": {
+       "steer": 0.002
+      }
+     },
+     "out": "Des données sur ta concentration."
+    },
+    {
+     "t": "Non merci",
+     "fx": {},
+     "out": "On garde les gants habituels."
+    }
+   ]
+  },
+  {
+   "id": "strikeair",
+   "icon": "🛫",
+   "title": "Grève des contrôleurs aériens",
+   "ch": [
+    {
+     "t": "Avion privé (0,8 M€)",
+     "fx": {
+      "budget": -0.8
+     },
+     "out": "Arrivée à l’heure."
+    },
+    {
+     "t": "Convoi de camions toute la nuit",
+     "fx": {
+      "moral": -2,
+      "perf": {
+       "mu": -0.002
+      }
+     },
+     "out": "Arrivée épuisée, mais à temps."
+    },
+    {
+     "t": "Train de nuit avec toute l’équipe",
+     "fx": {
+      "moral": 2,
+      "budget": -0.2
+     },
+     "out": "Un voyage mémorable et soudé."
+    }
+   ]
+  }
+ ],
+ "STORIES": [
+  {
+   "id": "reserve",
+   "title": "Le réserviste",
+   "icon": "🧑‍🚀",
+   "steps": {
+    "a": {
+     "icon": "🤒",
+     "title": "Équipier malade",
+     "ch": [
+      {
+       "fx": {
+        "rep": 1
+       },
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "fx": {
+        "budget": -0.5,
+        "conf": 1
+       },
+       "out": "Un choix prudent : il ramènera la voiture entière."
+      },
+      {
+       "fx": {
+        "mate": {
+         "spd": -1
+        },
+        "moral": -1
+       },
+       "out": "Il serre les dents, mais il n’est pas à 100 %."
+      }
+     ]
+    },
+    "b": {
+     "icon": "⏱️",
+     "title": "Une séance incroyable",
+     "ch": [
+      {
+       "t": "Le refaire rouler en essais dans deux GP",
+       "fx": {
+        "perf": {
+         "mu": -0.002
+        },
+        "rep": 2
+       },
+       "out": "Rendez-vous est pris : on veut confirmer.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Le recruter tout de suite comme 3e pilote (0,3 M€ par GP)",
+       "fx": {
+        "deal": {
+         "name": "Contrat 3e pilote",
+         "gp": -0.3,
+         "n": 8
+        },
+        "moral": 1
+       },
+       "out": "Il signe un contrat de troisième pilote, il suivra l’équipe partout.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Le remercier : ce n’était qu’un dépannage",
+       "fx": {
+        "moral": 1
+       }
+      }
+     ]
+    },
+    "c": {
+     "icon": "🔁",
+     "title": "Deuxième chance",
+     "ch": [
+      {
+       "t": "Lui offrir un contrat de 3e pilote (0,3 M€ par GP)",
+       "fx": {
+        "deal": {
+         "name": "Contrat 3e pilote",
+         "gp": -0.3,
+         "n": 8
+        },
+        "rep": 1
+       },
+       "out": "Il fait désormais partie de l’écurie.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "fx": {
+        "moral": 2
+       },
+       "out": "L’équipier reste le titulaire, le jeune patiente.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Le prêter à une petite écurie (+0,8 M€)",
+       "fx": {
+        "budget": 0.8
+       },
+       "out": "Il part se faire les dents ailleurs."
+      }
+     ]
+    },
+    "d": {
+     "icon": "📈",
+     "title": "Le 3e pilote progresse",
+     "ch": [
+      {
+       "t": "Lui confier le développement au simulateur",
+       "fx": {
+        "perf": {
+         "kd": 0.004
+        },
+        "dev": -1
+       },
+       "out": "Ses retours accélèrent l’usine.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Le laisser courir en Formule B le week-end",
+       "fx": {
+        "rep": 2
+       },
+       "out": "Il gagne en Formule B et fait parler de l’écurie.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "fx": {
+        "budget": 1
+       },
+       "out": "Une indemnité correcte… pour un futur rival."
+      }
+     ]
+    },
+    "e": {
+     "icon": "✍️",
+     "title": "L’heure du choix",
+     "ch": [
+      {
+       "fx": {
+        "sign": {
+         "drv": "drv",
+         "sal": 1.5,
+         "years": 2,
+         "role": "eq"
+        },
+        "rep": 2,
+        "moral": -1
+       }
+      },
+      {
+       "t": "Le garder comme réserviste de luxe (1 M€)",
+       "fx": {
+        "budget": -1,
+        "mate": {
+         "spd": 1
+        }
+       }
+      },
+      {
+       "fx": {
+        "moral": 3,
+        "rep": -1
+       },
+       "out": "L’équipier apprécie ta fidélité."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "mystery",
+   "title": "Le sponsor mystère",
+   "icon": "🕶️",
+   "steps": {
+    "a": {
+     "icon": "💼",
+     "title": "Une offre trop belle",
+     "ch": [
+      {
+       "t": "Accepter sans poser de questions",
+       "fx": {
+        "deal": {
+         "name": "Sponsor mystère",
+         "gp": 1,
+         "n": 4
+        }
+       },
+       "out": "L’argent arrive dès le lendemain.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Enquêter avant de signer (0,2 M€)",
+       "fx": {
+        "budget": -0.2
+       },
+       "out": "Un détective privé se met au travail.",
+       "next": "c",
+       "gap": 1
+      },
+      {
+       "t": "Refuser",
+       "fx": {
+        "conf": 1
+       },
+       "out": "Mieux vaut éviter les ennuis."
+      }
+     ]
+    },
+    "b": {
+     "icon": "📸",
+     "title": "Photos compromettantes",
+     "ch": [
+      {
+       "t": "Retirer le logo immédiatement",
+       "fx": {
+        "rep": 1,
+        "budget": -1
+       },
+       "out": "Tu rends une partie de l’argent, l’image est sauve.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Défendre le partenaire",
+       "fx": {
+        "rep": -3
+       },
+       "out": "La polémique enfle.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Ne rien dire",
+       "fx": {
+        "rep": -1
+       },
+       "out": "Le silence est interprété comme un aveu.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "c": {
+     "icon": "🔍",
+     "title": "Le rapport du détective",
+     "ch": [
+      {
+       "t": "Le rencontrer",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Rendez-vous discret dans un hôtel de luxe.",
+       "next": "d",
+       "gap": 1
+      },
+      {
+       "t": "Prévenir la direction",
+       "fx": {
+        "conf": 3
+       },
+       "out": "La direction te remercie de ta loyauté."
+      },
+      {
+       "t": "Vendre l’info à la presse (+0,5 M€)",
+       "fx": {
+        "budget": 0.5,
+        "rep": -2
+       },
+       "out": "Scoop à la une, mais le paddock n’aime pas les mouchards."
+      }
+     ]
+    },
+    "d": {
+     "icon": "🤝",
+     "title": "Le vrai visage",
+     "ch": [
+      {
+       "t": "Accepter : gros contrat, moins de pouvoir",
+       "fx": {
+        "deal": {
+         "gp": 1.2,
+         "n": 6
+        },
+        "conf": -4
+       },
+       "out": "Les caisses se remplissent, la direction grince.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Contrat simple, sans siège",
+       "fx": {
+        "deal": {
+         "name": "Partenaire discret",
+         "gp": 0.5,
+         "n": 6
+        }
+       },
+       "out": "Un compromis raisonnable."
+      },
+      {
+       "t": "Rompre tout lien",
+       "fx": {
+        "rep": 2,
+        "conf": 2
+       },
+       "out": "Page tournée."
+      }
+     ]
+    },
+    "e": {
+     "icon": "⚖️",
+     "title": "Le dénouement",
+     "ch": [
+      {
+       "t": "Prolonger le partenariat",
+       "fx": {
+        "deal": {
+         "name": "Partenaire fidèle",
+         "gp": 0.8,
+         "n": 6
+        },
+        "rep": 2
+       },
+       "out": "Une belle histoire qui finit bien."
+      },
+      {
+       "t": "Refuser le rachat, garder l’indépendance",
+       "fx": {
+        "conf": 4,
+        "moral": 2
+       },
+       "out": "L’écurie reste maîtresse de son destin."
+      },
+      {
+       "t": "Demander une prime de fidélité (+2 M€)",
+       "fx": {
+        "budget": 2,
+        "rep": -1
+       },
+       "out": "Il paie, un peu agacé."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "mole",
+   "title": "La taupe",
+   "icon": "🐀",
+   "steps": {
+    "a": {
+     "icon": "📂",
+     "title": "Des données envolées",
+     "ch": [
+      {
+       "t": "Lancer une enquête interne",
+       "fx": {
+        "moral": -2
+       },
+       "out": "L’ambiance devient pesante à l’usine.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Changer tous les accès informatiques",
+       "fx": {
+        "dev": 2
+       },
+       "out": "Deux jours perdus, mais les fuites cessent… pour l’instant.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Ignorer : on va plus vite qu’eux",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Tu préfères regarder devant."
+      }
+     ]
+    },
+    "b": {
+     "icon": "🕵️",
+     "title": "Un suspect",
+     "ch": [
+      {
+       "t": "Lui tendre un piège avec de fausses données",
+       "fx": {},
+       "out": "De faux plans circulent dans l’usine.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Le confronter directement",
+       "fx": {
+        "moral": -1
+       },
+       "out": "Il nie tout, les larmes aux yeux.",
+       "next": "d",
+       "gap": 1
+      },
+      {
+       "t": "Le muter loin des projets sensibles",
+       "fx": {
+        "dev": 1
+       },
+       "out": "Plus de risque, un ingénieur de moins sur les pièces."
+      }
+     ]
+    },
+    "c": {
+     "icon": "🪤",
+     "title": "Le piège fonctionne",
+     "ch": [
+      {
+       "t": "Le renvoyer et porter plainte",
+       "fx": {
+        "rep": 3,
+        "conf": 2
+       },
+       "out": "Justice est faite, le paddock salue ta fermeté.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "En faire un agent double",
+       "fx": {
+        "perf": {
+         "kd": 0.004
+        }
+       },
+       "out": "Il renseigne désormais sur les plans du rival…",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Rire de l’aileron rival en public",
+       "fx": {
+        "rep": 2,
+        "moral": 2
+       },
+       "out": "Les réseaux s’amusent, le rival fulmine."
+      }
+     ]
+    },
+    "d": {
+     "icon": "💔",
+     "title": "Innocent ?",
+     "ch": [
+      {
+       "t": "Présenter des excuses publiques",
+       "fx": {
+        "moral": 3,
+        "rep": 1
+       },
+       "out": "L’équipe apprécie l’honnêteté.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Lui offrir une promotion",
+       "fx": {
+        "moral": 2,
+        "dev": -1,
+        "budget": -0.3
+       },
+       "out": "Il devient l’un de tes plus fidèles ingénieurs.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Passer à autre chose",
+       "fx": {
+        "moral": -2
+       },
+       "out": "Le malaise reste."
+      }
+     ]
+    },
+    "e": {
+     "icon": "⚖️",
+     "title": "Affaire classée",
+     "ch": [
+      {
+       "t": "Accepter la compensation (+1,5 M€)",
+       "fx": {
+        "budget": 1.5
+       },
+       "out": "Dossier clos, chèque encaissé."
+      },
+      {
+       "t": "Demander des heures de soufflerie en plus",
+       "fx": {
+        "dev": -3
+       },
+       "out": "Trois jours d’avance pour l’usine."
+      },
+      {
+       "t": "Renoncer avec élégance",
+       "fx": {
+        "rep": 4
+       },
+       "out": "Ton fair-play marque les esprits."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "genius",
+   "title": "Le génie incompris",
+   "icon": "💡",
+   "steps": {
+    "a": {
+     "icon": "📐",
+     "title": "Une idée folle",
+     "ch": [
+      {
+       "t": "Lui donner une semaine en soufflerie",
+       "fx": {
+        "dev": 1
+       },
+       "out": "Il travaille jour et nuit.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Lui demander de convaincre le chef aéro",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Le chef accepte d’y jeter un œil.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Classer le projet",
+       "fx": {},
+       "out": "Le plan finit dans un tiroir."
+      }
+     ]
+    },
+    "b": {
+     "icon": "🌬️",
+     "title": "Les chiffres parlent",
+     "ch": [
+      {
+       "t": "Construire un prototype (0,6 M€)",
+       "fx": {
+        "budget": -0.6
+       },
+       "out": "Le prototype sera prêt dans deux courses.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Corriger les vibrations d’abord",
+       "fx": {
+        "dev": 2
+       },
+       "out": "Plus long, mais plus sûr.",
+       "next": "c",
+       "gap": 3
+      },
+      {
+       "t": "Trop risqué, on arrête",
+       "fx": {
+        "moral": -2
+       }
+      }
+     ]
+    },
+    "c": {
+     "icon": "🧪",
+     "title": "Premier roulage",
+     "ch": [
+      {
+       "t": "Le monter pour le prochain GP",
+       "fx": {
+        "perf": {
+         "kd": 0.008
+        }
+       },
+       "out": "La voiture colle à la piste !",
+       "risk": {
+        "p": 0.3,
+        "fx": {
+         "perf": {
+          "kd": -0.004
+         },
+         "budget": -0.4
+        },
+        "out": "L’aileron casse en essais : réparation et prochain GP compliqué."
+       },
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Le tester en essais libres seulement",
+       "fx": {
+        "perf": {
+         "kd": 0.003
+        }
+       },
+       "out": "Des données précieuses, sans risque.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Le garder pour la saison prochaine",
+       "fx": {
+        "conf": 1
+       },
+       "out": "L’idée mûrira."
+      }
+     ]
+    },
+    "d": {
+     "icon": "📞",
+     "title": "Le génie convoité",
+     "ch": [
+      {
+       "t": "Le promouvoir chef de projet (0,5 M€)",
+       "fx": {
+        "budget": -0.5,
+        "dev": -2,
+        "moral": 1
+       },
+       "out": "Il reste et prend du galon.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Lui promettre un projet à son nom",
+       "fx": {
+        "moral": 2
+       },
+       "out": "Il reste… pour l’instant.",
+       "risk": {
+        "p": 0.4,
+        "fx": {
+         "dev": 2,
+         "moral": -2
+        }
+       },
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Le laisser partir",
+       "fx": {
+        "budget": 0.3
+       },
+       "out": "Bonne chance à lui."
+      }
+     ]
+    },
+    "e": {
+     "icon": "🏅",
+     "title": "La consécration",
+     "ch": [
+      {
+       "t": "Le mettre en avant",
+       "fx": {
+        "rep": 4,
+        "moral": 2
+       },
+       "out": "L’écurie gagne une image d’innovatrice."
+      },
+      {
+       "t": "Garder le secret de la prochaine évolution",
+       "fx": {
+        "dev": -3
+       },
+       "out": "Il travaille déjà sur la suite."
+      },
+      {
+       "t": "Breveter l’idée (+1 M€)",
+       "fx": {
+        "budget": 1,
+        "rep": -1
+       },
+       "out": "Les rivaux paient pour l’utiliser."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "feud",
+   "title": "La guerre des pilotes",
+   "icon": "⚔️",
+   "steps": {
+    "a": {
+     "icon": "😤",
+     "title": "Tension dans le garage",
+     "ch": [
+      {
+       "t": "Montrer les données : tout est égal",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Il se calme, à moitié convaincu.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Lui rappeler qui est le patron",
+       "fx": {
+        "moral": -2,
+        "conf": 1
+       },
+       "out": "Il ravale sa colère.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Lui donner la prochaine pièce en priorité",
+       "fx": {
+        "mate": {
+         "spd": 1
+        },
+        "perf": {
+         "vtop": -0.003
+        }
+       },
+       "out": "Il est content, tu perds un peu de vitesse."
+      }
+     ]
+    },
+    "b": {
+     "icon": "📰",
+     "title": "Interview incendiaire",
+     "ch": [
+      {
+       "t": "Répondre publiquement",
+       "fx": {
+        "rep": -1,
+        "moral": -1
+       },
+       "out": "Le feuilleton fait vendre du papier.",
+       "next": "c",
+       "gap": 1
+      },
+      {
+       "t": "Réunion à huis clos",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Les choses sont dites, en privé.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Lui retirer une séance au simulateur",
+       "fx": {
+        "mate": {
+         "strat": -1
+        }
+       },
+       "out": "Sanction discrète.",
+       "next": "c",
+       "gap": 1
+      }
+     ]
+    },
+    "c": {
+     "icon": "💥",
+     "title": "Accrochage fratricide",
+     "ch": [
+      {
+       "t": "Imposer des consignes d’équipe",
+       "fx": {
+        "role": "n2",
+        "moral": -2
+       },
+       "out": "Il sera numéro 2 : il devra te laisser passer.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Laisser courir : que le meilleur gagne",
+       "fx": {
+        "moral": 2,
+        "rep": 1
+       },
+       "out": "Le duel continue… pour le plus grand plaisir des fans.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Médiation avec un psychologue (0,2 M€)",
+       "fx": {
+        "budget": -0.2,
+        "moral": 3
+       },
+       "out": "Les deux pilotes finissent par en rire.",
+       "next": "e",
+       "gap": 3
+      }
+     ]
+    },
+    "d": {
+     "icon": "📢",
+     "title": "Le paddock s’en mêle",
+     "ch": [
+      {
+       "t": "Lui proposer une prolongation",
+       "fx": {
+        "wage": 0.5,
+        "moral": 2
+       },
+       "out": "Il se sent enfin respecté.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Le laisser écouter les offres",
+       "fx": {
+        "moral": -2
+       },
+       "out": "Il reste… mais la tête ailleurs.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Exiger une indemnité si on le débauche",
+       "fx": {
+        "conf": 2
+       },
+       "out": "Le rival recule.",
+       "next": "e",
+       "gap": 3
+      }
+     ]
+    },
+    "e": {
+     "icon": "🤝",
+     "title": "La réconciliation ?",
+     "ch": [
+      {
+       "t": "Accepter avec le sourire",
+       "fx": {
+        "rep": 3,
+        "moral": 3
+       },
+       "out": "Une vidéo hilarante qui enterre la hache de guerre."
+      },
+      {
+       "t": "Accepter, mais garder ses distances",
+       "fx": {
+        "rep": 1
+       },
+       "out": "Une paix froide."
+      },
+      {
+       "t": "Refuser",
+       "fx": {
+        "moral": -2,
+        "mate": {
+         "spd": 1
+        }
+       },
+       "out": "Il sera encore plus motivé pour te battre."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "tycoon",
+   "title": "Le milliardaire",
+   "icon": "🛥️",
+   "steps": {
+    "a": {
+     "icon": "🥂",
+     "title": "Une visite remarquée",
+     "ch": [
+      {
+       "t": "Lui faire visiter le garage",
+       "fx": {
+        "moral": -1
+       },
+       "out": "Il pose des questions très précises.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Le confier au service partenaires",
+       "fx": {
+        "budget": 0.2
+       },
+       "out": "Il repart avec une casquette et un dossier.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "L’ignorer poliment",
+       "fx": {},
+       "out": "Il ne reviendra pas."
+      }
+     ]
+    },
+    "b": {
+     "icon": "👦",
+     "title": "Une demande paternelle",
+     "ch": [
+      {
+       "t": "Accepter (+2 M€)",
+       "fx": {
+        "budget": 2,
+        "perf": {
+         "mu": -0.003
+        }
+       },
+       "out": "Le fils roulera, tes réglages en pâtiront.",
+       "next": "c",
+       "gap": 1
+      },
+      {
+       "t": "Proposer le simulateur à la place (+0,5 M€)",
+       "fx": {
+        "budget": 0.5
+       },
+       "out": "Le fils s’amuse au simulateur.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Refuser fermement",
+       "fx": {
+        "conf": 2
+       },
+       "out": "Le volant ne s’achète pas."
+      }
+     ]
+    },
+    "c": {
+     "icon": "🌀",
+     "title": "Le fils en piste",
+     "ch": [
+      {
+       "t": "Le féliciter devant son père",
+       "fx": {
+        "rep": -1
+       },
+       "out": "Le père sourit jusqu’aux oreilles.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Dire la vérité : il n’est pas prêt",
+       "fx": {
+        "rep": 2,
+        "moral": 1
+       },
+       "out": "Le père encaisse, vexé.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Lui offrir une place à l’académie (0,3 M€)",
+       "fx": {
+        "budget": -0.3
+       },
+       "out": "Le fils va apprendre le métier.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "d": {
+     "icon": "🏦",
+     "title": "L’offre de rachat",
+     "ch": [
+      {
+       "t": "Accepter (+5 M€)",
+       "fx": {
+        "budget": 5,
+        "conf": -5
+       },
+       "out": "L’argent coule à flots, la direction n’aime pas ça.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Contre-proposer un simple partenariat",
+       "fx": {
+        "deal": {
+         "gp": 0.5,
+         "n": 6
+        }
+       },
+       "out": "Il accepte un rôle de sponsor."
+      },
+      {
+       "t": "Refuser",
+       "fx": {
+        "conf": 3
+       },
+       "out": "La direction apprécie ta loyauté."
+      }
+     ]
+    },
+    "e": {
+     "icon": "🎯",
+     "title": "L’ultimatum",
+     "ch": [
+      {
+       "fx": {
+        "sign": {
+         "drv": "son",
+         "sal": 0.3,
+         "years": 1,
+         "role": "n2"
+        },
+        "budget": 2
+       }
+      },
+      {
+       "t": "Refuser et rembourser (−3 M€)",
+       "fx": {
+        "budget": -3,
+        "conf": 4,
+        "rep": 2
+       },
+       "out": "L’écurie reprend sa liberté."
+      },
+      {
+       "t": "Gagner du temps",
+       "fx": {
+        "conf": -2
+       },
+       "out": "Il patiente, l’œil mauvais."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "legend",
+   "title": "Le retour de la légende",
+   "icon": "🦁",
+   "steps": {
+    "a": {
+     "icon": "🏆",
+     "title": "Un ancien champion",
+     "ch": [
+      {
+       "t": "L’engager (0,3 M€ par GP)",
+       "fx": {
+        "deal": {
+         "name": "Consultant",
+         "gp": -0.3,
+         "n": 6
+        },
+        "rep": 3
+       },
+       "out": "Sa présence électrise le garage.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Un essai d’un week-end",
+       "fx": {
+        "budget": -0.2
+       },
+       "out": "On verra ce qu’il apporte.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Non merci",
+       "fx": {},
+       "out": "Il ira conseiller une autre écurie."
+      }
+     ]
+    },
+    "b": {
+     "icon": "🗣️",
+     "title": "Des conseils qui piquent",
+     "ch": [
+      {
+       "t": "L’écouter attentivement",
+       "fx": {
+        "perf": {
+         "brake": 0.005
+        },
+        "moral": -1
+       },
+       "out": "Vexant, mais tu freines plus tard.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Lui demander de parler en privé",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Il comprend et adoucit le ton.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Le recadrer",
+       "fx": {
+        "rep": -1
+       },
+       "out": "L’ambiance se refroidit.",
+       "next": "c",
+       "gap": 2
+      }
+     ]
+    },
+    "c": {
+     "icon": "🏎️",
+     "title": "L’envie de rouler",
+     "ch": [
+      {
+       "t": "Organiser la démonstration (0,4 M€)",
+       "fx": {
+        "budget": -0.4,
+        "rep": 4
+       },
+       "out": "Le public est debout dans les tribunes.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Lui prêter le simulateur",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Il bat le record de ton équipier au simulateur !",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Trop dangereux",
+       "fx": {},
+       "out": "Il est déçu.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "d": {
+     "icon": "🎓",
+     "title": "Le mentor",
+     "ch": [
+      {
+       "t": "Bonne idée",
+       "fx": {
+        "mate": {
+         "spd": 1,
+         "strat": 1
+        }
+       },
+       "out": "L’équipier progresse à vue d’œil.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Je préfère qu’il travaille avec moi",
+       "fx": {
+        "perf": {
+         "steer": 0.005
+        }
+       },
+       "out": "Tu en profites toi-même.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Qu’il travaille avec les ingénieurs",
+       "fx": {
+        "dev": -2
+       },
+       "out": "Ses retours accélèrent l’usine.",
+       "next": "e",
+       "gap": 3
+      }
+     ]
+    },
+    "e": {
+     "icon": "📜",
+     "title": "Un rôle officiel ?",
+     "ch": [
+      {
+       "t": "Contrat d’ambassadeur",
+       "fx": {
+        "rep": 5,
+        "budget": -0.5
+       },
+       "out": "Son nom est désormais associé à l’écurie."
+      },
+      {
+       "t": "Rester amis",
+       "fx": {
+        "rep": 2,
+        "moral": 1
+       },
+       "out": "Il passera de temps en temps."
+      },
+      {
+       "t": "Le remercier pour tout",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Une belle page se tourne."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "factory",
+   "title": "La nouvelle usine",
+   "icon": "🏗️",
+   "steps": {
+    "a": {
+     "icon": "🏛️",
+     "title": "Un terrain offert",
+     "ch": [
+      {
+       "t": "Accepter le projet",
+       "fx": {
+        "rep": 2
+       },
+       "out": "Les architectes sont au travail.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Négocier des aides en plus",
+       "fx": {
+        "budget": 0.5
+       },
+       "out": "La ville accepte de participer.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "Refuser, on reste chez nous",
+       "fx": {
+        "moral": 1
+       },
+       "out": "Pas de déménagement."
+      }
+     ]
+    },
+    "b": {
+     "icon": "🚧",
+     "title": "Chantier retardé",
+     "ch": [
+      {
+       "t": "Payer des travaux en urgence (1 M€)",
+       "fx": {
+        "budget": -1
+       },
+       "out": "Le chantier reprend.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Attendre",
+       "fx": {
+        "moral": -1
+       },
+       "out": "Le projet patine.",
+       "next": "c",
+       "gap": 3
+      },
+      {
+       "t": "Transformer la source en atout : refroidissement naturel",
+       "fx": {
+        "rep": 2,
+        "budget": -0.3
+       },
+       "out": "Une usine écologique : les médias adorent.",
+       "next": "c",
+       "gap": 2
+      }
+     ]
+    },
+    "c": {
+     "icon": "👷",
+     "title": "Le recrutement local",
+     "ch": [
+      {
+       "t": "Embaucher des jeunes du coin et les former",
+       "fx": {
+        "dev": 2,
+        "rep": 3
+       },
+       "out": "Ils apprennent vite, mais il faut du temps.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Embaucher des techniciens expérimentés (0,8 M€)",
+       "fx": {
+        "budget": -0.8,
+        "dev": -1
+       },
+       "out": "Opérationnels tout de suite.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Gagner du temps",
+       "fx": {
+        "rep": -2
+       },
+       "out": "Les élus s’impatientent.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "d": {
+     "icon": "🎀",
+     "title": "L’inauguration",
+     "ch": [
+      {
+       "t": "Grande fête avec les habitants (0,3 M€)",
+       "fx": {
+        "budget": -0.3,
+        "rep": 3,
+        "moral": 3
+       },
+       "out": "Toute la ville est là.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Inauguration sobre",
+       "fx": {
+        "moral": 1
+       },
+       "out": "On coupe le ruban et on travaille.",
+       "next": "e",
+       "gap": 3
+      },
+      {
+       "t": "Inviter les sponsors (+0,5 M€)",
+       "fx": {
+        "budget": 0.5
+       },
+       "out": "Les partenaires sont impressionnés.",
+       "next": "e",
+       "gap": 3
+      }
+     ]
+    },
+    "e": {
+     "icon": "⚙️",
+     "title": "L’usine tourne",
+     "ch": [
+      {
+       "t": "Aux pièces de la voiture",
+       "fx": {
+        "dev": -3
+       },
+       "out": "Les livraisons s’accélèrent."
+      },
+      {
+       "t": "À la voiture de l’an prochain",
+       "fx": {
+        "conf": 3
+       },
+       "out": "La direction apprécie la vision à long terme."
+      },
+      {
+       "t": "À la sous-traitance pour d’autres écuries (+1,5 M€)",
+       "fx": {
+        "budget": 1.5
+       },
+       "out": "L’usine rapporte de l’argent."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "fuelcase",
+   "title": "L’affaire du carburant",
+   "icon": "⛽",
+   "steps": {
+    "a": {
+     "icon": "🧾",
+     "title": "Contrôle surprise",
+     "ch": [
+      {
+       "t": "Coopérer totalement",
+       "fx": {
+        "conf": 1
+       },
+       "out": "Les échantillons partent au laboratoire.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Engager un avocat (0,4 M€)",
+       "fx": {
+        "budget": -0.4
+       },
+       "out": "Ton avocat prépare la défense.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Accuser le pétrolier",
+       "fx": {
+        "rep": -1
+       },
+       "out": "Le pétrolier n’apprécie pas.",
+       "next": "c",
+       "gap": 1
+      }
+     ]
+    },
+    "b": {
+     "icon": "🔬",
+     "title": "Résultats du laboratoire",
+     "ch": [
+      {
+       "t": "Le retirer de nous-mêmes",
+       "fx": {
+        "perf": {
+         "vtop": -0.003
+        },
+        "rep": 2
+       },
+       "out": "Un peu de puissance en moins, beaucoup d’honnêteté en plus.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Le garder : c’est légal",
+       "fx": {
+        "perf": {
+         "vtop": 0.003
+        }
+       },
+       "out": "L’audience aura lieu dans deux courses.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Demander l’avis officiel de la fédération",
+       "fx": {},
+       "out": "Réponse attendue sous peu.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "c": {
+     "icon": "🔥",
+     "title": "Le pétrolier contre-attaque",
+     "ch": [
+      {
+       "t": "Présenter des excuses",
+       "fx": {
+        "rep": -1,
+        "conf": 1
+       },
+       "out": "Les relations se réchauffent.",
+       "next": "d",
+       "gap": 1
+      },
+      {
+       "t": "Maintenir tes propos",
+       "fx": {
+        "budget": -0.5,
+        "rep": 1
+       },
+       "out": "Le pétrolier réduit son soutien.",
+       "next": "d",
+       "gap": 1
+      },
+      {
+       "t": "Chercher un nouveau pétrolier",
+       "fx": {
+        "dev": 1
+       },
+       "out": "Les ingénieurs doivent tout recalibrer.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "d": {
+     "icon": "🏛️",
+     "title": "L’audience",
+     "ch": [
+      {
+       "t": "Plaider la bonne foi",
+       "fx": {
+        "rep": 1
+       },
+       "out": "Le tribunal écoute.",
+       "next": "e",
+       "gap": 1
+      },
+      {
+       "t": "Démontrer la faille du règlement",
+       "fx": {},
+       "out": "Les juges sont piqués au vif.",
+       "risk": {
+        "p": 0.4,
+        "fx": {
+         "grid": 3
+        },
+        "out": "Le tribunal n’apprécie pas : 3 places de pénalité sur la grille."
+       },
+       "next": "e",
+       "gap": 1
+      },
+      {
+       "t": "Proposer un accord amiable (0,5 M€)",
+       "fx": {
+        "budget": -0.5
+       },
+       "out": "Affaire réglée hors tribunal."
+      }
+     ]
+    },
+    "e": {
+     "icon": "🔨",
+     "title": "Le verdict",
+     "ch": [
+      {
+       "t": "Partager les données avec tout le monde",
+       "fx": {
+        "rep": 4
+       },
+       "out": "Le paddock salue ta transparence."
+      },
+      {
+       "t": "Rester discret",
+       "fx": {
+        "conf": 2
+       },
+       "out": "L’affaire s’oublie peu à peu."
+      },
+      {
+       "t": "Réclamer le remboursement des frais (+0,6 M€)",
+       "fx": {
+        "budget": 0.6,
+        "rep": -1
+       },
+       "out": "La fédération paie, sans plaisir."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "founder",
+   "title": "La voiture du fondateur",
+   "icon": "🏚️",
+   "steps": {
+    "a": {
+     "icon": "🔦",
+     "title": "Une découverte",
+     "ch": [
+      {
+       "t": "La racheter (0,3 M€)",
+       "fx": {
+        "budget": -0.3,
+        "rep": 2
+       },
+       "out": "La voiture rentre à la maison.",
+       "next": "b",
+       "gap": 1
+      },
+      {
+       "t": "Négocier un prix d’ami",
+       "fx": {
+        "rep": -1
+       },
+       "out": "Le fermier finit par céder… sans le sourire.",
+       "next": "b",
+       "gap": 2
+      },
+      {
+       "t": "La laisser à un musée",
+       "fx": {
+        "rep": 1
+       },
+       "out": "Le musée te remercie."
+      }
+     ]
+    },
+    "b": {
+     "icon": "🔧",
+     "title": "La restauration",
+     "ch": [
+      {
+       "t": "Les laisser faire",
+       "fx": {
+        "moral": 3,
+        "dev": 1
+       },
+       "out": "L’atelier sent l’huile et la nostalgie.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Confier ça à un spécialiste (0,5 M€)",
+       "fx": {
+        "budget": -0.5
+       },
+       "out": "Une restauration parfaite.",
+       "next": "c",
+       "gap": 2
+      },
+      {
+       "t": "Mobiliser les apprentis",
+       "fx": {
+        "moral": 1,
+        "rep": 1
+       },
+       "out": "Les jeunes apprennent l’histoire de l’écurie.",
+       "next": "c",
+       "gap": 2
+      }
+     ]
+    },
+    "c": {
+     "icon": "📜",
+     "title": "Un secret dans la voiture",
+     "ch": [
+      {
+       "t": "Étudier le carnet",
+       "fx": {
+        "perf": {
+         "mu": 0.004
+        }
+       },
+       "out": "Une vieille astuce de réglage fonctionne encore !",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "L’exposer au QG",
+       "fx": {
+        "moral": 2
+       },
+       "out": "Il inspire toute l’équipe.",
+       "next": "d",
+       "gap": 2
+      },
+      {
+       "t": "Le publier en livre (+0,4 M€)",
+       "fx": {
+        "budget": 0.4,
+        "rep": 2
+       },
+       "out": "Le livre se vend bien.",
+       "next": "d",
+       "gap": 2
+      }
+     ]
+    },
+    "d": {
+     "icon": "🏁",
+     "title": "Le tour de démonstration",
+     "ch": [
+      {
+       "t": "Tu la pilotes toi-même",
+       "fx": {
+        "rep": 3,
+        "moral": 2
+       },
+       "out": "Frissons garantis dans les tribunes.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Faire piloter le plus vieux mécanicien",
+       "fx": {
+        "moral": 4
+       },
+       "out": "Il pleure de joie en sortant du baquet.",
+       "next": "e",
+       "gap": 2
+      },
+      {
+       "t": "Une exposition statique suffit",
+       "fx": {
+        "rep": 1
+       },
+       "out": "Les fans font la queue pour la voir.",
+       "next": "e",
+       "gap": 2
+      }
+     ]
+    },
+    "e": {
+     "icon": "💎",
+     "title": "Une offre de collectionneur",
+     "ch": [
+      {
+       "t": "Vendre (+3 M€)",
+       "fx": {
+        "budget": 3,
+        "rep": -3,
+        "moral": -2
+       },
+       "out": "L’argent est là, l’âme un peu moins."
+      },
+      {
+       "t": "Refuser : elle reste au QG",
+       "fx": {
+        "rep": 3,
+        "moral": 2
+       },
+       "out": "Elle trône à l’entrée de l’usine."
+      },
+      {
+       "t": "La prêter à un musée contre une rente",
+       "fx": {
+        "deal": {
+         "name": "Musée",
+         "gp": 0.2,
+         "n": 8
+        },
+        "rep": 1
+       },
+       "out": "Elle voyage, et rapporte un peu."
+      }
+     ]
+    }
+   }
+  }
+ ]
+}
