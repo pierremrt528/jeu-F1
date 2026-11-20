@@ -5,6 +5,7 @@
 #include "GPMGameMode.h"
 #include "GPMSeason.h"
 #include "GPMFactory.h"
+#include "GPMCareer.h"
 #include "Engine/GameInstance.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SNullWidget.h"
@@ -70,11 +71,11 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 	UGPMSeasonSubsystem* S = SeasonSys();
 	if (!F || !S || F->Trees().Num() == 0) return SNullWidget::NullWidget;
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
-	QGTab = FMath::Clamp(QGTab, 0, 2);
+	QGTab = FMath::Clamp(QGTab, 0, 3);
 	if (QGTab == 2) F->EnsureStaff();
 	GM->bFutCar = QGTab == 0 && FutView();   // l'atelier montre la voiture de la prochaine ère
 	const UGPMSaveGame* G = S->State();
-	static const TCHAR* const TabTitles[3] = { TEXT("Recherche et développement"), TEXT("Installations"), TEXT("Chefs de pôle") };
+	static const TCHAR* const TabTitles[4] = { TEXT("Recherche et développement"), TEXT("Installations"), TEXT("Chefs de pôle"), TEXT("Académie des jeunes pilotes") };
 
 	TSharedRef<SHorizontalBox> Right = SNew(SHorizontalBox);
 	auto AddRight = [&Right](const TSharedRef<SWidget>& W, float Gap) { Right->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, Gap, 0.f))[ W ]; };
@@ -85,6 +86,11 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 		const bool bWip = G && !G->BuildId.IsEmpty();
 		AddRight(Chip(TEXT("Chantier"), bWip ? FString::Printf(TEXT("%d j"), G->BuildLeft) : FString(TEXT("libre")), bWip ? CGold : CText), 16.f);
 	}
+	else if (QGTab == 3)
+	{
+		const UGPMCareerSubsystem* CA = CareerSys();
+		AddRight(Chip(TEXT("Places"), FString::Printf(TEXT("%d / %d"), G ? G->Academy.Num() : 0, CA ? CA->AcadSlots() : 2), CText), 16.f);
+	}
 	else
 	{
 		float Pay = 0.f;
@@ -93,14 +99,14 @@ TSharedRef<SWidget> FGPMUI::FactoryScreen(AGPMGameMode* GM)
 	}
 	AddRight(Button(TEXT("RETOUR"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Season; }, true, 150.f, 46.f, 15), 0.f);
 
-	TSharedRef<SWidget> Content = QGTab == 0 ? ResearchTab() : QGTab == 1 ? InfraTab() : ChiefsTab();
+	TSharedRef<SWidget> Content = QGTab == 0 ? ResearchTab() : QGTab == 1 ? InfraTab() : QGTab == 2 ? ChiefsTab() : AcademyTab();
 	const FString TeamName = G && G->bCreated ? G->TeamName : FString(TEXT("ton écurie"));
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Title(FString::Printf(TEXT("QG · %s"), *GPMUp(TeamName)), TabTitles[QGTab], Right) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("RECHERCHE"), TEXT("INSTALLATIONS"), TEXT("CHEFS DE PÔLE") }, QGTab, [this](int32 k) { QGTab = k; }) ]
+			+ SHorizontalBox::Slot().AutoWidth()[ Tabs({ TEXT("RECHERCHE"), TEXT("INSTALLATIONS"), TEXT("CHEFS DE PÔLE"), TEXT("ACADÉMIE") }, QGTab, [this](int32 k) { QGTab = k; }) ]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).HAlign(HAlign_Right)[ Txt(TEXT("Tab : onglet suivant · flèches : choisir · Entrée : lancer · U : saison"), 13, CFaint) ]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ Content ];
@@ -604,17 +610,68 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 		Det->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("ENGAGER %s"), *GPMUp(Offer.C.Name)), 14, CGold, true) ];
 		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(Cmp, 14, CText, false, true) ];
 		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 10.f))[ Txt(CostWhy + TEXT("."), 13, CDim, false, true) ];
-		TSharedRef<SHorizontalBox> Btns = SNew(SHorizontalBox);
-		for (int32 y = 1; y <= 3; ++y)
+		// offre à la carte (comme pour les pilotes) : salaire, durée, prime à la signature ; il répond, sa patience baisse
+		const bool bBroken = G->Broken.Contains(Offer.C.Id);
+		if (ChFor != Offer.C.Id)
 		{
-			const float Cost = F->HireCost(Offer, y);
-			const FString Label = FString::Printf(TEXT("%d SAISON%s · %.1f M€/an · %.1f M€"), y, y > 1 ? TEXT("S") : TEXT(""), UGPMFactorySubsystem::ChiefAsk(Offer.C, y), Cost);
-			Btns->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
-			[
-				Button(Label, y == 2 ? Acc : Acc2, [WF, Offer, y]() { if (WF.IsValid()) WF->Hire(Offer, y); }, Cost <= G->Budget + 1e-3f, 0.f, 50.f, 14)
-			];
+			ChFor = Offer.C.Id; ChYears = 2; ChSign = 0.f; ChLine.Reset();
+			ChSal = UGPMFactorySubsystem::ChiefAsk(Offer.C, 2);
+			ChPat = FMath::Max(1, 3 + (UGPMCareerSubsystem::NegoLevel == 0 ? 1 : UGPMCareerSubsystem::NegoLevel == 2 ? -1 : 0));
 		}
+		const float Ask = UGPMFactorySubsystem::ChiefAsk(Offer.C, ChYears);
+		const float NowCost = F->HireCost(Offer, ChYears, ChSal, ChSign);
+		auto Step = [this](float D) { ChSal = FMath::Max(0.1f, FMath::RoundToFloat((ChSal + D) * 10.f) / 10.f); ChLine.Reset(); };
+		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Button(TEXT("−"), CNeutral, [Step]() { Step(-0.1f); }, !bBroken, 44.f, 44.f, 20) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("%.1f M€ / saison"), ChSal), 20, CText, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("demande : %.1f M€"), Ask), 12, CDim) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Button(TEXT("+"), CNeutral, [Step]() { Step(0.1f); }, !bBroken, 44.f, 44.f, 20) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(14.f, 0.f, 0.f, 0.f))
+			[ Button(FString::Printf(TEXT("DURÉE : %d SAISON%s ›"), ChYears, ChYears > 1 ? TEXT("S") : TEXT("")), CNeutral, [this]() { ChYears = ChYears % 3 + 1; ChLine.Reset(); }, !bBroken, 0.f, 44.f, 13) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f, 0.f, 0.f))
+			[
+				Button(FString::Printf(TEXT("PRIME À LA SIGNATURE : %.1f M€ ›"), ChSign), CNeutral, [this, Ask]()
+				{
+					static const float K[4] = { 0.f, 0.25f, 0.5f, 1.f };
+					int32 I = 0;
+					for (int32 k = 0; k < 4; ++k) if (FMath::IsNearlyEqual(ChSign, FMath::RoundToFloat(Ask * K[k] * 10.f) / 10.f, 0.05f)) I = k;
+					ChSign = FMath::RoundToFloat(Ask * K[(I + 1) % 4] * 10.f) / 10.f; ChLine.Reset();
+				}, !bBroken, 0.f, 44.f, 13)
+			]
+		];
+		TSharedRef<SHorizontalBox> Btns = SNew(SHorizontalBox);
+		Btns->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+		[
+			Button(FString::Printf(TEXT("ENVOYER L'OFFRE · %.1f M€ tout de suite"), NowCost), Acc, [this, WF, Offer]()
+			{
+				if (!WF.IsValid()) return;
+				FString Line;
+				const int32 Res = WF->OfferChief(Offer, ChSal, ChYears, ChSign, Line);
+				if (Res == 1) { ChFor.Reset(); SelCand = 0; return; }
+				ChLine = Line;
+				if (Res == 0 || Res == -1) ChPat -= Res == 0 ? 1 : 2;
+				if (ChPat <= 0)
+				{
+					ChLine = TEXT("Il met fin aux discussions jusqu'au prochain Grand Prix.");
+					if (UGPMSeasonSubsystem* Ss = SeasonSys()) if (UGPMSaveGame* Gs = Ss->State()) Gs->Broken.AddUnique(Offer.C.Id);
+				}
+			}, !bBroken && NowCost <= G->Budget + 1e-3f, 0.f, 50.f, 14)
+		];
+		Btns->AddSlot().AutoWidth()
+		[
+			Button(FString::Printf(TEXT("ACCEPTER SA DEMANDE · %.1f M€"), F->HireCost(Offer, ChYears)), Acc2, [this, WF, Offer]() { if (WF.IsValid() && WF->Hire(Offer, ChYears)) { ChFor.Reset(); SelCand = 0; } },
+				!bBroken && F->HireCost(Offer, ChYears) <= G->Budget + 1e-3f, 0.f, 50.f, 14)
+		];
 		Det->AddSlot().AutoHeight()[ Btns ];
+		if (bBroken || !ChLine.IsEmpty())
+			Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))[ Txt(bBroken ? FString(TEXT("Discussions rompues : il ne répond plus avant le prochain Grand Prix.")) : ChLine, 14, bBroken ? CBad : CGold, false, true) ];
+		Det->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(FString::Printf(TEXT("Patience : %d"), FMath::Max(0, ChPat)), 12, CFaint) ];
 	}
 	else Det->AddSlot().AutoHeight()[ Txt(TEXT("Choisis un candidat dans la liste."), 15, CDim) ];
 
@@ -635,5 +692,83 @@ TSharedRef<SWidget> FGPMUI::ChiefsTab()
 					CCardBg, 14.f)
 			]
 			+ SVerticalBox::Slot().AutoHeight()[ Card(Det, FLinearColor(0.12f, 0.1f, 0.03f, 0.85f), 16.f) ]
+		];
+}
+
+// ---------- académie des jeunes pilotes : juniors sous contrat, pilote de réserve, jeunes repérés ----------
+
+TSharedRef<SWidget> FGPMUI::AcademyTab()
+{
+	UGPMCareerSubsystem* C = CareerSys();
+	UGPMSeasonSubsystem* S = SeasonSys();
+	const UGPMSaveGame* G = S ? S->State() : nullptr;
+	if (!C || !G || !G->bCreated) return Card(Txt(TEXT("L'académie ouvre avec la carrière."), 16, CDim), CCardBg, 18.f);
+	C->EnsureScouts();
+	auto Fiche = [this, C, G](const FString& Name) -> TSharedRef<SWidget>
+	{
+		const FGPMMarketDriver D = C->StatsOf(Name);
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Txt(Name, 17, CText, true) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(Name == G->Reserve ? FString(TEXT("PILOTE DE RÉSERVE")) : FString(), 11, CGold, true) ]
+			]
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("%d ans · %s"), D.Age, *D.From), 12, CDim) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("vitesse %.0f · stratégie %.0f · pneus %.0f · potentiel %.0f"), D.Spd, D.Strat, D.Tyre, D.Pot), 13, CText) ];
+	};
+	TSharedRef<SVerticalBox> Mine = SNew(SVerticalBox);
+	for (const FString& Name : G->Academy)
+	{
+		const FString N = Name;
+		TSharedRef<SHorizontalBox> Acts = SNew(SHorizontalBox);
+		if (N != G->Reserve)
+			Acts->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("RÉSERVE"), CNeutral, [this, N]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->SetReserve(N); Touch(); }, true, 0.f, 40.f, 12) ];
+		Acts->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+		[
+			Button(FString::Printf(TEXT("TITULARISER · %.1f M€"), C->PromoteCost()), FLinearColor(0.72f, 0.55f, 0.1f, 1.f), [this, N]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->PromoteJunior(N); Touch(); },
+				C->PromoteCost() <= G->Budget + 1e-3f, 0.f, 40.f, 12)
+		];
+		Acts->AddSlot().AutoWidth()[ Button(TEXT("LIBÉRER"), CNeutral, [this, N]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->ReleaseJunior(N); Touch(); }, true, 0.f, 40.f, 12) ];
+		Mine->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
+		[
+			Card(SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Fiche(N) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("Contrat junior jusqu'en %d · %.1f M€ par saison"), G->AcadUntil.FindRef(N), C->JuniorSal(N)), 12, CFaint) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Acts ], CCardBg, 12.f)
+		];
+	}
+	if (G->Academy.Num() == 0) Mine->AddSlot().AutoHeight()[ Txt(TEXT("Aucun junior sous contrat : signe un jeune repéré à droite."), 14, CFaint, false, true) ];
+	TSharedRef<SVerticalBox> Scouts = SNew(SVerticalBox);
+	const bool bRoom = G->Academy.Num() < C->AcadSlots();
+	for (const FString& Name : G->ScoutList)
+	{
+		const FString N = Name;
+		const float Sal = C->JuniorSal(N);
+		Scouts->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
+		[
+			Card(SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Fiche(N) ]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f)).HAlign(HAlign_Left)
+				[
+					Button(FString::Printf(TEXT("SIGNER · 3 SAISONS · %.1f M€ / an"), Sal), FLinearColor(0.15f, 0.55f, 0.3f), [this, N]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->SignJunior(N); Touch(); },
+						bRoom && Sal <= G->Budget + 1e-3f, 0.f, 40.f, 12)
+				], CCardBg, 12.f)
+		];
+	}
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Txt(TEXT("TES JUNIORS"), 13, CDim, true) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
+			[ Txt(TEXT("Ils progressent après chaque Grand Prix (plus vite avec le bâtiment Académie). Le pilote de réserve remplace l'équipier qui part ; tu peux aussi le titulariser tout de suite."), 12, CFaint, false, true) ]
+			+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ Mine ] ]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Txt(TEXT("JEUNES REPÉRÉS"), 13, CDim, true) ]
+			+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ Scouts ] ]
 		];
 }

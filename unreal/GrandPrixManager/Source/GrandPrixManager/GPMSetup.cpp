@@ -227,6 +227,8 @@ void AGPMGameMode::ApplySetup()
 	if (!Car) return;
 	EnsureSetup();
 	Car->SetupFx = Setup.Fx();
+	// essais libres faits ce week-end : voiture mieux réglée, pneus et carburant mieux connus
+	if (PracKey == WeekendKey()) { Car->UpMu *= PracMu; Car->UpTyre *= PracTyre; Car->UpFuel *= PracFuel; }
 }
 
 // ---------- options des pilotes IA ----------

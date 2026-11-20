@@ -117,8 +117,10 @@ public:
 	/** Indemnité de départ du chef en poste (moitié des saisons restantes après celle-ci). */
 	float ReleaseCost(const FString& Dept) const;
 	/** Coût immédiat d'une signature : première saison de salaire + indemnités. */
-	float HireCost(const FGPMChiefOffer& O, int32 Years) const;
-	bool Hire(const FGPMChiefOffer& O, int32 Years);
+	float HireCost(const FGPMChiefOffer& O, int32 Years, float Sal = -1.f, float Sign = 0.f) const;
+	bool Hire(const FGPMChiefOffer& O, int32 Years, float Sal = -1.f, float Sign = 0.f);
+	/** Offre à la carte à un chef (salaire, durée, prime à la signature) : 1 signé, 0 contre-proposition, −1 refus net, −2 budget insuffisant ; OutLine = sa réponse. */
+	int32 OfferChief(const FGPMChiefOffer& O, float Sal, int32 Years, float Sign, FString& OutLine);
 	/** Prolonge le contrat du chef d'une saison, au même salaire (3 saisons d'avance au plus). */
 	bool Extend(const FString& Dept);
 	/** Marché des chefs créé à la première visite (chefs libres, chefs des rivaux). */

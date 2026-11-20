@@ -61,6 +61,7 @@ void AGPMGameMode::OpenTuning()
 
 void AGPMGameMode::PlayQuali()
 {
+	bPractice = false;
 	EnsureSetup();
 	EndCine();
 	StartQuali();
@@ -69,6 +70,7 @@ void AGPMGameMode::PlayQuali()
 // qualifications simulées : temps du joueur selon le réglage choisi (simLap de main.js), mêmes temps des IA
 void AGPMGameMode::SimQuali()
 {
+	bPractice = false;
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	EnsureSetup();

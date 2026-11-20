@@ -4,6 +4,7 @@
 #include "GrandPrixManager.h"
 #include "GPMDataSubsystem.h"
 #include "GPMSeason.h"
+#include "GPMCareer.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -315,17 +316,42 @@ float UGPMFactorySubsystem::ReleaseCost(const FString& Dept) const
 	return Left > 0 ? GPMQGData::Round1(0.5f * G->ChiefSal.FindRef(Dept) * Left) : 0.f;
 }
 
-float UGPMFactorySubsystem::HireCost(const FGPMChiefOffer& O, int32 Years) const
+float UGPMFactorySubsystem::HireCost(const FGPMChiefOffer& O, int32 Years, float Sal, float Sign) const
 {
-	return GPMQGData::Round1(ChiefAsk(O.C, Years) + (O.Club.IsEmpty() ? 0.f : ChiefFee(O.C)) + ReleaseCost(O.C.Dept));
+	return GPMQGData::Round1((Sal > 0.f ? Sal : ChiefAsk(O.C, Years)) + Sign + (O.Club.IsEmpty() ? 0.f : ChiefFee(O.C)) + ReleaseCost(O.C.Dept));
 }
 
-bool UGPMFactorySubsystem::Hire(const FGPMChiefOffer& O, int32 Years)
+int32 UGPMFactorySubsystem::OfferChief(const FGPMChiefOffer& O, float Sal, int32 Years, float Sign, FString& OutLine)
+{
+	UGPMSaveGame* G = Save();
+	if (!G || !O.C.IsValid()) return -1;
+	const int32 Y = FMath::Clamp(Years, 1, 3);
+	const int32 NL = UGPMCareerSubsystem::NegoLevel;
+	const float Ask = ChiefAsk(O.C, 2) * (NL == 0 ? 0.92f : NL == 2 ? 1.1f : 1.f);
+	// chacun son caractère : certains veulent de la sécurité (contrat long), d'autres rester libres (contrat court)
+	const float Pref = (GetTypeHash(O.C.Id) % 2 ? 0.03f : -0.03f) * (Y - 2);
+	const float Score = (Sal + Sign * 0.6f / Y) / FMath::Max(0.1f, Ask) + Pref;
+	const float Thr = 1.f + (O.Club.IsEmpty() ? 0.f : 0.05f) + (NL - 1) * 0.04f + (FMath::FRand() - 0.5f) * 0.03f;
+	if (Score >= Thr)
+	{
+		if (HireCost(O, Y, Sal, Sign) > G->Budget + 1e-3f) { OutLine = TEXT("Il accepte, mais ton budget ne suffit pas pour signer."); return -2; }
+		Hire(O, Y, Sal, Sign);
+		return 1;
+	}
+	const float Need = GPMQGData::Round1((Thr - Pref) * Ask - Sign * 0.6f / Y + 0.05f);
+	OutLine = Score >= Thr - 0.12f
+		? FString::Printf(TEXT("« On y est presque. À %.1f M€ par saison, je signe. »"), Need)
+		: FString::Printf(TEXT("« C'est loin de ma valeur. Je ne descendrai pas sous %.1f M€. »"), Need);
+	return Score >= Thr - 0.12f ? 0 : -1;
+}
+
+bool UGPMFactorySubsystem::Hire(const FGPMChiefOffer& O, int32 Years, float Sal, float Sign)
 {
 	UGPMSaveGame* G = Save();
 	if (!G || !O.C.IsValid()) return false;
 	const int32 Y = FMath::Clamp(Years, 1, 3);
-	const float Cost = HireCost(O, Y);
+	const float Cost = HireCost(O, Y, Sal, Sign);
+	const float Wage = Sal > 0.f ? GPMQGData::Round1(Sal) : ChiefAsk(O.C, Y);
 	if (Cost > G->Budget + 1e-3f) return false;
 	G->Budget = GPMQGData::Round1(G->Budget - Cost);
 	const FString Dept = O.C.Dept, Old = G->ChiefOf.FindRef(Dept);
@@ -339,9 +365,10 @@ bool UGPMFactorySubsystem::Hire(const FGPMChiefOffer& O, int32 Years)
 	}
 	else if (!Old.IsEmpty()) G->ChiefFree.AddUnique(Old);
 	G->ChiefOf.Add(Dept, O.C.Id);
-	G->ChiefSal.Add(Dept, ChiefAsk(O.C, Y));
+	G->ChiefSal.Add(Dept, Wage);
 	G->ChiefUntil.Add(Dept, G->Year + Y - 1);
-	G->News.Add(FString::Printf(TEXT("%s prend la tête du pôle %s (%d saison%s, %.1f M€ par saison)."), *O.C.Name, *DeptName(Dept), Y, Y > 1 ? TEXT("s") : TEXT(""), ChiefAsk(O.C, Y)));
+	G->News.Add(FString::Printf(TEXT("%s prend la tête du pôle %s (%d saison%s, %.1f M€ par saison%s)."), *O.C.Name, *DeptName(Dept), Y, Y > 1 ? TEXT("s") : TEXT(""), Wage,
+		Sign > 0.f ? *FString::Printf(TEXT(", prime de signature %.1f M€"), Sign) : TEXT("")));
 	Persist();
 	return true;
 }

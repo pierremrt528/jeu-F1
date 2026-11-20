@@ -686,7 +686,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		TrackLimits(DeltaSeconds);
 		RadioT -= DeltaSeconds;
 		if (Phase == EPhase::Quali) UpdateSectors();
-		if (Phase == EPhase::Quali && Car && Car->Lap >= 2) EndQuali();
+		if (Phase == EPhase::Quali && Car && Car->Lap >= (bPractice && PracticeProg == 2 ? 3 : 2)) { if (bPractice) EndPractice(); else EndQuali(); }
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			if (PC->WasInputKeyJustPressed(EKeys::Enter)) { if (Phase == EPhase::QualiDone) OpenPrerace(); }   // stratégie de course

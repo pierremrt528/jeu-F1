@@ -87,6 +87,14 @@ public:
 	UPROPERTY() int32 Ambition = -1;        // ambitions de la direction : 0 petite écurie, 1 milieu de grille, 2 écurie de pointe ; −1 = selon le niveau de départ
 	UPROPERTY() FString Engine;
 	UPROPERTY() FString Sponsor;
+	UPROPERTY() FString MainDeal;           // contrat renégocié du sponsor principal « id|fixe|prime|objectif|dernière saison » (vide = conditions de base)
+	UPROPERTY() TArray<FString> SecDeals;   // sponsors secondaires, même format
+	UPROPERTY() int32 SpTalkAt = -1;        // manche de la dernière discussion avec un sponsor (une par GP)
+	// Académie des jeunes pilotes : juniors sous contrat (noms ; leurs notes sont dans Skill/DrvPot/DrvBorn/DrvFrom), fin de contrat, jeunes repérés, pilote de réserve
+	UPROPERTY() TArray<FString> Academy;
+	UPROPERTY() TMap<FString, int32> AcadUntil;
+	UPROPERTY() TArray<FString> ScoutList;
+	UPROPERTY() FString Reserve;
 	UPROPERTY() int32 Col1 = 0;
 	UPROPERTY() int32 Col2 = 6;
 	UPROPERTY() float BasePerf = 0.96f;

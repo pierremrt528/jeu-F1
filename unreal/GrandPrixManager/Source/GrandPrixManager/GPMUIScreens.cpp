@@ -174,6 +174,7 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 	TSharedRef<SScrollBox> LeftCol = SNew(SScrollBox);
 	LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ HeroNext(GM) ];
 	LeftCol->AddSlot()[ MissionCard() ];
+	if (bTeam) LeftCol->AddSlot()[ SponsorCard(GM) ];
 	if (bTeam) LeftCol->AddSlot()[ EraCard(GM) ];
 	if (bTeam) LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Glass(Board) ];
 	if (Lines->NumSlots()) LeftCol->AddSlot()[ Glass(Lines) ];

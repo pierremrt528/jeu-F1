@@ -113,6 +113,32 @@ public:
 	TArray<FGPMEngineOpt> Engines;
 	TArray<FGPMColorOpt> Colors;
 	TArray<FGPMSponsorOpt> Sponsors;
+	TArray<FGPMSponsorOpt> SecSponsors;   // sponsors secondaires (3 au plus)
+	/** Négociation des sponsors à la carte (GPMSponsorTalk.cpp) : montant fixe, durée, prime par GP, objectif de course. */
+	struct FSpTalk { bool bSec = false; int32 Sp = -1; float Fix = 0.f; int32 Years = 2, BonusL = 2, GoalI = 0, Patience = 3; };
+	FSpTalk SpTalk;
+	struct FSpDeal { FString Id; float Fix = 0.f, Bonus = 0.f; FString Goal; int32 Until = 0; };
+	static FSpDeal ParseDeal(const FString& S);
+	/** Contrat en vigueur du sponsor principal (conditions de base s'il n'a pas été renégocié). */
+	FSpDeal MainDeal() const;
+	TArray<FSpDeal> SecDeals() const;
+	bool CanTalkSponsor() const;
+	void OpenSponsorTalk(int32 Sp, bool bSec);
+	void OpenSecondary();
+	static FString GoalName(const FString& Goal);
+	float GoalChance(const FString& Goal) const;
+	/** Académie des jeunes pilotes (GPMAcademy.cpp) : contrats juniors de 3 saisons, progression après chaque GP, pilote de réserve. */
+	int32 AcadSlots() const;
+	FGPMMarketDriver StatsOf(const FString& Name) const;
+	float JuniorSal(const FString& Name) const;
+	float PromoteCost() const;
+	void EnsureScouts();
+	bool SignJunior(const FString& Name);
+	void ReleaseJunior(const FString& Name);
+	void SetReserve(const FString& Name);
+	bool PromoteJunior(const FString& Name);
+	void TickAcademy();
+	void AcademyYear();
 	TArray<FGPMMarketDriver> Market;
 	TArray<FString> TeamNames, PilotNames;
 	FGPMPick Pick;
@@ -222,6 +248,8 @@ private:
 	// mercato : offres des rivaux pour l'équipier, pilote de réserve, carrières (âge, progression, retraites)
 	void RivalOfferCheck(const FGPMRaceCtx& R);
 	void OfferAct(int32 Action);
+	void SponsorAct(int32 Action);
+	void SponsorDialog(const FString& Line);
 	void MateLeaves(const FString& Team, float Gain);
 	FString PromoteReserve(bool bPayNow);
 	FString BestFree(float MaxSal) const;
@@ -232,7 +260,6 @@ private:
 	FGPMMarketDriver MateAsDriver() const;
 	void MakeOffer(const FString& Team);
 	int32 TeamPos() const;
-	FGPMMarketDriver StatsOf(const FString& Name) const;
 	void WriteSeats();
 	void News(const FString& Msg);
 };

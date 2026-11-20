@@ -335,6 +335,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
 	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
+	H = HashCombine(H, HashCombine(GetTypeHash(FMath::RoundToInt(ChSal * 10.f) + FMath::RoundToInt(ChSign * 10.f) * 1000 + ChYears * 100000 + ChPat * 1000000), GetTypeHash(ChFor + ChLine)));
 	H = HashCombine(H, GetTypeHash(UGPMCareerSubsystem::NegoLevel * 7 + UGPMCareerSubsystem::CareerLen * 31 + SeasonTab * 1000));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, HashCombine(GM->Setup.Hash(), GetTypeHash(GM->SetupRow)));
@@ -416,7 +417,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		// QG au clavier : Tab change d'onglet, flèches pour choisir, Entrée (ou 1-3 pour la durée d'un chef) pour agir
 		UGPMFactorySubsystem* F = FactorySys();
 		if (!F) return;
-		if (PC->WasInputKeyJustPressed(EKeys::Tab)) { QGTab = (QGTab + 1) % 3; Touch(); return; }
+		if (PC->WasInputKeyJustPressed(EKeys::Tab)) { QGTab = (QGTab + 1) % 4; Touch(); return; }
 		const bool bL = PC->WasInputKeyJustPressed(EKeys::Left), bR = PC->WasInputKeyJustPressed(EKeys::Right);
 		const bool bU = PC->WasInputKeyJustPressed(EKeys::Up), bD = PC->WasInputKeyJustPressed(EKeys::Down);
 		const bool bEnter = PC->WasInputKeyJustPressed(EKeys::Enter);
@@ -443,7 +444,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 			FString Why;
 			if (bEnter && F->CanBuild(BId, Why)) { F->Build(BId); Touch(); }
 		}
-		else
+		else if (QGTab == 2)
 		{
 			const int32 ND = UGPMFactorySubsystem::Depts().Num();
 			if (ND == 0) return;

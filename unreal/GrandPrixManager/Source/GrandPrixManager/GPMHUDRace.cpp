@@ -329,7 +329,7 @@ float AGPMHUD::DrawTower(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
 	DrawRect(HudAcc, X, Y, 2.5f * S, HH);
 	if (bQuali)
 	{
-		Ink(GM->bTesting ? TEXT("ESSAIS HIVERNAUX") : TEXT("QUALIFICATIONS"), X + 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim);
+		Ink(GM->bTesting ? FString(TEXT("ESSAIS HIVERNAUX")) : GM->bPractice ? FString::Printf(TEXT("ESSAIS LIBRES · %s"), AGPMGameMode::PracticeName(GM->PracticeProg)) : FString(TEXT("QUALIFICATIONS")), X + 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim);
 		Ink(Car->Lap >= 1 ? TEXT("TOUR LANCÉ") : TEXT("TOUR DE LANCEMENT"), X + 8.f * S, Y + 10.f * S, 1, 7.f, RaceYellow);
 	}
 	else

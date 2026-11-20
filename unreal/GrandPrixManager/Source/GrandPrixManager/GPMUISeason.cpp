@@ -570,6 +570,52 @@ TSharedRef<SWidget> FGPMUI::PerfPanel()
 		CCardBg, 16.f);
 }
 
+// ---------- sponsors : contrat du principal, secondaires, négociations ----------
+
+TSharedRef<SWidget> FGPMUI::SponsorCard(AGPMGameMode* GM)
+{
+	UGPMCareerSubsystem* C = CareerSys();
+	UGPMSeasonSubsystem* S = SeasonSys();
+	const UGPMSaveGame* G = C ? C->Save() : nullptr;
+	if (!G || !S || !GM || !C->IsCreated() || S->IsOver()) return SNullWidget::NullWidget;
+	TWeakObjectPtr<AGPMGameMode> WGM = GM;
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	Box->AddSlot().AutoHeight()[ Txt(TEXT("SPONSORS"), 12, CGood, true) ];
+	const UGPMCareerSubsystem::FSpDeal M = C->MainDeal();
+	for (const FGPMSponsorOpt& Sp : C->Sponsors)
+		if (Sp.Id == M.Id)
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))
+			[
+				Txt(FString::Printf(TEXT("%s : %.1f M€ / saison + %.1f M€ par GP si tu %s%s"), *Sp.Name, M.Fix, M.Bonus, *UGPMCareerSubsystem::GoalName(M.Goal),
+					M.Until ? *FString::Printf(TEXT(" (jusqu'en %d)"), M.Until) : TEXT(" (conditions de base)")), 14, CText, false, true)
+			];
+	for (const UGPMCareerSubsystem::FSpDeal& D : C->SecDeals())
+		for (const FGPMSponsorOpt& Sp : C->SecSponsors)
+			if (Sp.Id == D.Id)
+				Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))
+				[ Txt(FString::Printf(TEXT("• %s : %.1f M€ / saison + %.1f M€ par GP (jusqu'en %d)"), *Sp.Name, D.Fix, D.Bonus, D.Until), 12, CDim, false, true) ];
+	const bool bCan = C->CanTalkSponsor();
+	auto Open = [this, WGM](bool bSec)
+	{
+		UGPMCareerSubsystem* CS = CareerSys();
+		if (!CS || !WGM.IsValid()) return;
+		if (bSec) CS->OpenSecondary(); else CS->OpenSponsorTalk(-1, false);
+		if (!CS->Current()) return;
+		WGM->bNegoFromMercato = false;
+		WGM->Phase = AGPMGameMode::EPhase::Press;
+	};
+	Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+		[ Button(TEXT("RENÉGOCIER"), FLinearColor(0.15f, 0.55f, 0.3f), [Open]() { Open(false); }, bCan, 0.f, 40.f, 13) ]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[ Button(FString::Printf(TEXT("SECONDAIRES (%d/3)"), G->SecDeals.Num()), FLinearColor(0.15f, 0.55f, 0.3f), [Open]() { Open(true); }, bCan, 0.f, 40.f, 13) ]
+	];
+	if (!bCan) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(TEXT("Une discussion par Grand Prix : reviens après la prochaine course."), 12, CFaint, false, true) ];
+	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Box, CCardBg, 14.f) ];
+}
+
 // ---------- mission du sponsor pour le prochain Grand Prix ----------
 
 TSharedRef<SWidget> FGPMUI::MissionCard()

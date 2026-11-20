@@ -79,6 +79,16 @@ public:
 	uint8 RedState = 0;   // 1 drapeau rouge (tout le monde ralentit), 2 course suspendue (sur la grille, reprise aux feux)
 	float RedT = 0.f;
 	void RedFlag(const FString& Why, bool bForce = false);
+	/** Essais libres (GPMPractice.cpp) : 1 ou 2 tours seul en piste avec un programme (0 réglages, 1 pneus, 2 long run), une fois chacun par week-end ;
+	 *  chaque programme fait donne un petit avantage pour la course du week-end. */
+	bool bPractice = false;
+	int32 PracticeProg = 0, PracMask = 0, PracKey = -999;
+	float PracMu = 1.f, PracTyre = 1.f, PracFuel = 1.f;
+	FString PracReport;
+	void StartPractice(int32 Prog);
+	int32 WeekendKey() const;
+	static const TCHAR* PracticeName(int32 P) { return P == 0 ? TEXT("RÉGLAGES") : P == 1 ? TEXT("PNEUS") : TEXT("LONG RUN"); }
+	void EndPractice();
 	void TestPenalty(uint8 Kind, float Sec);   // tests (GPM.TestSC)
 	/** Commissaires : dernier communiqué (HUD), pilote concerné, durée d'affichage ; enquête en cours. */
 	FString StewardHead, StewardWhy;

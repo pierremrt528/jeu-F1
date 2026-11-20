@@ -85,8 +85,7 @@ void UGPMCareerSubsystem::LoadOptions()
 	for (const TSharedPtr<FJsonObject>& O : Arr(TEXT("config_couleurs"), TEXT("COULEURS")))
 		Colors.Add({ JStr(O, TEXT("id")), JStr(O, TEXT("name")), FromHex(int64(JNum(O, TEXT("hex")))) });
 	for (const TSharedPtr<FJsonObject>& O : Arr(TEXT("config_sponsors"), TEXT("SPONSORS")))
-		if (JStr(O, TEXT("kind")) == TEXT("main"))
-			Sponsors.Add({ JStr(O, TEXT("id")), JStr(O, TEXT("name")), JStr(O, TEXT("sector")), JStr(O, TEXT("goal")), float(JNum(O, TEXT("year"), 10)),
+		(JStr(O, TEXT("kind")) == TEXT("main") ? Sponsors : SecSponsors).Add({ JStr(O, TEXT("id")), JStr(O, TEXT("name")), JStr(O, TEXT("sector")), JStr(O, TEXT("goal")), float(JNum(O, TEXT("year"), 10)),
 				float(JNum(O, TEXT("sign"), 2)), float(JNum(O, TEXT("bonus"), 0.5)), int32(JNum(O, TEXT("rep"))) });
 	for (const TSharedPtr<FJsonObject>& O : Arr(TEXT("career"), TEXT("MARKET")))
 	{
@@ -473,6 +472,7 @@ void UGPMCareerSubsystem::AcceptMission()
 
 TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 {
+	TickAcademy();
 	TArray<FString> Lines;
 	UGPMSaveGame* G = Save();
 	if (!G || !G->bCreated) return Lines;
@@ -482,17 +482,39 @@ TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 	G->Conf = FMath::Clamp(G->Conf + D, 0, 100);
 	Lines.Add(FString::Printf(TEXT("Direction : confiance %d %% (%s%d) · %s"), G->Conf, D >= 0 ? TEXT("+") : TEXT(""), D, *ConfText(G->Conf)));
 	// sponsor principal : part annuelle + bonus si l'objectif de la course est rempli (GOALS de sponsors.js)
-	for (const FGPMSponsorOpt& Sp : Sponsors)
-		if (Sp.Id == G->Sponsor)
+	// (contrat renégocié : montant fixe, prime et objectif de la négociation) ; sponsors secondaires de la même façon
+	{
+		auto GoalOk = [&R](const FString& Goal)
 		{
-			const bool bOk = Sp.Goal == TEXT("finish") ? !R.bDnf : Sp.Goal == TEXT("beatMate") ? (R.MatePos == 0 || R.Pos < R.MatePos)
-				: Sp.Goal == TEXT("gain") ? R.Pos < R.Grid : Sp.Goal == TEXT("pts") ? R.Pos <= 10 : Sp.Goal == TEXT("podium") ? R.Pos <= 3
-				: Sp.Goal == TEXT("fl") ? R.bFastest : false;
-			const UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
-			const float V = R1(Sp.Year / FMath::Max(1, Season ? Season->NumRounds() : 22) + (bOk ? Sp.Bonus : 0.f));
-			G->Budget = R1(G->Budget + V);
-			Lines.Add(FString::Printf(TEXT("%s : +%.1f M€%s"), *Sp.Name, V, bOk ? TEXT(" (objectif rempli)") : TEXT("")));
+			return Goal == TEXT("finish") ? !R.bDnf : Goal == TEXT("beatMate") ? (R.MatePos == 0 || R.Pos < R.MatePos)
+				: Goal == TEXT("gain") ? R.Pos < R.Grid : Goal == TEXT("pts") ? R.Pos <= 10 : Goal == TEXT("top5") ? R.Pos <= 5 : Goal == TEXT("podium") ? R.Pos <= 3
+				: Goal == TEXT("fl") ? R.bFastest : false;
+		};
+		const UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+		const int32 NR = FMath::Max(1, Season ? Season->NumRounds() : 22);
+		const FSpDeal Main = MainDeal();
+		for (const FGPMSponsorOpt& Sp : Sponsors)
+			if (Sp.Id == Main.Id)
+			{
+				const bool bOk = GoalOk(Main.Goal);
+				const float V = R1(Main.Fix / NR + (bOk ? Main.Bonus : 0.f));
+				G->Budget = R1(G->Budget + V);
+				Lines.Add(FString::Printf(TEXT("%s : +%.1f M€%s"), *Sp.Name, V, bOk ? TEXT(" (objectif rempli)") : TEXT("")));
+			}
+		float SecV = 0.f;
+		int32 SecOk = 0;
+		for (const FSpDeal& Dd : SecDeals())
+		{
+			const bool bOk = !R.bDnf && GoalOk(Dd.Goal);
+			SecV += Dd.Fix / NR + (bOk ? Dd.Bonus : 0.f);
+			SecOk += bOk;
 		}
+		if (SecV > 0.f)
+		{
+			G->Budget = R1(G->Budget + SecV);
+			Lines.Add(FString::Printf(TEXT("Sponsors secondaires : +%.1f M€ (%d objectif%s rempli%s)"), R1(SecV), SecOk, SecOk > 1 ? TEXT("s") : TEXT(""), SecOk > 1 ? TEXT("s") : TEXT("")));
+		}
+	}
 	// contrats ponctuels (team.deals) : versés ou payés à chaque GP
 	for (int32 k = G->DealName.Num() - 1; k >= 0; --k)
 	{
@@ -617,6 +639,21 @@ void UGPMCareerSubsystem::Intersaison()
 					G->Year + 1, Sp.Sign, Sp.Year, Sp.Bonus));
 			News(FString::Printf(TEXT("%s verse %.1f M€ pour la nouvelle saison."), *Sp.Name, Sp.Sign));
 		}
+	// contrats négociés arrivés à échéance : le sponsor principal revient à ses conditions de base, les secondaires s'en vont
+	if (!G->MainDeal.IsEmpty() && ParseDeal(G->MainDeal).Until <= G->Year)
+	{
+		G->MainDeal.Reset();
+		SendMail(TEXT("sponsor"), TEXT("Service partenariats"), TEXT("Contrat du sponsor principal à renégocier"),
+			TEXT("Le contrat négocié avec ton sponsor principal est arrivé à son terme : il continue aux conditions de base. Tu peux le renégocier depuis l'écran de saison."));
+	}
+	for (int32 k = G->SecDeals.Num() - 1; k >= 0; --k)
+		if (ParseDeal(G->SecDeals[k]).Until <= G->Year)
+		{
+			const FString Id = ParseDeal(G->SecDeals[k]).Id;
+			G->SecDeals.RemoveAt(k);
+			for (const FGPMSponsorOpt& Sp : SecSponsors)
+				if (Sp.Id == Id) News(FString::Printf(TEXT("Fin du contrat avec %s : tu peux le resigner depuis l'écran de saison."), *Sp.Name));
+		}
 	// motoriste et salaire de l'équipier payés pour la nouvelle saison ; fin de contrat → pilote de réserve
 	for (const FGPMEngineOpt& E : Engines) if (E.Id == G->Engine) G->Budget = R1(G->Budget - E.Price);
 	if (--G->MateYears <= 0)
@@ -628,6 +665,7 @@ void UGPMCareerSubsystem::Intersaison()
 		Mk.Add(FString::Printf(TEXT("%s arrive en fin de contrat et quitte %s. %s, pilote de réserve, devient titulaire pour une saison."), *Old, *G->TeamName, *In));
 	}
 	G->Budget = R1(G->Budget - G->MateSal);
+	AcademyYear();
 	// les jeunes progressent un peu, l'équipier aussi (plus vite avec l'Académie de pilotes) ; après 33 ans, il décline
 	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
 	const float Grow = Factory ? Factory->MateGrowth() : 1.f;
@@ -1173,6 +1211,7 @@ void UGPMCareerSubsystem::NegoAct(int32 Action)
 	UGPMSaveGame* G = Save();
 	FGPMDialog* Dl = Current();
 	if (!G || !Dl) return;
+	if ((Action >= 40 && Action < 60) || Action >= 100) { SponsorAct(Action); return; }
 	if (Action >= 20 && Action < 40) { BuildAct(Action); return; }
 	if (Action >= 10) { OfferAct(Action); return; }
 	if (Action == 4) { Dl->Chosen = 0; Dl->Result = TEXT("Tu quittes la table. L'agent garde ton numéro."); return; }
@@ -1432,8 +1471,10 @@ FString UGPMCareerSubsystem::PromoteReserve(bool bPayNow)
 {
 	UGPMSaveGame* G = Save();
 	if (!G) return FString();
-	// le meilleur pilote libre abordable devient titulaire pour une saison
-	const FString Name = BestFree(FMath::Max(1.5f, G->Budget * 0.06f));
+	// le pilote de réserve de l'académie s'il y en a un, sinon le meilleur pilote libre abordable, devient titulaire pour une saison
+	const FString Name = !G->Reserve.IsEmpty() && G->Academy.Contains(G->Reserve) ? G->Reserve : BestFree(FMath::Max(1.5f, G->Budget * 0.06f));
+	G->Academy.Remove(Name); G->AcadUntil.Remove(Name);
+	if (G->Reserve == Name) G->Reserve.Reset();
 	FGPMMarketDriver B;
 	if (Name.IsEmpty()) { B.Name = TEXT("R. Vallin"); B.Spd = 70; B.Strat = 65; B.Tyre = 66; B.Pot = 55; }
 	else B = StatsOf(Name);

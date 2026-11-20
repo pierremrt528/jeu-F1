@@ -113,6 +113,25 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 	Presets->AddSlot().AutoWidth()
 	[ Button(S == Adv ? TEXT("RÉGLAGES DE L'INGÉNIEUR") : TEXT("CONSEIL DE L'INGÉNIEUR"), S == Adv ? CGood : Acc2, [WGM]() { if (WGM.IsValid()) WGM->Setup = WGM->Advice(); }, true, 0.f, 36.f, 12) ];
 
+	// essais libres express avant les qualifications : un programme = 1 tour (2 pour le long run), une fois chacun par week-end
+	TSharedRef<SVerticalBox> Practice = SNew(SVerticalBox);
+	{
+		const bool bSame = GM->PracKey == GM->WeekendKey();
+		TSharedRef<SHorizontalBox> PBtns = SNew(SHorizontalBox);
+		PBtns->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Txt(TEXT("ESSAIS LIBRES"), 12, CDim, true) ];
+		for (int32 k = 0; k < 3; ++k)
+		{
+			const bool bDone = bSame && (GM->PracMask & (1 << k));
+			PBtns->AddSlot().AutoWidth().Padding(FMargin(k ? 5.f : 0.f, 0.f, 0.f, 0.f))
+			[
+				Button(FString::Printf(TEXT("%s%s · %d TOUR%s"), bDone ? TEXT("FAIT : ") : TEXT(""), AGPMGameMode::PracticeName(k), k == 2 ? 2 : 1, k == 2 ? TEXT("S") : TEXT("")), bDone ? CGood : CNeutral,
+					[WGM, k]() { if (WGM.IsValid()) WGM->StartPractice(k); }, !bDone && !GM->bGridReady, 0.f, 34.f, 12)
+			];
+		}
+		Practice->AddSlot().AutoHeight()[ PBtns ];
+		if (bSame && !GM->PracReport.IsEmpty()) Practice->AddSlot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Txt(GM->PracReport, 12, CGood, false, true) ];
+	}
+
 	UGPMSeasonSubsystem* Ss = SeasonSys();
 	const FString Kicker = GM->bCareer && Ss ? FString::Printf(TEXT("GRAND PRIX %d / %d · RÉGLAGES"), Ss->Round() + 1, Ss->NumRounds()) : FString(TEXT("COURSE SOLO · RÉGLAGES"));
 	TSharedRef<SWidget> Nav = SNew(SHorizontalBox)
@@ -136,6 +155,7 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 				+ SHorizontalBox::Slot().AutoWidth()[ Chip(TEXT("Tour estimé"), Clock(Mine), Delta < 0.0005f ? CPurple : CGold) ])
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Presets ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Practice ]
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SNew(SScrollBox) + SScrollBox::Slot()
