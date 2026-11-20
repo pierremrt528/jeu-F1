@@ -694,6 +694,21 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		if (LightsT >= GoAt) { Phase = EPhase::Race; for (AGPMCar* C : Cars) C->bHold = false; }
 	}
 	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
+	if (Scenery) Scenery->SetStartLights(LightsOn());
+	// mécaniciens du carré : prêts quand une voiture de l'écurie arrive, au travail pendant l'arrêt (pas pendant un stop-and-go)
+	if (Scenery && Car && (Phase == EPhase::Race || Phase == EPhase::Quali || Phase == EPhase::Lights))
+	{
+		int32 Crew = 0;
+		const AGPMCar* At = nullptr;
+		for (AGPMCar* C : Cars)
+		{
+			if (!C || C->TeamIdx != Car->TeamIdx || !C->PitPhase) continue;
+			const float D = FGPMTrackData::PitBox(C->TeamIdx) - C->PitKf;
+			const int32 S = C->PitPhase == 2 ? (C->bPenVisit ? 1 : 2) : (C->PitPhase == 1 && D < 50.f && D > -6.f) ? 1 : 0;
+			if (S > Crew) { Crew = S; At = C; }
+		}
+		Scenery->SetCrew(Crew, Crew == 2 && At ? At->GetActorLocation() : FVector::ZeroVector, At ? At->GetActorForwardVector() : FVector::ForwardVector, Car->TeamColor, DeltaSeconds);
+	}
 	Aspiration(DeltaSeconds);
 	Collide();
 	TrackLimits(DeltaSeconds);

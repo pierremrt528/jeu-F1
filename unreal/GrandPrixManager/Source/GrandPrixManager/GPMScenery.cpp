@@ -220,6 +220,7 @@ void AGPMScenery::Build(const FGPMTrackData* InTrack)
 {
 	for (UHierarchicalInstancedStaticMeshComponent* H : Instances) if (H) H->DestroyComponent();
 	Instances.Reset();
+	Lamps = nullptr; LampsLit = -1; CrewDark = CrewSuit = nullptr; CrewState = -1;
 	Hash.Reset();
 	Track = InTrack;
 	if (!Track || Track->Points.Num() < 4) return;
@@ -677,6 +678,31 @@ void AGPMScenery::BuildStands()
 			}
 		}
 	}
+	// portique des feux, 6 m après la ligne : deux poteaux, une poutre au-dessus de la piste, un panneau noir de 5 colonnes
+	// de feux tourné vers la grille (allumés par SetStartLights)
+	{
+		UHierarchicalInstancedStaticMeshComponent* Dark = AddLayer(TEXT("Cube"), FLinearColor(0.02f, 0.02f, 0.025f), FLinearColor::Transparent, 0.5f);
+		Lamps = AddLayer(TEXT("Cube"), FLinearColor(0.6f, 0.01f, 0.01f), FLinearColor::Transparent, 0.2f);
+		if (UMaterialInstanceDynamic* LM = Cast<UMaterialInstanceDynamic>(Lamps->GetMaterial(0))) LM->SetVectorParameterValue(TEXT("Glow"), FLinearColor(60.f, 0.8f, 0.5f));
+		const int32 K = 3, i = K % N;
+		const float WL = Track->WallLeft.IsValidIndex(i) ? Track->WallLeft[i] : Track->Width / 2.f + 4.f;
+		const float WR = FMath::Min(Track->PitHalf + 0.6f, Track->WallRight.IsValidIndex(i) ? Track->WallRight[i] : Track->Width / 2.f + 4.f);
+		FVector P; float Yaw;
+		Frame(K, 0.f, P, Yaw);
+		const FRotator Rot(0, Yaw, 0);
+		const FVector Lt = Rot.RotateVector(FVector(0, 100.f, 0)), Fw = Rot.RotateVector(FVector(100.f, 0, 0));
+		for (const float Lat : { -WL - 0.4f, WR + 0.4f })
+			Roof->AddInstance(FTransform(Rot, P + Lt * Lat + FVector(0, 0, 400.f), FVector(0.5f, 0.5f, 8.f)));
+		Roof->AddInstance(FTransform(Rot, P + Lt * ((WR - WL) * 0.5f) + FVector(0, 0, 790.f), FVector(0.7f, WL + WR + 1.4f, 0.5f)));
+		Dark->AddInstance(FTransform(Rot, P + FVector(0, 0, 680.f), FVector(0.35f, 4.4f, 1.2f)));
+		for (int32 k = 0; k < 5; ++k)
+		{
+			const FVector At = P + Lt * ((k - 2) * 0.82f) - Fw * 0.2f + FVector(0, 0, 680.f);
+			Dark->AddInstance(FTransform(Rot, At - Fw * 0.02f, FVector(0.1f, 0.62f, 1.f)));
+			LampAt[k] = FTransform(Rot, At - Fw * 0.04f, FVector(0.06f, 0.42f, 0.8f));
+		}
+	}
+	BuildCrew();
 	// bâtiment des stands : blocs de 20 m derrière la voie des stands (sans les modules Blender)
 	if (!HasDecor(TEXT("garage")))
 	for (int32 K = -130; K <= -10; K += 10)
@@ -685,4 +711,13 @@ void AGPMScenery::BuildStands()
 		Frame(K, Track->PitLat + Track->PitHalf + 7.f, P, Yaw);
 		Pits->AddInstance(FTransform(FRotator(0, Yaw, 0), FVector(P.X, P.Y, P.Z + 350.f), FVector(20.5f, 12.f, 7.f)));
 	}
+}
+
+void AGPMScenery::SetStartLights(int32 On)
+{
+	On = FMath::Clamp(On, 0, 5);
+	if (!Lamps || On == LampsLit) return;
+	LampsLit = On;
+	Lamps->ClearInstances();
+	for (int32 k = 0; k < On; ++k) Lamps->AddInstance(LampAt[k]);
 }

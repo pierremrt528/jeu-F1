@@ -26,6 +26,11 @@ public:
 
 	/** Altitude du terrain (cm) au point (X, Y) du monde Unreal. */
 	float GroundZ(float X, float Y) const;
+	/** Portique des feux de départ : nombre de colonnes rouges allumées (0 à 5). */
+	void SetStartLights(int32 On);
+	/** Mécaniciens du carré du joueur (GPMPitCrew.cpp) : 0 devant le garage, 1 prêts (voiture qui arrive, ou stop-and-go :
+	 *  personne ne touche la voiture), 2 au travail autour de la voiture arrêtée. */
+	void SetCrew(int32 State, const FVector& CarPos, const FVector& CarFwd, const FLinearColor& Team, float Dt);
 
 private:
 	void BuildTerrain();
@@ -65,6 +70,16 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Foliage;
 	UPROPERTY() TObjectPtr<UMaterialInterface> ShapeMat;
 	UPROPERTY() TObjectPtr<UMaterialInterface> VertexMat;
+	UPROPERTY() TObjectPtr<UHierarchicalInstancedStaticMeshComponent> Lamps;   // feux rouges allumés du portique
+	FTransform LampAt[5];
+	int32 LampsLit = -1;
+	void BuildCrew();
+	UPROPERTY() TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CrewDark;
+	UPROPERTY() TObjectPtr<UHierarchicalInstancedStaticMeshComponent> CrewSuit;
+	FVector CrewPos[10];
+	float CrewDown[10] = {};
+	FLinearColor CrewCol = FLinearColor::Black;
+	int32 CrewState = -1;
 
 	// grille du terrain (cm) et grille de recherche des points de piste (cellules de 50 m)
 	FVector2D Origin = FVector2D::ZeroVector;

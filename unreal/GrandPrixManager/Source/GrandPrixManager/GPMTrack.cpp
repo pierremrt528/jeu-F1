@@ -348,6 +348,32 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		Start.Quad(a, a + 1, a + 2, a + 3);
 	}
 
+	// Emplacements de la grille (race.js : un rang tous les 8 m, ±3 m) : trait blanc devant chaque voiture et deux retours
+	{
+		auto GridAt = [&](float Kf, float Lcm)
+		{
+			const float F = FMath::Fmod(FMath::Fmod(Kf, float(N)) + N, float(N));
+			const int32 i = FMath::FloorToInt(F) % N, j = (i + 1) % N;
+			const float Fr = F - FMath::FloorToFloat(F);
+			return FMath::Lerp(Track->Points[i], Track->Points[j], Fr) + FMath::Lerp(Right(i), Right(j), Fr).GetSafeNormal() * Lcm + Up * 1.2f;
+		};
+		auto Strip = [&](float KA, float KB, float LA, float LB)
+		{
+			const int32 q = Start.Add(GridAt(KA, LA), Up, FVector2D(0, 0), KerbWhite);
+			Start.Add(GridAt(KA, LB), Up, FVector2D(1, 0), KerbWhite);
+			Start.Add(GridAt(KB, LA), Up, FVector2D(0, 1), KerbWhite);
+			Start.Add(GridAt(KB, LB), Up, FVector2D(1, 1), KerbWhite);
+			Start.Quad(q, q + 1, q + 2, q + 3);
+		};
+		for (int32 Slot = 0; Slot < 20; ++Slot)
+		{
+			const float Kc = -(5.f + Slot * 4.f) + 1.6f, L = (Slot % 2 ? 300.f : -300.f);   // 3,2 m devant le centre de la voiture
+			Strip(Kc, Kc + 0.08f, L - 115.f, L + 115.f);
+			Strip(Kc - 0.8f, Kc, L - 115.f, L - 101.f);
+			Strip(Kc - 0.8f, Kc, L + 101.f, L + 115.f);
+		}
+	}
+
 	// Sol : grand plan sous le circuit (comme track.ground = altitude min - 0,6 m)
 	{
 		const FBox B(Track->Points);
