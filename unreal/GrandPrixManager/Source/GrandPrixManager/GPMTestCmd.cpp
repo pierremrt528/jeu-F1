@@ -340,3 +340,59 @@ static FAutoConsoleCommandWithWorldAndArgs GMercatoCmd(TEXT("GPM.TestMercato"), 
 		}
 		UE_LOG(LogGPM, Display, TEXT("GPM.TestMercato : parcours lancé"));
 	}));
+
+
+// « GPM.TestSC » : cinématique d'avant-course (une capture par plan), puis course en pilote automatique avec voiture de sécurité,
+// drive-through, 5 s de pénalité et VSC (Saved/Captures/S*.png)
+static FAutoConsoleCommandWithWorldAndArgs GTestScCmd(TEXT("GPM.TestSC"), TEXT("Cinématique, voiture de sécurité, pénalités et VSC avec captures (Saved/Captures/S*.png)."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		if (!World) return;
+		TWeakObjectPtr<UWorld> W = World;
+		struct FState { int32 Step = 0, Shot = -1; float T = 0.f, ShotT = 0.f; };
+		TSharedPtr<FState> St = MakeShared<FState>();
+		FTimerHandle H0;
+		World->GetTimerManager().SetTimer(H0, FTimerDelegate::CreateLambda([W]()
+		{
+			if (AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr) { GM->bSoloQuali = false; GM->SoloLaps = 6; GM->StartSolo(); }
+		}), 6.f, false);
+		FTimerHandle H;
+		World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W, St]()
+		{
+			AGPMGameMode* GM = W.IsValid() ? W->GetAuthGameMode<AGPMGameMode>() : nullptr;
+			AGPMCar* C = GM ? GM->PlayerCar() : nullptr;
+			if (!C || !C->GetTrack()) return;
+			if (GM->Phase == AGPMGameMode::EPhase::Tuning) { GM->StartQuali(); return; }
+			if (GM->Phase == AGPMGameMode::EPhase::Prerace) { GM->Go(false); return; }
+			St->T += 0.25f;
+			if (GM->Phase == AGPMGameMode::EPhase::Intro)
+			{
+				const int32 Sh = GM->CineShot();
+				if (Sh != St->Shot) { St->Shot = Sh; St->ShotT = 0.f; }
+				St->ShotT += 0.25f;
+				if (FMath::IsNearlyEqual(St->ShotT, 1.25f)) GPMTest::Capture(FString::Printf(TEXT("S0_Intro%d"), Sh + 1));
+				return;
+			}
+			if (GM->Phase != AGPMGameMode::EPhase::Race) return;
+			C->bPlayerControlled = false;
+			APlayerController* PC = W->GetFirstPlayerController();
+			auto Shot = [St](const TCHAR* Name) { GPMTest::Capture(Name); St->Step++; St->T = 0.f; };
+			switch (St->Step)
+			{
+			case 0: if (GM->Clock > 14.f) { GM->RequestSafety(true); St->Step++; St->T = 0.f; } break;
+			case 1: if (St->T >= 4.f && GM->SafetyCar() && PC) { PC->SetViewTargetWithBlend(GM->SafetyCar(), 0.f); St->Step++; St->T = 0.f; } break;
+			case 2: if (St->T >= 1.f) { Shot(TEXT("S1_VoitureSecurite")); if (PC) PC->SetViewTargetWithBlend(C, 0.f); } break;
+			case 3: if (St->T >= 8.f) Shot(TEXT("S2_SousSC")); break;
+			case 4: if (GM->SCState == 2) Shot(TEXT("S3_RentreCeTour")); break;
+			case 5: if (GM->SCState == 3) Shot(TEXT("S4_Relance")); break;
+			case 6: if (GM->SCState == 0) { Shot(TEXT("S5_DrapeauVert")); GM->TestPenalty(1, 0.f); } break;
+			case 7: if (St->T >= 1.f) Shot(TEXT("S6_Enquete")); break;
+			case 8: if (St->T >= 2.f) { Shot(TEXT("S7_DriveThrough")); UE_LOG(LogGPM, Display, TEXT("TestSC : drive-through à purger, tour %d"), C->Lap); } break;
+			case 9: if (!C->PenKind && !C->PitPhase) { UE_LOG(LogGPM, Display, TEXT("TestSC : drive-through purgé, tour %d, arrêts %d"), C->Lap, C->Stops); GM->TestPenalty(0, 5.f); St->Step++; St->T = 0.f; } break;
+			case 10: if (St->T >= 3.f) { Shot(TEXT("S8_Penalite5s")); GM->RequestSafety(true, true); } break;
+			case 11: if (St->T >= 3.f) Shot(TEXT("S9_VSC")); break;
+			case 12: if (GM->SCState == 0) { UE_LOG(LogGPM, Display, TEXT("TestSC : fin, pénalité restante %.0f s, total %.0f s"), C->Penalty, C->PenSum); St->Step++; } break;
+			default: break;
+			}
+		}), 0.25f, true);
+	}));
