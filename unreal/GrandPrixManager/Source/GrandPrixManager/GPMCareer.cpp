@@ -132,10 +132,16 @@ void UGPMCareerSubsystem::ApplyIdentity()
 	// disposition du plateau : l'écurie du joueur est toujours la première ; l'écurie d'origine du jeu (Martel) devient une rivale
 	// quand le joueur rejoint une autre écurie (elle prend sa place) ou crée la 11e
 	BaseTeams = OrigTeams;
+	// 11e écurie qui porte le nom de l'écurie d'origine : la rivale change de nom (sinon les deux écuries se confondent
+	// au classement et sur la grille) ; une ancienne sauvegarde est remise en ordre une fois
+	const FString OrigName = OrigTeams[0].Name;
+	const bool bRename = G && G->bCreated && G->Layout == 2 && G->TeamName == OrigName;
+	if (bRename) RenameRival(OrigName, TEXT("Valcourt Racing"));
 	if (G && G->bCreated && G->Layout >= 1)
 	{
-		auto MartelRival = [](FGPMTeam& M)
+		auto MartelRival = [bRename](FGPMTeam& M)
 		{
+			if (bRename) M.Name = TEXT("Valcourt Racing");
 			if (M.Drivers.Num() < 2) return;
 			M.Drivers[0].Name = TEXT("R. Valcourt"); M.Drivers[0].bPlayer = false; M.Drivers[0].Skill = 0.95f;
 			M.Drivers[1].Name = TEXT("E. Montrand"); M.Drivers[1].Skill = 0.935f;
@@ -179,6 +185,40 @@ void UGPMCareerSubsystem::ApplyIdentity()
 				Data->Teams[t].Drivers[d].Name = *Who;
 				if (const float* Sk = G->Skill.Find(*Who)) Data->Teams[t].Drivers[d].Skill = *Sk;
 			}
+}
+
+void UGPMCareerSubsystem::RenameRival(const FString& Old, const FString& New)
+{
+	UGPMSaveGame* G = Save();
+	if (!G || G->Flags.Contains(TEXT("rivalRenamed"))) return;
+	G->Flags.Add(TEXT("rivalRenamed"));
+	const FString Pre = Old + TEXT("|");
+	auto Rekey = [&](auto& Map)
+	{
+		TArray<FString> Keys; Map.GetKeys(Keys);
+		for (const FString& K : Keys)
+			if (K.StartsWith(Pre)) { auto V = Map.FindRef(K); Map.Remove(K); Map.Add(New + K.Mid(Old.Len()), V); }
+	};
+	Rekey(G->Seats); Rekey(G->RivalChief);
+	if (const float* D = G->RivalDev.Find(Old)) { const float V = *D; G->RivalDev.Remove(Old); G->RivalDev.Add(New, V); }
+	if (const float* D = G->RivalFut.Find(Old)) { const float V = *D; G->RivalFut.Remove(Old); G->RivalFut.Add(New, V); }
+	// pilotes de la rivale : ceux de ses baquets, et ses pilotes d'origine ; leurs points passent à son classement
+	TArray<FString> Rivals = { TEXT("R. Valcourt"), TEXT("E. Montrand") };
+	for (const TPair<FString, FString>& P : G->Seats) if (P.Key.StartsWith(New + TEXT("|"))) Rivals.AddUnique(P.Value);
+	int32 Moved = 0;
+	for (const FString& D : Rivals)
+		if (D != G->MateName && D != TEXT("Toi") && G->DriverTeam.FindRef(D) == Old)
+		{
+			G->DriverTeam.Add(D, New);
+			Moved += G->DriverPts.FindRef(D);
+		}
+	if (Moved > 0)
+	{
+		int32& Mine = G->TeamPts.FindOrAdd(Old);
+		Mine = FMath::Max(0, Mine - Moved);
+		G->TeamPts.FindOrAdd(New) += Moved;
+	}
+	UE_LOG(LogGPM, Log, TEXT("Écurie rivale renommée : %s → %s (%d points)"), *Old, *New, Moved);
 }
 
 // ---------- création de l'écurie ----------

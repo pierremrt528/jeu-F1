@@ -7,11 +7,11 @@
 #include "GPMSeason.h"
 #include "Engine/GameInstance.h"
 
-void AGPMGameMode::RecordHonours(int32 Pos)
+FString AGPMGameMode::RecordHonours(int32 Pos)
 {
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	UGPMSaveGame* G = Season ? Season->State() : nullptr;
-	if (!G || !Car || !CurTrack()) return;
+	if (!G || !Car || !CurTrack()) return FString();
 	const FString Circ = CurTrack()->Name;
 	auto Add = [G](const TCHAR* Key) { G->Rec.FindOrAdd(Key)++; };
 	Add(TEXT("starts"));
@@ -36,9 +36,51 @@ void AGPMGameMode::RecordHonours(int32 Pos)
 			if (Old) G->News.Add(FString::Printf(TEXT("Nouveau record de l'écurie à %s : %d:%06.3f"), *Circ, int32(Car->BestLap) / 60, FMath::Fmod(Car->BestLap, 60.f)));
 		}
 	}
+	// duel avec l'équipier (course et qualifications)
+	for (int32 k = 0; k < Order.Num(); ++k)
+		if (Order[k] != Car && Order[k]->TeamIdx == Car->TeamIdx)
+		{
+			Add(TEXT("mateRaces"));
+			if (Pos >= 1 && Pos < k + 1) Add(TEXT("mateBeat"));
+			int32 MateGrid = -1;
+			for (int32 q = 0; q < QOrder.Num(); ++q) if (QOrder[q] == Order[k]) MateGrid = q;
+			if (MateGrid >= 0 && GridSlot < MateGrid) Add(TEXT("mateQBeat"));
+			break;
+		}
+	// pilote du jour, le vote des fans : la plus belle remontée, un bonus pour le podium, un peu de hasard
+	FString Dotd;
+	{
+		const AGPMCar* Best = nullptr;
+		int32 BestFrom = 0, BestTo = 0;
+		float BestScore = -1e9f;
+		for (int32 k = 0; k < Order.Num(); ++k)
+		{
+			const AGPMCar* C = Order[k];
+			if (C->bOut) continue;
+			int32 From = k + 1;
+			for (int32 q = 0; q < QOrder.Num(); ++q) if (QOrder[q] == C) From = q + 1;
+			if (C == Car.Get()) From = GridSlot + 1;
+			const float Score = float(From - (k + 1)) + (k == 0 ? 3.f : k < 3 ? 1.5f : 0.f) + FMath::FRandRange(0.f, 3.f);
+			if (Score > BestScore) { BestScore = Score; Best = C; BestFrom = From; BestTo = k + 1; }
+		}
+		if (Best)
+		{
+			const int32 Votes = FMath::RandRange(24, 46);
+			const FString Climb = BestFrom > BestTo ? FString::Printf(TEXT("de P%d à P%d"), BestFrom, BestTo) : FString::Printf(TEXT("P%d"), BestTo);
+			if (Best == Car.Get())
+			{
+				Add(TEXT("dotd"));
+				G->Rep = FMath::Min(100, G->Rep + 2);
+				G->Moral = FMath::Min(100, G->Moral + 3);
+				Dotd = FString::Printf(TEXT("Les fans t'élisent pilote du jour (%d %% des votes, %s) : réputation +2, moral +3."), Votes, *Climb);
+			}
+			else Dotd = FString::Printf(TEXT("Pilote du jour : %s (%d %% des votes, %s)."), *Best->DriverName, Votes, *Climb);
+		}
+	}
 	if (Pos == 1)
 	{
 		const int32 W = G->Rec.FindRef(TEXT("wins"));
 		if (W == 1 || W % 10 == 0) G->News.Add(W == 1 ? FString(TEXT("Première victoire de l'histoire de l'écurie !")) : FString::Printf(TEXT("%de victoire de l'histoire de l'écurie !"), W));
 	}
+	return Dotd;
 }

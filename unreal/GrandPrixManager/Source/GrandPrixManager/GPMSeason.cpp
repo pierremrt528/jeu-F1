@@ -158,7 +158,7 @@ TArray<FGPMStanding> UGPMSeasonSubsystem::Teams() const
 	for (const TPair<FString, int32>& P : S->TeamPts)
 	{
 		FGPMStanding Row; Row.Name = P.Key; Row.Pts = P.Value;
-		if (Data) for (int32 t = 0; t < Data->Teams.Num(); ++t) if (Data->Teams[t].Name == P.Key) { Row.Color = Data->Teams[t].Color; Row.bPlayer = t == 0; }
+		if (Data) for (int32 t = 0; t < Data->Teams.Num(); ++t) if (Data->Teams[t].Name == P.Key) { Row.Color = Data->Teams[t].Color; Row.bPlayer = Row.bPlayer || t == 0; }
 		Out.Add(Row);
 	}
 	Out.Sort([](const FGPMStanding& A, const FGPMStanding& B) { return A.Pts > B.Pts; });

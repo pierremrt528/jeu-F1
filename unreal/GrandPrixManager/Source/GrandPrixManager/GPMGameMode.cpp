@@ -1266,7 +1266,7 @@ void AGPMGameMode::RecordResult()
 		R.bFlat = bHadFlat;
 		R.bDnf = Car->bOut;
 		R.Circuit = CurTrack() ? CurTrack()->Name : FString();
-		RecordHonours(Pos);
+		const FString Dotd = RecordHonours(Pos);
 		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
 		R.OutWhy = Car->bOut ? Car->OutWhy : FString();
 		R.bRed = bRedUsed;
@@ -1295,6 +1295,7 @@ void AGPMGameMode::RecordResult()
 		for (int32 k = 0; k < Order.Num(); ++k) if (!G->MisWho.IsEmpty() && Order[k]->DriverName == G->MisWho) R.RivalPos = k + 1;
 		const float BeforeLife = G->Budget;
 		LastLines = Career->AfterRace(R);
+		if (!Dotd.IsEmpty()) LastLines.Insert(Dotd, 0);
 		G->FinPartner += G->Budget - BeforeLife;   // sponsor principal, contrats ponctuels, missions, primes de l'équipier
 		if (!Built.IsEmpty()) LastLines.Add(Built);
 		if (Car->bOut && Car->OutWhy == TEXT("moteur")) LastLines.Add(TEXT("Casse moteur : abandon. Le pôle Fiabilité de l'usine et un motoriste plus fiable réduisent ce risque."));

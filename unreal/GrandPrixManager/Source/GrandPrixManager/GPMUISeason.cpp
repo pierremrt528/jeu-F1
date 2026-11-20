@@ -617,6 +617,49 @@ TSharedRef<SWidget> FGPMUI::SponsorCard(AGPMGameMode* GM)
 	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Box, CCardBg, 14.f) ];
 }
 
+// ---------- course au titre : écart, points encore en jeu, ce qu'il faut pour être sacré au prochain GP ----------
+TSharedRef<SWidget> FGPMUI::TitleCard()
+{
+	UGPMSeasonSubsystem* S = SeasonSys();
+	UGPMCareerSubsystem* C = CareerSys();
+	if (!S || !C || S->IsOver() || S->Round() < 1) return SNullWidget::NullWidget;
+	const TArray<FGPMStanding> Drv = S->Drivers();
+	int32 Me = -1;
+	for (int32 k = 0; k < Drv.Num(); ++k) if (Drv[k].bPlayer) { Me = k; break; }
+	if (Me < 0 || Drv.Num() < 2) return SNullWidget::NullWidget;
+	const int32 Left = FMath::Max(0, S->NumRounds() - S->Round()), Pot = 26 * Left;   // 25 points + le meilleur tour par course
+	FString Head, Body;
+	FLinearColor Col = CText;
+	if (Me == 0)
+	{
+		const int32 Lead = Drv[0].Pts - Drv[1].Pts;
+		const FString Two = C->Display(Drv[1].Name);
+		if (Lead > Pot) { Head = TEXT("TITRE ASSURÉ"); Body = FString::Printf(TEXT("%d points d'avance sur %s : plus personne ne peut te rattraper."), Lead, *Two); Col = CGold; }
+		else
+		{
+			Head = FString::Printf(TEXT("LEADER · +%d PTS"), Lead);
+			const int32 Need = 26 * (Left - 1) + 1 - Lead;
+			Body = FString::Printf(TEXT("Devant %s, encore %d points en jeu sur %d Grand%s Prix."), *Two, Pot, Left, Left > 1 ? TEXT("s") : TEXT(""));
+			if (Left >= 1 && Need <= 26)
+				Body += Need <= 0 ? FString(TEXT(" Tu seras sacré au prochain Grand Prix.")) : FString::Printf(TEXT(" Sacré au prochain Grand Prix si tu marques au moins %d point%s de plus que %s."), Need, Need > 1 ? TEXT("s") : TEXT(""), *Two);
+			Col = CGood;
+		}
+	}
+	else
+	{
+		const int32 Gap = Drv[0].Pts - Drv[Me].Pts;
+		const FString One = C->Display(Drv[0].Name);
+		Head = FString::Printf(TEXT("P%d · −%d PTS"), Me + 1, Gap);
+		if (Gap > Pot) { Body = FString::Printf(TEXT("%s est hors de portée cette saison : vise la meilleure place possible au championnat."), *One); Col = CDim; }
+		else Body = FString::Printf(TEXT("À %d points de %s, encore %d points en jeu : il faut lui reprendre %.1f points par Grand Prix."), Gap, *One, Pot, Left ? float(Gap) / Left : 0.f);
+	}
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox);
+	Box->AddSlot().AutoHeight()[ Txt(TEXT("COURSE AU TITRE"), 12, CGold, true) ];
+	Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Txt(Head, 18, Col, true) ];
+	Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))[ Txt(Body, 13, CDim, false, true) ];
+	return SNew(SBox).Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Box, CCardBg, 14.f) ];
+}
+
 // ---------- mission du sponsor pour le prochain Grand Prix ----------
 
 TSharedRef<SWidget> FGPMUI::MissionCard()
@@ -909,6 +952,9 @@ TSharedRef<SWidget> FGPMUI::HonoursPanel()
 	Stat(TEXT("POLES"), FString::FromInt(R(TEXT("poles"))), CText);
 	Stat(TEXT("MEILLEURS TOURS"), FString::FromInt(R(TEXT("fast"))), CText);
 	Stat(TEXT("DOUBLÉS"), FString::FromInt(R(TEXT("doubles"))), CText);
+	Stat(TEXT("PILOTE DU JOUR"), FString::FromInt(R(TEXT("dotd"))), CText);
+	Stat(TEXT("DUEL ÉQUIPIER · GP"), R(TEXT("mateRaces")) ? FString::Printf(TEXT("%d / %d"), R(TEXT("mateBeat")), R(TEXT("mateRaces"))) : FString(TEXT("–")), CText);
+	Stat(TEXT("DUEL ÉQUIPIER · QUALIF"), R(TEXT("mateRaces")) ? FString::Printf(TEXT("%d / %d"), R(TEXT("mateQBeat")), R(TEXT("mateRaces"))) : FString(TEXT("–")), CText);
 	Stat(TEXT("TITRES PILOTES"), FString::FromInt(R(TEXT("dtitles"))), CGold);
 	Stat(TEXT("TITRES ÉCURIES"), FString::FromInt(R(TEXT("ttitles"))), CGold);
 	Stat(TEXT("MEILLEUR RÉSULTAT"), R(TEXT("best")) ? FString::Printf(TEXT("P%d"), R(TEXT("best"))) : FString(TEXT("–")), CText);

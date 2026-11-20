@@ -235,6 +235,7 @@ private:
 	void ApplyFx(const TSharedPtr<FJsonObject>& Fx, float Jit);
 	FString FxText(const TSharedPtr<FJsonObject>& Fx) const;
 	FGPMChoice ReadChoice(const TSharedPtr<FJsonObject>& O) const;
+	void RenameRival(const FString& Old, const FString& New);   // écurie d'origine renommée quand la tienne porte son nom
 	void BuildPress(const FGPMRaceCtx& R);
 	TArray<FGPMDialog> RaceQuestions(const FGPMRaceCtx& R) const;   // questions écrites à partir des faits de la course
 	void PickEvents();

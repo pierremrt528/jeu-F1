@@ -173,6 +173,7 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 	if (bTeam) { const int32 NUnread = C->Unread(); TabNames.Add(NUnread ? FString::Printf(TEXT("BOÎTE MAIL (%d)"), NUnread) : FString(TEXT("BOÎTE MAIL"))); TabNames.Add(TEXT("PALMARÈS")); }
 	TSharedRef<SScrollBox> LeftCol = SNew(SScrollBox);
 	LeftCol->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ HeroNext(GM) ];
+	if (bTeam) LeftCol->AddSlot()[ TitleCard() ];
 	LeftCol->AddSlot()[ MissionCard() ];
 	if (bTeam) LeftCol->AddSlot()[ SponsorCard(GM) ];
 	if (bTeam) LeftCol->AddSlot()[ EraCard(GM) ];

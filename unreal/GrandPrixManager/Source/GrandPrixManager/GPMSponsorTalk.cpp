@@ -55,6 +55,17 @@ FString UGPMCareerSubsystem::GoalName(const FString& Goal)
 float UGPMCareerSubsystem::GoalChance(const FString& Goal) const
 {
 	const float Exp = float(Expected());   // place attendue par la direction : 4, 9 ou 14
+	// la forme du moment compte : réussite de l'objectif sur les 8 derniers Grands Prix (la place attendue vaut 2 courses)
+	const int32 Lim = Goal == TEXT("pts") ? 10 : Goal == TEXT("top5") ? 5 : Goal == TEXT("podium") ? 3 : 0;
+	const UGPMSeasonSubsystem* Ss = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	if (Lim > 0 && Ss && Ss->Results().Num() >= 3)
+	{
+		const TArray<FGPMRaceResult>& Res = Ss->Results();
+		int32 Hit = 0, Seen = 0;
+		for (int32 k = Res.Num() - 1; k >= 0 && Seen < 8; --k, ++Seen) if (Res[k].Pos > 0 && Res[k].Pos <= Lim) ++Hit;
+		const float Prior = FMath::Clamp((Lim + 4.f - Exp) / 10.f, 0.03f, 0.9f);
+		return FMath::Clamp((Hit + 2.f * Prior) / (Seen + 2.f), 0.03f, 0.95f);
+	}
 	return Goal == TEXT("finish") ? 0.85f : Goal == TEXT("pts") ? FMath::Clamp((15.f - Exp) / 10.f, 0.1f, 0.9f) : Goal == TEXT("beatMate") ? 0.5f
 		: Goal == TEXT("gain") ? 0.45f : Goal == TEXT("top5") ? FMath::Clamp((9.f - Exp) / 10.f, 0.05f, 0.75f) : Goal == TEXT("podium") ? FMath::Clamp((7.f - Exp) / 10.f, 0.03f, 0.6f)
 		: Goal == TEXT("fl") ? FMath::Clamp((6.f - Exp) / 14.f, 0.02f, 0.35f) : 0.3f;

@@ -240,7 +240,7 @@ void AGPMScenery::BuildDecorMeshes()
 	int32 Total = 0;
 	for (const TPair<FString, TArray<FDecorItem>>& E : DecorItems)
 		for (const FDecorItem& It : E.Value)
-			if (E.Key != TEXT("tablier") && NearTrack(It.X * 100.f, It.Z * 100.f) < Track->Width / 2.f + 6.f)   // (le tablier de la passerelle passe exprès au-dessus de la piste, à 7 m)
+			if (E.Key != TEXT("tablier") && NearTrack(It.X * 100.f, It.Z * 100.f) < Track->Width / 2.f + 1.5f)   // (le tablier de la passerelle passe exprès au-dessus de la piste, à 7 m)
 				UE_LOG(LogGPM, Warning, TEXT("Décor sur la piste : %s (%.0f, %.0f)"), *E.Key, It.X, It.Z);
 	for (const TPair<FString, TArray<FDecorItem>>& E : DecorItems)
 	{

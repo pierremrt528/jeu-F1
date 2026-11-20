@@ -391,7 +391,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		if (!PC) return;
 		if (Dl->Chosen < 0)
 		{
-			for (int32 k = 0; k < Dl->Choices.Num() && k < 6; ++k)
+			for (int32 k = 0; k < Dl->Choices.Num() && k < 9; ++k)
 				if (AGPMGameMode::DigitPressed(PC, k + 1) && !Dl->Choices[k].bOff) { C->Choose(k); Touch(); return; }
 		}
 		else if (PC->WasInputKeyJustPressed(EKeys::Enter))
@@ -1332,7 +1332,7 @@ TSharedRef<SWidget> FGPMUI::DialogScreen(AGPMGameMode* GM)
 				[ Txt(Ch.Text, 18, Ch.bOff ? CFaint : CText, false, true) ];
 			Add(Pick(Content, false, [this, k]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Choose(k); }, !Ch.bOff), 10.f);
 		}
-		Add(Txt(TEXT("Touche une réponse (ou les touches 1 à 5)."), 13, CFaint), 0.f);
+		Add(Txt(FString::Printf(TEXT("Touche une réponse (ou les touches 1 à %d)."), FMath::Min(9, Dl->Choices.Num())), 13, CFaint), 0.f);
 	}
 	else
 	{

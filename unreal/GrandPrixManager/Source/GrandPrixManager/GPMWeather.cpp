@@ -298,9 +298,9 @@ int32 AGPMGameMode::SectorColour(int32 K) const
 
 bool AGPMGameMode::DigitPressed(const APlayerController* PC, int32 D)
 {
-	if (!PC || D < 1 || D > 6) return false;
-	static const FKey Top[6] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
-	static const FKey Pad[6] = { EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive, EKeys::NumPadSix };
-	static const FKey Azerty[6] = { EKeys::Ampersand, EKeys::E_AccentAigu, EKeys::Quote, EKeys::Apostrophe, EKeys::LeftParantheses, EKeys::Hyphen };
+	if (!PC || D < 1 || D > 9) return false;
+	static const FKey Top[9] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+	static const FKey Pad[9] = { EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven, EKeys::NumPadEight, EKeys::NumPadNine };
+	static const FKey Azerty[9] = { EKeys::Ampersand, EKeys::E_AccentAigu, EKeys::Quote, EKeys::Apostrophe, EKeys::LeftParantheses, EKeys::Hyphen, EKeys::E_AccentGrave, EKeys::Underscore, EKeys::C_Cedille };
 	return PC->WasInputKeyJustPressed(Top[D - 1]) || PC->WasInputKeyJustPressed(Pad[D - 1]) || PC->WasInputKeyJustPressed(Azerty[D - 1]);
 }

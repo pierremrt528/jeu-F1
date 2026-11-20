@@ -287,7 +287,7 @@ private:
 	TWeakObjectPtr<AGPMCar> SCLeader;
 	TSet<AGPMCar*> SCAhead;
 	void UpdateFlags(float Dt);
-	void RecordHonours(int32 Pos);   // palmarès et records de l'écurie après une course (GPMRecords.cpp)
+	FString RecordHonours(int32 Pos);   // palmarès et records de l'écurie après une course (GPMRecords.cpp)
 	void UpdateRed(float Dt);
 	struct FYellowZone { TWeakObjectPtr<AGPMCar> C; int32 At = 0; float Left = 0.f; };
 	TArray<FYellowZone> Yellows;

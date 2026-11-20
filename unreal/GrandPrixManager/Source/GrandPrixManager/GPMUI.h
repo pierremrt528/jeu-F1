@@ -154,6 +154,7 @@ private:
 	TSharedRef<SWidget> InboxPanel();
 	TSharedRef<SWidget> MissionCard();
 	TSharedRef<SWidget> SponsorCard(AGPMGameMode* GM);
+	TSharedRef<SWidget> TitleCard();
 	TSharedRef<SWidget> EraCard(AGPMGameMode* GM);
 	TSharedRef<SWidget> ChampScreen(AGPMGameMode* GM);
 	TSharedRef<SWidget> QualiScreen(AGPMGameMode* GM);
