@@ -1231,6 +1231,23 @@ void AGPMGameMode::RecordResult()
 	// plateau (celle du joueur comprise), et selon leurs moyens (les grandes écuries investissent plus).
 	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
 	{
+		// les rivaux réagissent quand tu domines : plus tu enchaînes les podiums (6 derniers GP), plus ils poussent leur développement
+		float React = 1.f;
+		{
+			const TArray<FGPMRaceResult>& Res = Season->Results();
+			int32 Pods = 0, Seen = 0;
+			for (int32 k = Res.Num() - 1; k >= 0 && Seen < 6; --k, ++Seen) if (Res[k].Pos >= 1 && Res[k].Pos <= 3) ++Pods;
+			const float Dom = Seen >= 4 ? FMath::Clamp((Pods - 2.f) / 4.f, 0.f, 1.f) : 0.f;
+			React = 1.f + 0.8f * Dom;
+			const FString Flag = FString::Printf(TEXT("react%d"), G->Year);
+			if (Dom >= 0.5f && !G->Flags.Contains(Flag))
+			{
+				G->Flags.Add(Flag);
+				if (UGPMCareerSubsystem* CS = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
+					CS->SendMail(TEXT("presse"), TEXT("Paddock"), TEXT("Tes rivaux contre-attaquent"),
+						TEXT("Ta domination agace le paddock : les grandes écuries rivales débloquent des budgets d'urgence et accélèrent leurs évolutions. Attends-toi à les voir revenir dans les prochaines courses : garde ton usine en mouvement."));
+			}
+		}
 		float BestCar = Factory->PlayerPerf();
 		for (int32 t = 1; t < Data->Teams.Num(); ++t) BestCar = FMath::Max(BestCar, Data->Teams[t].Perf + G->RivalDev.FindRef(Data->Teams[t].Name));
 		for (int32 t = 1; t < Data->Teams.Num(); ++t)
@@ -1239,7 +1256,7 @@ void AGPMGameMode::RecordResult()
 			const float Room = FMath::Clamp(1.f - Dev / 0.15f, 0.15f, 1.3f);
 			const float Catch = 1.f + 0.6f * FMath::Clamp((BestCar - Mine) / 0.05f, 0.f, 1.f);
 			const float Means = 0.85f + 0.25f * FMath::Clamp((Data->Teams[t].Perf - 0.95f) / 0.04f, 0.f, 1.f);
-			Factory->RivalGain(Data->Teams[t].Name, (0.0022f + FMath::FRand() * 0.0028f) * Room * Catch * Means * Factory->RivalDevMul(Data->Teams[t].Name));
+			Factory->RivalGain(Data->Teams[t].Name, (0.0022f + FMath::FRand() * 0.0028f) * Room * Catch * Means * React * Factory->RivalDevMul(Data->Teams[t].Name));
 		}
 	}
 	// l'usine avance jusqu'au GP suivant (GAPS de season.js, en jours)
