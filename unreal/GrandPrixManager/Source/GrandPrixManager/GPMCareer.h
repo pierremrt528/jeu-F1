@@ -100,6 +100,8 @@ class GRANDPRIXMANAGER_API UGPMCareerSubsystem : public UGameInstanceSubsystem
 
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	/** Options de carrière (réglages) : difficulté des négociations 0 facile, 1 normale, 2 dure ; durée de la carrière en saisons (0 = illimitée). */
+	static int32 NegoLevel, CareerLen;
 
 	bool IsCreated() const;
 	/** Identité, motoriste, équipier et transferts appliqués aux écuries de data.json. */

@@ -147,6 +147,7 @@ private:
 	TSharedRef<SWidget> StandingsPanel();
 	TSharedRef<SWidget> CalendarPanel();
 	TSharedRef<SWidget> PerfPanel();
+	TSharedRef<SWidget> HonoursPanel();
 	TSharedRef<SWidget> InboxPanel();
 	TSharedRef<SWidget> MissionCard();
 	TSharedRef<SWidget> EraCard(AGPMGameMode* GM);

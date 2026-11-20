@@ -337,6 +337,9 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("AILevel"), AILevel, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
+	GConfig->GetInt(TEXT("GPM"), TEXT("NegoLevel"), UGPMCareerSubsystem::NegoLevel, GGameUserSettingsIni);
+	GConfig->GetInt(TEXT("GPM"), TEXT("CareerLen"), UGPMCareerSubsystem::CareerLen, GGameUserSettingsIni);
+	UGPMCareerSubsystem::NegoLevel = FMath::Clamp(UGPMCareerSubsystem::NegoLevel, 0, 2);
 	AGPMCar::LoadAIOptions();
 	AILevel = FMath::Clamp(AILevel, 0, 4);
 	FuelK = FMath::Clamp(FuelK, 0, 4);
@@ -398,6 +401,8 @@ void AGPMGameMode::SaveSettings()
 		GConfig->SetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
 		GConfig->SetInt(TEXT("GPM"), TEXT("AILevel"), AILevel, GGameUserSettingsIni);
 		GConfig->SetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("NegoLevel"), UGPMCareerSubsystem::NegoLevel, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("CareerLen"), UGPMCareerSubsystem::CareerLen, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
 	ApplySettings();
@@ -538,6 +543,7 @@ void AGPMGameMode::StartRace()
 	for (AGPMCar* C : Grid) C->BestLap = 0.f;
 	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f; bRecorded = false;
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
+	RedState = 0; bRedUsed = bYellowPrev = bYellow = bBlueFlag = false; Yellows.Reset(); YellowAhead.Reset(); BlueT = 0.f; BlueWarn = CrashRun = 0; SCCall = -1; CrashAt = -100.f;
 	bSCUsed = false; SCAhead.Reset(); SCState = 0; SCCount = 0; SCPassed = 0; GreenT = StewardT = 0.f; Inquiries.Reset(); bStewardInquiry = false;
 	for (AGPMCar* C : Cars) C->SlowMul = 1.f;
 	GoAt = 4.2f + 0.4f + FMath::FRand() * 0.8f;
@@ -694,6 +700,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		if (LightsT >= GoAt) { Phase = EPhase::Race; for (AGPMCar* C : Cars) C->bHold = false; }
 	}
 	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
+	UpdateRed(DeltaSeconds);
 	if (Scenery) Scenery->SetStartLights(LightsOn());
 	// mécaniciens du carré : prêts quand une voiture de l'écurie arrive, au travail pendant l'arrêt (pas pendant un stop-and-go)
 	if (Scenery && Car && (Phase == EPhase::Race || Phase == EPhase::Quali || Phase == EPhase::Lights))
@@ -718,6 +725,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		if (!bSCUsed && UGameplayStatics::HasOption(OptionsString, TEXT("sc")) && Clock > 20.f) RequestSafety(true);
 		UpdateSafety(DeltaSeconds);
 		Stewards(DeltaSeconds);
+		UpdateFlags(DeltaSeconds);
 	}
 	GreenT -= DeltaSeconds; StewardT -= DeltaSeconds;
 	RadioT -= DeltaSeconds;
@@ -853,7 +861,7 @@ void AGPMGameMode::AutoCapture(float Dt)
 
 void AGPMGameMode::RequestSafety(bool bForce, bool bVirtual)
 {
-	if (SCState || SCCount >= 2 || Phase != EPhase::Race || Order.Num() == 0) return;
+	if (SCState || RedState || SCCount >= 2 || Phase != EPhase::Race || Order.Num() == 0) return;
 	const AGPMCar* Lead = Order[0];
 	const FGPMTrackData* T = Lead->GetTrack();
 	if (!T) return;
@@ -1114,6 +1122,21 @@ void AGPMGameMode::Strategy(float Dt)
 				Say(FString::Printf(TEXT("Muret : box, box ! Prends la voie des stands à droite : pneus %s."), *TyreName(C->NextTyre)));
 			}
 		}
+		// neutralisation : le peloton roule au ralenti, un arrêt coûte bien moins cher → on avance l'arrêt prévu dans les 6 tours
+		if ((SafetyOut() || SCState == 4) && !C->bBox && Left >= 3)
+		{
+			int32 NextStop = 999;
+			if (Pl.IsValidIndex(C->Stops + 1)) { NextStop = 0; for (int32 s = 0; s <= C->Stops; ++s) NextStop += Pl[s].Value; }
+			if (NextStop - C->Lap <= 6 || C->Wear > 0.4f)
+			{
+				if (bAuto) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
+				else if (SCCall != SCCount)
+				{
+					SCCall = SCCount; C->bAdvised = true; C->NextTyre = NextStopTyre(C);
+					Say(FString::Printf(TEXT("Muret : box, box sous %s ! L'arrêt coûte deux fois moins de temps : pneus %s prêts."), SCState == 4 ? TEXT("la VSC") : TEXT("la voiture de sécurité"), *TyreName(C->NextTyre)));
+				}
+			}
+		}
 		// IA : pluie, piste sèche, crevaison, pneus à bout, aileron cassé
 		if (bAuto && !C->bBox && WantBox(C)) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
 		// joueur : conseil du muret, une fois par tour
@@ -1240,6 +1263,7 @@ void AGPMGameMode::RecordResult()
 		R.bFlat = bHadFlat;
 		R.bDnf = Car->bOut;
 		R.Circuit = CurTrack() ? CurTrack()->Name : FString();
+		RecordHonours(Pos);
 		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
 		const int32 RivalIdx = Pos >= 2 ? Pos - 2 : 1;
 		if (Order.IsValidIndex(RivalIdx)) R.Rival = Order[RivalIdx]->DriverName;
@@ -1291,11 +1315,25 @@ void AGPMGameMode::RecordResult()
 			const TArray<FGPMStanding> Dr = Season->Drivers(), Tm = Season->Teams();
 			for (int32 k = 0; k < Dr.Num(); ++k) if (Dr[k].bPlayer) { MyD = k + 1; MyPts = Dr[k].Pts; }
 			for (int32 k = 0; k < Tm.Num(); ++k) if (Tm[k].bPlayer) MyT = k + 1;
+			// vitrine : titres et records de saison
+			if (MyD == 1) { G->Rec.FindOrAdd(TEXT("dtitles"))++; G->Trophies.Add(FString::Printf(TEXT("%d|Championnat des pilotes|0"), G->Year)); }
+			if (MyT == 1) { G->Rec.FindOrAdd(TEXT("ttitles"))++; G->Trophies.Add(FString::Printf(TEXT("%d|Championnat des écuries|0"), G->Year)); }
+			G->Rec.Add(TEXT("bestpts"), FMath::Max(G->Rec.FindRef(TEXT("bestpts")), MyPts));
+			G->Rec.Add(TEXT("bestwins"), FMath::Max(G->Rec.FindRef(TEXT("bestwins")), Wins));
 			G->Honours.Add(FString::Printf(TEXT("%d : pilote P%d (%d pts), écurie P%d · %d victoire%s, %d podium%s · champion : %s (%s)%s"), G->Year, MyD, MyPts, MyT, Wins, Wins > 1 ? TEXT("s") : TEXT(""),
 				Pods, Pods > 1 ? TEXT("s") : TEXT(""), Dr.Num() ? *Dr[0].Name : TEXT("?"), Tm.Num() ? *Tm[0].Name : TEXT("?"), MyD == 1 && MyT == 1 ? TEXT(" · DOUBLÉ pilotes et écuries") : MyD == 1 ? TEXT(" · TITRE PILOTES") : MyT == 1 ? TEXT(" · TITRE ÉCURIES") : TEXT("")));
 			FString Pal;
 			for (int32 k = G->Honours.Num() - 1; k >= 0; --k) Pal += (Pal.IsEmpty() ? TEXT("• ") : TEXT("\n• ")) + G->Honours[k];
 			Career->SendMail(TEXT("equipe"), TEXT("Service de presse"), FString::Printf(TEXT("Palmarès de %s"), *G->TeamName), Pal);
+			// carrière à durée fixée : bilan de fin de mandat (on peut continuer ensuite, sans limite)
+			if (UGPMCareerSubsystem::CareerLen > 0 && G->Year - 2026 == UGPMCareerSubsystem::CareerLen)
+			{
+				const int32 Ti = G->Rec.FindRef(TEXT("dtitles")) + G->Rec.FindRef(TEXT("ttitles")), Wi = G->Rec.FindRef(TEXT("wins"));
+				const TCHAR* Grade = Ti >= 2 ? TEXT("Légende du sport") : Ti == 1 ? TEXT("Champion") : Wi >= 5 ? TEXT("Grand directeur") : Wi >= 1 ? TEXT("Vainqueur de Grands Prix") : TEXT("Bâtisseur");
+				Career->SendMail(TEXT("direction"), TEXT("Conseil d'administration"), TEXT("Fin de ton mandat"), FString::Printf(
+					TEXT("Ton mandat de %d saisons est terminé. Verdict du conseil : %s.\n\n%d Grands Prix, %d victoires, %d podiums, %d poles, %d titre(s).\n\nLe conseil te propose de rester : la carrière continue sans limite (onglet Palmarès pour tout revoir)."),
+					UGPMCareerSubsystem::CareerLen, Grade, G->Rec.FindRef(TEXT("starts")), Wi, G->Rec.FindRef(TEXT("pods")), G->Rec.FindRef(TEXT("poles")), Ti));
+			}
 			const float Start = G->FinStart < 0.f ? G->Budget : G->FinStart, Spent = Start + G->FinPrize + G->FinPartner - G->Budget;
 			int32 Levels = 0;
 			for (const FGPMBuilding& B : Factory->Buildings()) Levels += Factory->Level(B.Id);

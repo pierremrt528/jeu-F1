@@ -833,3 +833,109 @@ TSharedRef<SWidget> FGPMUI::InboxPanel()
 			Card(Reader, CCardBg, 18.f)
 		];
 }
+
+// ---------- palmarès de l'écurie : compteurs, vitrine des trophées, records du tour, bilan des saisons ----------
+
+TSharedRef<SWidget> FGPMUI::HonoursPanel()
+{
+	UGPMSeasonSubsystem* S = SeasonSys();
+	const UGPMSaveGame* G = S ? S->State() : nullptr;
+	if (!G) return SNullWidget::NullWidget;
+	auto R = [G](const TCHAR* Key) { return G->Rec.FindRef(Key); };
+	TSharedRef<SWrapBox> Stats = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(8.f, 8.f));
+	auto Stat = [this, &Stats](const FString& Label, const FString& Value, const FLinearColor& Col)
+	{
+		Stats->AddSlot()
+		[
+			SNew(SBox).WidthOverride(118.f)
+			[
+				Card(SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(Value, 24, Col, true) ]
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(Label, 11, CDim) ], CCardBg, 10.f)
+			]
+		];
+	};
+	const int32 Starts = R(TEXT("starts"));
+	Stat(TEXT("GRANDS PRIX"), FString::FromInt(Starts), CText);
+	Stat(TEXT("VICTOIRES"), FString::FromInt(R(TEXT("wins"))), CGold);
+	Stat(TEXT("PODIUMS"), FString::FromInt(R(TEXT("pods"))), CText);
+	Stat(TEXT("POLES"), FString::FromInt(R(TEXT("poles"))), CText);
+	Stat(TEXT("MEILLEURS TOURS"), FString::FromInt(R(TEXT("fast"))), CText);
+	Stat(TEXT("DOUBLÉS"), FString::FromInt(R(TEXT("doubles"))), CText);
+	Stat(TEXT("TITRES PILOTES"), FString::FromInt(R(TEXT("dtitles"))), CGold);
+	Stat(TEXT("TITRES ÉCURIES"), FString::FromInt(R(TEXT("ttitles"))), CGold);
+	Stat(TEXT("MEILLEUR RÉSULTAT"), R(TEXT("best")) ? FString::Printf(TEXT("P%d"), R(TEXT("best"))) : FString(TEXT("–")), CText);
+	Stat(TEXT("ABANDONS"), FString::FromInt(R(TEXT("dnf"))), CBad);
+	Stat(TEXT("RECORD DE POINTS"), FString::FromInt(R(TEXT("bestpts"))), CText);
+	Stat(TEXT("VICTOIRES EN 1 SAISON"), FString::FromInt(R(TEXT("bestwins"))), CText);
+
+	// vitrine : titres d'abord, puis victoires et podiums, du plus récent au plus ancien
+	TSharedRef<SVerticalBox> Cab = SNew(SVerticalBox);
+	TArray<FString> Tro = G->Trophies;
+	Tro.StableSort([](const FString& A, const FString& B)
+	{
+		TArray<FString> Pa, Pb;
+		A.ParseIntoArray(Pa, TEXT("|")); B.ParseIntoArray(Pb, TEXT("|"));
+		const int32 Ka = Pa.Num() > 2 ? FCString::Atoi(*Pa[2]) : 9, Kb = Pb.Num() > 2 ? FCString::Atoi(*Pb[2]) : 9;
+		if (Ka != Kb) return Ka < Kb;
+		return (Pa.Num() ? FCString::Atoi(*Pa[0]) : 0) > (Pb.Num() ? FCString::Atoi(*Pb[0]) : 0);
+	});
+	for (int32 k = 0; k < Tro.Num() && k < 24; ++k)
+	{
+		TArray<FString> P;
+		Tro[k].ParseIntoArray(P, TEXT("|"));
+		if (P.Num() < 3) continue;
+		const int32 Place = FCString::Atoi(*P[2]);
+		const FLinearColor Col = Place <= 1 ? CGold : Place == 2 ? FLinearColor(0.6f, 0.62f, 0.66f, 1.f) : FLinearColor(0.55f, 0.27f, 0.08f, 1.f);
+		const FString What = Place == 0 ? FString(TEXT("TITRE")) : Place == 1 ? FString(TEXT("Victoire")) : FString::Printf(TEXT("%de place"), Place);
+		Cab->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Dot(Col, Place == 0 ? 14.f : 10.f) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))[ Txt(P[0], 13, CFaint) ]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[ Txt(P[1], 14, Place == 0 ? CGold : CText, Place == 0) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(What, 13, Col, true) ]
+		];
+	}
+	if (Tro.Num() == 0) Cab->AddSlot().AutoHeight()[ Txt(TEXT("La vitrine est vide : ton premier podium y entrera."), 13, CFaint, false, true) ];
+	if (Tro.Num() > 24) Cab->AddSlot().AutoHeight()[ Txt(FString::Printf(TEXT("… et %d autres trophées"), Tro.Num() - 24), 12, CFaint) ];
+
+	// record du tour de l'écurie sur chaque circuit
+	TSharedRef<SVerticalBox> Laps = SNew(SVerticalBox);
+	for (const TPair<FString, float>& L : G->LapRec)
+		Laps->AddSlot().AutoHeight().Padding(FMargin(0.f, 1.f))
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(L.Key, 13, CText) ]
+			+ SHorizontalBox::Slot().AutoWidth()[ Txt(FString::Printf(TEXT("%d:%06.3f"), int32(L.Value) / 60, FMath::Fmod(L.Value, 60.f)), 13, CGood, true) ]
+		];
+	if (G->LapRec.Num() == 0) Laps->AddSlot().AutoHeight()[ Txt(TEXT("Les records apparaîtront après tes courses jouées."), 13, CFaint, false, true) ];
+
+	TSharedRef<SVerticalBox> Past = SNew(SVerticalBox);
+	for (int32 k = G->Honours.Num() - 1; k >= 0; --k) Past->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(G->Honours[k], 12, CDim, false, true) ];
+
+	TSharedRef<SScrollBox> Box = SNew(SScrollBox);
+	Box->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Txt(FString::Printf(TEXT("PALMARÈS DE %s"), *G->TeamName.ToUpper()), 14, CDim, true) ];
+	Box->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Stats ];
+	Box->AddSlot().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(FMargin(0.f, 0.f, 14.f, 0.f))
+		[
+			Card(SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Txt(TEXT("VITRINE DES TROPHÉES"), 13, CDim, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Cab ], CCardBg, 14.f)
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		[
+			Card(SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Txt(TEXT("RECORDS DU TOUR DE L'ÉCURIE"), 13, CDim, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Laps ], CCardBg, 14.f)
+		]
+	];
+	if (G->Honours.Num())
+		Box->AddSlot()[ Card(SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Txt(TEXT("SAISON PAR SAISON"), 13, CDim, true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Past ], CCardBg, 14.f) ];
+	return Box;
+}

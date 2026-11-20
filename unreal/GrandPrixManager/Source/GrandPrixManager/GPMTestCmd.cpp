@@ -373,7 +373,7 @@ static FAutoConsoleCommandWithWorldAndArgs GTestScCmd(TEXT("GPM.TestSC"), TEXT("
 				if (FMath::IsNearlyEqual(St->ShotT, 1.25f)) GPMTest::Capture(FString::Printf(TEXT("S0_Intro%d"), Sh + 1));
 				return;
 			}
-			if (GM->Phase != AGPMGameMode::EPhase::Race) return;
+			if (GM->Phase != AGPMGameMode::EPhase::Race && GM->RedState != 2) return;
 			C->bPlayerControlled = false;
 			APlayerController* PC = W->GetFirstPlayerController();
 			auto Shot = [St](const TCHAR* Name) { GPMTest::Capture(Name); St->Step++; St->T = 0.f; };
@@ -392,6 +392,10 @@ static FAutoConsoleCommandWithWorldAndArgs GTestScCmd(TEXT("GPM.TestSC"), TEXT("
 			case 10: if (St->T >= 3.f) { Shot(TEXT("S8_Penalite5s")); GM->RequestSafety(true, true); } break;
 			case 11: if (St->T >= 3.f) Shot(TEXT("S9_VSC")); break;
 			case 12: if (GM->SCState == 0) { UE_LOG(LogGPM, Display, TEXT("TestSC : fin, pénalité restante %.0f s, total %.0f s"), C->Penalty, C->PenSum); St->Step++; } break;
+			case 13: if (St->T >= 2.f) { GM->RedFlag(TEXT("Test : drapeau rouge"), true); St->Step++; St->T = 0.f; } break;
+			case 14: if (St->T >= 2.f) Shot(TEXT("S10_DrapeauRouge")); break;
+			case 15: if (GM->Phase == AGPMGameMode::EPhase::Lights && GM->LightsT > -6.f) Shot(TEXT("S11_Suspendue")); break;
+			case 16: if (GM->RedState == 0 && GM->Phase == AGPMGameMode::EPhase::Race) { Shot(TEXT("S12_Reprise")); UE_LOG(LogGPM, Display, TEXT("TestSC : reprise après drapeau rouge, tour %d, pneus %c"), C->Lap, C->Tyre); } break;
 			default: break;
 			}
 		}), 0.25f, true);

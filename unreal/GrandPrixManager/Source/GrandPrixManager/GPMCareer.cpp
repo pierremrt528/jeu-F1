@@ -44,6 +44,9 @@ namespace
 		TEXT("Pixalto"), TEXT("Verdania") };
 }
 
+int32 UGPMCareerSubsystem::NegoLevel = 1;
+int32 UGPMCareerSubsystem::CareerLen = 0;
+
 void UGPMCareerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Collection.InitializeDependency<UGPMDataSubsystem>();
@@ -921,13 +924,13 @@ void UGPMCareerSubsystem::OpenNego(const FGPMMarketDriver& D, bool bExtend)
 		if (G->MateRole == TEXT("n2") && Nego.bWantN1) Int -= 15.f; // mais il en a assez d'être N°2
 	}
 	Nego.Interest = FMath::Clamp(FMath::RoundToInt(Int), 5, 95);
-	Nego.Patience = P.Pat;
+	Nego.Patience = FMath::Max(1, P.Pat + (NegoLevel == 0 ? 1 : NegoLevel == 2 ? -1 : 0));   // difficulté des négociations
 	Nego.Years = Nego.Pers == TEXT("fidele") ? (bVet ? 2 : 3) : ((Nego.Pers == TEXT("mercenaire") || bVet) ? 1 : 2);
 	Nego.Role = Nego.bWantN1 || (bExtend && G->MateRole == TEXT("n1")) ? TEXT("n1") : TEXT("eq");
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	const bool bMid = Season && Season->Round() > 0 && !Season->IsOver();
 	const UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
-	Nego.Ask = FMath::Max(0.3f, Salary(D)) * P.Greed * (1.f + (55 - Nego.Interest) / 160.f) * (bMid && !bExtend ? 1.2f : 1.f) * (Factory ? Factory->SalaryCut() : 1.f);
+	Nego.Ask = FMath::Max(0.3f, Salary(D)) * P.Greed * (1.f + (55 - Nego.Interest) / 160.f) * (bMid && !bExtend ? 1.2f : 1.f) * (Factory ? Factory->SalaryCut() : 1.f) * (NegoLevel == 0 ? 0.92f : NegoLevel == 2 ? 1.1f : 1.f);
 	if (bExtend && G->MateSal > 0.f) Nego.Ask = FMath::Max(Nego.Ask, G->MateSal * 1.05f);   // jamais moins que son salaire actuel
 	Nego.Demand = FMath::CeilToFloat(Nego.Ask * 1.1f * 10.f) / 10.f;
 	Nego.Fee = bExtend ? 0.f : FeeOf(D);
@@ -1073,7 +1076,7 @@ void UGPMCareerSubsystem::OfferDialog(const FString& Line)
 		Nego.D.Spd, Nego.D.Strat, Nego.D.Tyre, Nego.D.Pot);
 	float Cost = 0.f;
 	const float Score = OfferValue(Cost);
-	const float Thr = 1.f - (Nego.Interest - 50) / 500.f;
+	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (NegoLevel - 1) * 0.05f;
 	const TCHAR* Mood = Score >= Thr + 0.02f ? TEXT("il devrait accepter") : Score >= Thr - 0.14f ? TEXT("il hésite, encore un effort") : TEXT("offre trop basse, il risque de se fâcher");
 	const float Budget = G ? G->Budget : 0.f;
 	Dl.Text = FString::Printf(TEXT("« %s »\n\nCoût immédiat de ton offre : %.1f M€ (budget %.1f M€)%s · Avis de l'agent : %s."), *Line, Cost, Budget,
@@ -1138,7 +1141,7 @@ void UGPMCareerSubsystem::BuildAct(int32 Action)
 	if (Action != 30) { OfferDialog(Nego.OLine); return; }
 	float Cost = 0.f;
 	const float Score = OfferValue(Cost);
-	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (FMath::FRand() - 0.5f) * 0.04f;
+	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (NegoLevel - 1) * 0.05f + (FMath::FRand() - 0.5f) * 0.04f;
 	if (Score >= Thr) { Close(); return; }
 	FString Line;
 	if (Score >= Thr - 0.14f)
@@ -1184,7 +1187,7 @@ void UGPMCareerSubsystem::NegoAct(int32 Action)
 	const float Clause = Action == 6 ? ClauseOf(Nego.Demand) : 0.f;
 	const float ClauseT = Action != 6 ? 0.f : Nego.Pers == TEXT("mercenaire") ? 0.12f : Nego.Pers == TEXT("ambitieux") ? 0.1f : Nego.Pers == TEXT("jeune") ? 0.06f : 0.03f;
 	const float Score = (Bid + (Pod + Win) * BonusW) / Nego.Ask + RoleT + ClauseT - (Nego.bWantN1 && Role != TEXT("n1") ? 0.12f : 0.f);
-	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (FMath::FRand() - 0.5f) * 0.04f;
+	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (NegoLevel - 1) * 0.05f + (FMath::FRand() - 0.5f) * 0.04f;
 	if (Score >= Thr)
 	{
 		Nego.Demand = Bid; Nego.Role = Role; Nego.Pod = Pod; Nego.Win = Win; Nego.Clause = Clause;

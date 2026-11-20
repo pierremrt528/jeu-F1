@@ -68,6 +68,11 @@ public:
 	UPROPERTY() float FinPrize = 0.f;
 	UPROPERTY() float FinPartner = 0.f;
 	UPROPERTY() TArray<FString> Honours;
+	// Palmarès de l'écurie, d'une saison à l'autre : compteurs (starts, wins, pods, poles, fast, dnf, doubles, dtitles, ttitles, best, bestpts, bestwins),
+	// vitrine des trophées « année|épreuve|place » (place 0 = titre), record du tour de l'écurie sur chaque circuit
+	UPROPERTY() TMap<FString, int32> Rec;
+	UPROPERTY() TArray<FString> Trophies;
+	UPROPERTY() TMap<FString, float> LapRec;
 	UPROPERTY() int32 Rescues = 0;
 	// Disposition du plateau : 0 ancienne (l'écurie du joueur prend la place de la première), 1 le joueur a rejoint une écurie existante
 	// (JoinTeam), 2 le joueur a créé sa propre écurie : 11 écuries au départ

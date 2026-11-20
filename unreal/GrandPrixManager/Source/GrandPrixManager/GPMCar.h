@@ -38,6 +38,8 @@ public:
 
 	/** Place la voiture sur la grille (Slot 0 = pole) du circuit donné. */
 	void PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot = 0);
+	/** Drapeau rouge : retour sur la grille (Slot) en gardant la course (tour NewLap), pneus neufs NewTyre et voiture réparée. */
+	void Regrid(int32 Slot, int32 NewLap, TCHAR NewTyre);
 	float Pursuit(float InLane) const;
 
 	/** Couleurs de l'écurie (provisoire : modèle en formes simples). */

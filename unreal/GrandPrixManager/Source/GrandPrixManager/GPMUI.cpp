@@ -335,6 +335,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
 	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
+	H = HashCombine(H, GetTypeHash(UGPMCareerSubsystem::NegoLevel * 7 + UGPMCareerSubsystem::CareerLen * 31 + SeasonTab * 1000));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, HashCombine(GM->Setup.Hash(), GetTypeHash(GM->SetupRow)));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
@@ -408,7 +409,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 			if (!(Drv.Num() && Drv[0].bPlayer) && !(Tms.Num() && Tms[0].bPlayer)) GM->bChampShown = true;
 		}
 		// Tab : classements, calendrier, performance
-		if (PC && PC->WasInputKeyJustPressed(EKeys::Tab)) { SeasonTab = (SeasonTab + 1) % (C && C->IsCreated() ? 4 : 3); Touch(); }
+		if (PC && PC->WasInputKeyJustPressed(EKeys::Tab)) { SeasonTab = (SeasonTab + 1) % (C && C->IsCreated() ? 5 : 3); Touch(); }
 	}
 	else if (GM->Phase == EP::Factory && PC)
 	{
@@ -1160,6 +1161,43 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Levels ],
 			CCardBg, 14.f)
 	];
+	// options de carrière : difficulté des négociations (exigences, patience, seuil d'accord) et durée du mandat
+	{
+		TSharedRef<SHorizontalBox> NegoBtns = SNew(SHorizontalBox), LenBtns = SNew(SHorizontalBox);
+		static const TCHAR* const NegoName[3] = { TEXT("Facile"), TEXT("Normale"), TEXT("Dure") };
+		static const TCHAR* const NegoHelp[3] = {
+			TEXT("Agents conciliants : demandes plus basses, plus de patience."),
+			TEXT("Les agents défendent leur pilote, sans excès."),
+			TEXT("Agents redoutables : demandes plus hautes, peu de patience, offres serrées refusées.") };
+		for (int32 k = 0; k < 3; ++k)
+			NegoBtns->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
+			[
+				Button(NegoName[k], UGPMCareerSubsystem::NegoLevel == k ? Acc : CNeutral, [WGM, k]() { UGPMCareerSubsystem::NegoLevel = k; if (WGM.IsValid()) WGM->SaveSettings(); }, true, 100.f, 44.f, 14)
+			];
+		static const int32 Lens[4] = { 0, 3, 5, 10 };
+		for (int32 k = 0; k < 4; ++k)
+			LenBtns->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
+			[
+				Button(Lens[k] ? FString::Printf(TEXT("%d saisons"), Lens[k]) : FString(TEXT("Illimitée")), UGPMCareerSubsystem::CareerLen == Lens[k] ? Acc : CNeutral,
+					[WGM, k]() { UGPMCareerSubsystem::CareerLen = Lens[k]; if (WGM.IsValid()) WGM->SaveSettings(); }, true, 100.f, 44.f, 14)
+			];
+		auto OptRow = [this](const FString& Head, const FString& Sub, const TSharedRef<SWidget>& Btns)
+		{
+			return Card(SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(Head, 20, CText, true) ]
+					+ SVerticalBox::Slot().AutoHeight()[ Txt(Sub, 14, CDim, false, true) ]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Btns ],
+				CCardBg, 14.f);
+		};
+		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Négociations (carrière)"), NegoHelp[FMath::Clamp(UGPMCareerSubsystem::NegoLevel, 0, 2)], NegoBtns) ];
+		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Durée de la carrière"),
+			UGPMCareerSubsystem::CareerLen ? FString::Printf(TEXT("Bilan du conseil après %d saisons, puis tu peux continuer sans limite."), UGPMCareerSubsystem::CareerLen)
+				: FString(TEXT("Saisons illimitées : l'écurie, l'usine et le palmarès continuent d'année en année.")), LenBtns) ];
+	}
 	// comportement des IA en course : agressivité (dépassements, défense, distance de sécurité) et erreurs de pilotage
 	TSharedRef<SHorizontalBox> Aggro = SNew(SHorizontalBox);
 	static const TCHAR* const AggroName[3] = { TEXT("Prudent"), TEXT("Normal"), TEXT("Agressif") };

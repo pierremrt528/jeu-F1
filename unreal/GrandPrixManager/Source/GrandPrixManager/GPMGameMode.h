@@ -73,6 +73,12 @@ public:
 	bool SafetyOut() const { return SCState >= 1 && SCState <= 3; }
 	float GreenT = 0.f;   // bandeau « drapeau vert » après une neutralisation
 	AGPMCar* SafetyCar() const;
+	/** Drapeaux (GPMFlags.cpp) : jaune local (voiture arrêtée, tête-à-queue), bleu (le joueur va être pris d'un tour), rouge (course suspendue). */
+	bool bYellow = false, bBlueFlag = false;
+	FString BlueBy, RedWhy;
+	uint8 RedState = 0;   // 1 drapeau rouge (tout le monde ralentit), 2 course suspendue (sur la grille, reprise aux feux)
+	float RedT = 0.f;
+	void RedFlag(const FString& Why, bool bForce = false);
 	void TestPenalty(uint8 Kind, float Sec);   // tests (GPM.TestSC)
 	/** Commissaires : dernier communiqué (HUD), pilote concerné, durée d'affichage ; enquête en cours. */
 	FString StewardHead, StewardWhy;
@@ -262,6 +268,15 @@ private:
 	int32 SCCount = 0, SCLeadLap = 0, SCPassed = 0;   // neutralisations de la course ; tour du leader au début de la relance
 	TWeakObjectPtr<AGPMCar> SCLeader;
 	TSet<AGPMCar*> SCAhead;
+	void UpdateFlags(float Dt);
+	void RecordHonours(int32 Pos);   // palmarès et records de l'écurie après une course (GPMRecords.cpp)
+	void UpdateRed(float Dt);
+	struct FYellowZone { TWeakObjectPtr<AGPMCar> C; int32 At = 0; float Left = 0.f; };
+	TArray<FYellowZone> Yellows;
+	TArray<TWeakObjectPtr<AGPMCar>> YellowAhead;
+	float BlueT = 0.f, CrashAt = -100.f;
+	int32 BlueWarn = 0, SCCall = -1, CrashRun = 0;
+	bool bRedUsed = false, bYellowPrev = false;
 	TCHAR PickTyre(int32 LapsLeft) const;
 	int32 GridSlot = 9;
 	int32 Pending = 0;   // après le chargement d'un circuit : 0 = qualifs (test), 1 = accueil, 2 = QG (bienvenue), 3 = grille en fond, 4 = réglages, 5 = stratégie

@@ -85,6 +85,12 @@ void AGPMGameMode::Retire(AGPMCar* C, const TCHAR* Why)
 	else Say(FString::Printf(TEXT("Muret : abandon de %s (%s)."), *C->DriverName, bEngine ? TEXT("casse moteur") : TEXT("accident")));
 	UE_LOG(LogGPM, Log, TEXT("Abandon : %s (%s), %s, tour %d"), *C->DriverName, *C->TeamName, Why, C->Lap);
 	RequestSafety(false, bEngine ? FMath::FRand() < 0.7f : FMath::FRand() < 0.35f);
+	// deux accidents rapprochés (ou parfois un seul très gros) : drapeau rouge, la piste est à nettoyer
+	if (bEngine) return;
+	CrashRun = Clock - CrashAt < 10.f ? CrashRun + 1 : 1;
+	CrashAt = Clock;
+	if ((CrashRun >= 2 && FMath::FRand() < 0.6f) || FMath::FRand() < 0.05f)
+		RedFlag(CrashRun >= 2 ? TEXT("Plusieurs voitures accidentées : piste encombrée") : TEXT("Accident : barrières à réparer"));
 }
 
 FString AGPMGameMode::ResultGap(const AGPMCar* C) const

@@ -827,6 +827,11 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			TopY = Banner(SCTxt[FMath::Min<int32>(GM->SCState, 5)], TopY, bBlinkSC ? RaceGreen : RaceYellow, RaceInk, 11.f) + 4.f * S;
 		}
 		else if (GM->GreenT > 0.f) TopY = Banner(TEXT("DRAPEAU VERT"), TopY, RaceGreen, FLinearColor::White, 11.f) + 4.f * S;
+		// drapeaux : rouge (course suspendue), jaune local (danger devant, pas de dépassement), bleu (laisse passer le leader)
+		const bool bFlagBlink = FMath::Fmod(GetWorld()->GetRealTimeSeconds(), 0.7f) < 0.45f;
+		if (GM->RedState) TopY = Banner(GM->RedState == 1 ? TEXT("DRAPEAU ROUGE · COURSE SUSPENDUE") : TEXT("COURSE SUSPENDUE · RETOUR SUR LA GRILLE"), TopY, RaceRed, FLinearColor::White, 11.f) + 4.f * S;
+		else if (GM->bYellow) TopY = Banner(TEXT("DRAPEAU JAUNE · DANGER, PAS DE DÉPASSEMENT"), TopY, bFlagBlink ? RaceYellow : RaceA(RaceYellow, 0.7f), RaceInk, 10.f) + 4.f * S;
+		if (GM->bBlueFlag) TopY = Banner(FString::Printf(TEXT("DRAPEAU BLEU · LAISSE PASSER %s"), *Code3(GM->BlueBy)), TopY, bFlagBlink ? RaceBlue : RaceA(RaceBlue, 0.7f), FLinearColor::White, 10.f) + 4.f * S;
 		// communiqué des commissaires : enquête (jaune) puis décision (rouge), avec le code du pilote
 		if (GM->StewardT > 0.f && !GM->StewardHead.IsEmpty())
 		{
@@ -857,6 +862,16 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		}
 		if (GM->Phase == AGPMGameMode::EPhase::Race && !Car->bFinished && !Car->bOut) DrawRadioPad(GM, Car);
 		if (GM->Phase == AGPMGameMode::EPhase::Lights) DrawLights(GM->LightsOn(), W);
+		if (GM->Phase == AGPMGameMode::EPhase::Lights && GM->RedState == 2 && GM->LightsT < 0.f)
+		{
+			// interruption : panneau au centre avec le compte à rebours de la reprise
+			const float SusW = 300.f * S, SusH = 66.f * S, SusX = (W - SusW) * 0.5f, SusY = H * 0.36f;
+			Panel(SusX, SusY, SusW, SusH, RacePanel);
+			DrawRect(RaceRed, SusX, SusY, SusW, 4.f * S);
+			Ink(TEXT("COURSE SUSPENDUE"), W * 0.5f, SusY + 10.f * S, 0, 13.f, FLinearColor::White, 0.5f);
+			Ink(FString::Printf(TEXT("REPRISE DANS %d S · DÉPART ARRÊTÉ"), FMath::CeilToInt(-GM->LightsT)), W * 0.5f, SusY + 32.f * S, 1, 7.f, RaceYellow, 0.5f);
+			Ink(GM->RedWhy + TEXT(" · pneus neufs, voitures réparées"), W * 0.5f, SusY + 46.f * S, 2, 5.5f, RaceDim, 0.5f);
+		}
 		else if (GM->Phase == AGPMGameMode::EPhase::Race && GM->Clock < 1.5f)
 		{
 			// « GO ! » vert avec un halo, qui s'efface
