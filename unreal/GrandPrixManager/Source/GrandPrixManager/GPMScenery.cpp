@@ -460,8 +460,8 @@ void AGPMScenery::BuildTrees()
 	auto Leaf = [&]() -> FLinearColor
 	{
 		if (Th.TreeHue >= 0.f)
-			return FLinearColor(FMath::Frac(Th.TreeHue + Rnd.FRandRange(-1.f, 1.f) * FMath::Max(0.02f, Th.TreeHueSpan)) * 360.f, Rnd.FRandRange(0.6f, 0.85f), Rnd.FRandRange(0.12f, 0.24f)).HSVToLinearRGB();
-		return FLinearColor(Rnd.FRandRange(78.f, 115.f), Rnd.FRandRange(0.6f, 0.85f), Rnd.FRandRange(0.08f, 0.17f)).HSVToLinearRGB();
+			return FLinearColor(FMath::Frac(Th.TreeHue + Rnd.FRandRange(-1.f, 1.f) * FMath::Max(0.02f, Th.TreeHueSpan)) * 360.f, Rnd.FRandRange(0.6f, 0.85f), Rnd.FRandRange(0.15f, 0.28f)).HSVToLinearRGB();
+		return FLinearColor(Rnd.FRandRange(78.f, 115.f), Rnd.FRandRange(0.55f, 0.8f), Rnd.FRandRange(0.11f, 0.22f)).HSVToLinearRGB();
 	};
 	int32 Placed = 0;
 	for (int32 Try = 0; Try < Want * 3 && Placed < Want; ++Try)
@@ -520,7 +520,7 @@ void AGPMScenery::BuildTrees()
 				const FVector Pts[2] = { G, G + FVector(0, 0, 220.f * Sc) };
 				const float Rad[2] = { 32.f * Sc, 22.f * Sc };
 				GPMTreeGeo::Tube(Buf, Pts, Rad, 2, FLinearColor(0.06f, 0.035f, 0.02f));
-				const FLinearColor Col = FLinearColor(Rnd.FRandRange(100.f, 140.f), Rnd.FRandRange(0.5f, 0.72f), Rnd.FRandRange(0.045f, 0.09f)).HSVToLinearRGB();
+				const FLinearColor Col = FLinearColor(Rnd.FRandRange(100.f, 140.f), Rnd.FRandRange(0.5f, 0.72f), Rnd.FRandRange(0.06f, 0.12f)).HSVToLinearRGB();
 				const float H = 1300.f * Sc;
 				for (int32 Lv = 0; Lv < 4; ++Lv)
 					GPMTreeGeo::Tier(Buf, G + FVector(0, 0, 150.f * Sc + H * 0.22f * Lv), 300.f * Sc * (1.f - 0.2f * Lv), H * 0.36f, Yaw + Lv * 0.7f, Col * (1.f + 0.08f * Lv));

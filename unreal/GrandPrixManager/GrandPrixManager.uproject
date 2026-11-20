@@ -9,7 +9,6 @@
 	"Plugins": [
 		{ "Name": "ChaosVehiclesPlugin", "Enabled": true },
 		{ "Name": "EnhancedInput", "Enabled": true },
-		{ "Name": "CommonUI", "Enabled": true },
 		{ "Name": "ProceduralMeshComponent", "Enabled": true },
 		{ "Name": "Metasound", "Enabled": true },
 		{ "Name": "Niagara", "Enabled": true },

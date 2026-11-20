@@ -18,6 +18,8 @@
 #include "GPMScenery.h"
 #include "GPMSky.h"
 #include "GPMDebris.h"
+#include "GPMRain.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GPMEngineSound.h"
 #include "GPMSeason.h"
 #include "GPMFactory.h"
@@ -26,6 +28,7 @@
 #include "Engine/Engine.h"
 #include "RenderCore.h"
 #include "RHI.h"
+#include "RHIStats.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Misc/ConfigCacheIni.h"
@@ -104,6 +107,7 @@ void AGPMGameMode::SetupWorld()
 		L->RecaptureSky();
 	}
 	Debris = W->SpawnActor<AGPMDebris>();   // éclats de carbone et ailerons arrachés
+	Rain3D = W->SpawnActor<AGPMRain>();     // gerbes d'eau derrière les voitures, gouttes autour de la caméra
 	// atelier 3D des écrans de gestion : une pièce fermée 600 m sous le circuit, cachée pendant la course
 	Showroom = W->SpawnActor<AGPMShowroom>(FVector(0.f, 0.f, -60000.f), FRotator::ZeroRotator);
 	if (Showroom) { Showroom->Build(); Showroom->SetShown(false); }
@@ -130,6 +134,21 @@ void AGPMGameMode::SetupWorld()
 	}
 	// image un peu plus nette (le lissage des bords adoucit les lignes fines : vibreurs, grillages, lignes blanches)
 	if (IConsoleVariable* Sharpen = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Tonemapper.Sharpen"))) Sharpen->Set(0.5f, ECVF_SetByCode);
+	// Fluidité (mesurée avec GPM.TestPerf sur un MacBook Air M3) : le lissage TSR des réglages « Épique » coûtait ~4 ms
+	// et faisait tomber la résolution à 55 % (image floue). Lissage FXAA en pleine résolution, ombres sur 2 cascades.
+	auto SetCV = [](const TCHAR* Name, const TCHAR* Value)
+	{
+		if (IConsoleVariable* CV = IConsoleManager::Get().FindConsoleVariable(Name)) CV->Set(Value, ECVF_SetByCode);
+	};
+	SetCV(TEXT("r.AntiAliasingMethod"), TEXT("1"));
+	SetCV(TEXT("r.FXAA.Quality"), TEXT("4"));
+	SetCV(TEXT("r.Shadow.CSM.MaxCascades"), TEXT("2"));
+	SetCV(TEXT("r.Shadow.DistanceScale"), TEXT("0.8"));
+	SetCV(TEXT("r.AmbientOcclusionLevels"), TEXT("0"));
+	SetCV(TEXT("r.SSR.Quality"), TEXT("0"));
+	SetCV(TEXT("r.LensFlareQuality"), TEXT("0"));
+	SetCV(TEXT("r.ScreenPercentage"), TEXT("100"));
+	ScreenPct = 100;
 }
 
 // Ambiance du circuit (thème de data.js) : direction du soleil, brouillard, puis le décor
@@ -277,7 +296,9 @@ void AGPMGameMode::UpdatePerf(float Dt)
 	FrameAvg = FrameAvg * 0.95f + Dt * 0.05f;
 	Fps = 1.f / FMath::Max(0.001f, FrameAvg);
 	PerfT += Dt; PerfLogT += Dt;
-	if (PerfT >= 1.5f)
+	PerfWorst = FMath::Max(PerfWorst, Dt);
+	if (Dt > 0.025f) ++PerfHitch;
+	if (PerfT >= 1.5f && !bPerfTest)
 	{
 		PerfT = 0.f;
 		// résolution adaptative : seulement quand la carte graphique est le goulot (baisser la résolution n'aide pas sinon)
@@ -287,7 +308,7 @@ void AGPMGameMode::UpdatePerf(float Dt)
 		if (Fps < 50.f && bGpuBound) Want -= 10;
 		else if (Fps < 56.f && bGpuBound) Want -= 5;
 		else if (Fps > 58.f || (bGpuKnown && GpuMs < 11.f)) Want += 5;
-		Want = FMath::Clamp(Want, 55, 100);
+		Want = FMath::Clamp(Want, 75, 100);   // sous 75 %, l'image devient trop floue
 		if (Want != ScreenPct)
 		{
 			ScreenPct = Want;
@@ -298,8 +319,10 @@ void AGPMGameMode::UpdatePerf(float Dt)
 	{
 		PerfLogT = 0.f;
 		// temps de l'image par fil (jeu, rendu, carte graphique) pour savoir ce qui ralentit
-		UE_LOG(LogGPM, Log, TEXT("Fluidité : %.0f i/s, résolution %d %% · jeu %.1f ms, rendu %.1f ms, GPU %.1f ms"), Fps, ScreenPct,
-			FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()));
+		UE_LOG(LogGPM, Log, TEXT("Fluidité : %.0f i/s, résolution %d %% · jeu %.1f ms, rendu %.1f ms, GPU %.1f ms · %d à-coups, pire image %.0f ms · %d appels de dessin"), Fps, ScreenPct,
+			FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime), FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
+			PerfHitch, PerfWorst * 1000.f, GNumDrawCallsRHI[0]);
+		PerfHitch = 0; PerfWorst = 0.f;
 	}
 }
 
@@ -314,6 +337,7 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetBool(TEXT("GPM"), TEXT("Sound"), bSetSound, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("AILevel"), AILevel, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
+	AGPMCar::LoadAIOptions();
 	AILevel = FMath::Clamp(AILevel, 0, 4);
 	FuelK = FMath::Clamp(FuelK, 0, 4);
 }
@@ -383,7 +407,11 @@ void AGPMGameMode::ApplySettings()
 {
 	if (!Car) return;
 	Car->Assist.bABS = bSetABS; Car->Assist.bTC = bSetTC; Car->Assist.bStab = bSetStab;
-	if (Car->IsCockpit() != bSetCockpit) Car->ToggleCamera();
+	// caméra au départ : la dernière choisie (touche C) ; la case « cockpit au départ » des réglages l'emporte quand on la change
+	int32 Want = bSetCockpit ? 2 : 0, Saved = -1;
+	if (GConfig) GConfig->GetInt(TEXT("GPM"), TEXT("CamMode"), Saved, GGameUserSettingsIni);
+	if (Saved >= 0 && Saved <= 2 && (Saved == 2) == bSetCockpit) Want = Saved;
+	if (Car->GetCamMode() != Want) Car->SetCamMode(Want);
 }
 
 const FGPMTrackData* AGPMGameMode::CurTrack() const
@@ -432,6 +460,7 @@ void AGPMGameMode::StartQuali()
 	Car->Idx = I; Car->X = T->WX[I]; Car->Z = T->WZ[I]; Car->Y = T->WY[I]; Car->Heading = T->H[I];
 	Car->Lat = Car->Lane = 0.f; Car->V = 45.f; Car->bHold = false;
 	Car->Field = { Car.Get() };
+	bQInvalid = false;
 	ResetWeather();
 	if (Debris) Debris->Clear();
 	// tendres pour le tour lancé, intermédiaires ou pneus pluie sur piste mouillée
@@ -456,7 +485,7 @@ void AGPMGameMode::EndQuali()
 {
 	Phase = EPhase::QualiDone;
 	bGridReady = true;
-	const float Mine = Car->LastLap;
+	const float Mine = bQInvalid ? 0.f : Car->LastLap;   // limites de piste franchies : le tour ne compte pas
 	// 3e secteur et records perso
 	if (QSplit[1] > 0.f && Mine > QSplit[1]) { QSec[2] = Mine - QSplit[1]; QCol[2] = SectorColour(2); }
 	for (int32 k = 0; k < 3; ++k) if (QSec[k] > 0.f && (QPB[k] <= 0.f || QSec[k] < QPB[k])) QPB[k] = QSec[k];
@@ -544,6 +573,7 @@ void AGPMGameMode::StartRace()
 	Car->Fuel = PlayerStartFuel(FuelK);
 	Car->Mass = 1.f + Car->Fuel / 750.f;
 	FuelWarn = 0;
+	RollReliability();   // moteurs qui faibliront pendant cette course
 	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 	ApplySettings();
@@ -573,6 +603,23 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	UpdateRoom();
 	UpdateCine(DeltaSeconds);
 	UpdateSky(DeltaSeconds);
+	// pluie en 3D : seulement en piste (pas dans les menus ni l'atelier)
+	if (Rain3D)
+	{
+		APlayerController* PCam = GetWorld()->GetFirstPlayerController();
+		if (InMenu() || !PCam || !PCam->PlayerCameraManager) Rain3D->Clear();
+		else
+		{
+			// vue embarquée (T-cam, cockpit) : gouttes sur l'objectif ; pas pendant les cinématiques
+			// voitures lointaines sans ombre (plus de 70 m de la caméra), feu arrière allumé sous la pluie
+			const FVector CamAt = PCam->PlayerCameraManager->GetCameraLocation();
+			const bool bLight = bRaining || TrackWet > 0.3f;
+			for (AGPMCar* C : Order)
+				if (C) { C->SetNear(FVector::DistSquared(C->GetActorLocation(), CamAt) < FMath::Square(7000.f)); C->SetRainLight(bLight); }
+			USceneComponent* Onboard = Car && PCam->GetViewTarget() == Car.Get() ? Car->OnboardCam() : nullptr;
+			Rain3D->UpdateRain(DeltaSeconds, PCam->PlayerCameraManager->GetCameraLocation(), PCam->PlayerCameraManager->GetCameraRotation(), Order, TrackWet, RainShow, Onboard, Car ? Car->V : 0.f);
+		}
+	}
 	AutoCapture(DeltaSeconds);
 	// pointeur de la souris visible dans les menus et les écrans de résultats (sur ordinateur), caché en course
 	if (APlayerController* PCur = GetWorld()->GetFirstPlayerController())
@@ -594,6 +641,12 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	}
 	if (InMenu())
 	{
+		// après la révélation de la monoplace : la présentation devant la presse (fenêtre à choix)
+		if (bRevealDialog && Cine != ECine::Welcome)
+		{
+			bRevealDialog = false; bReveal = false;
+			if (UGPMCareerSubsystem* CR = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>()) if (CR->Current()) { bNegoFromMercato = false; Phase = EPhase::Press; }
+		}
 		if (Cine == ECine::None) StartCine(ECine::Menu);
 		// contrat signé pendant une négociation : poignée de main et photo dans l'atelier
 		if (UGPMCareerSubsystem* CS = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>())
@@ -620,8 +673,10 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 			if (PC->WasInputKeyJustPressed(EKeys::Enter) || PC->WasInputKeyJustPressed(EKeys::SpaceBar)) EndCine();
 		if (Phase == EPhase::Intro) return;   // la course attend la fin du survol
 	}
+	if (bTesting && Phase == EPhase::Quali) { TrackLimits(DeltaSeconds); TestTick(DeltaSeconds); return; }
 	if (Phase == EPhase::Quali || Phase == EPhase::QualiDone)
 	{
+		TrackLimits(DeltaSeconds);
 		RadioT -= DeltaSeconds;
 		if (Phase == EPhase::Quali) UpdateSectors();
 		if (Phase == EPhase::Quali && Car && Car->Lap >= 2) EndQuali();
@@ -640,6 +695,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 	else if (Phase == EPhase::Race) Clock += DeltaSeconds;
 	Aspiration(DeltaSeconds);
 	Collide();
+	TrackLimits(DeltaSeconds);
 	if (Phase == EPhase::Race)
 	{
 		Strategy(DeltaSeconds);
@@ -655,20 +711,68 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		if (DigitPressed(PC, 3) || PC->WasInputKeyJustPressed(EKeys::N)) RadioCall(2);
 	}
 	// arrivée : tour de plus que la distance de course
-	for (AGPMCar* C : Cars)
-		if (!C->bFinished && C->Lap > TotalLaps) { C->bFinished = true; C->FinishTime = Clock; }
-	if (Phase == EPhase::Race && Car && Car->bFinished)
+	// (drapeau à damier : une fois le vainqueur arrivé, chaque voiture termine à son prochain passage sur la ligne, même à un tour)
+	const bool bLive = Phase != EPhase::Done && Phase != EPhase::Outro;   // après l'arrivée, le classement ne bouge plus
+	if (bLive)
 	{
-		Car->bPlayerControlled = false;   // le pilote automatique ramène la voiture
+		bool bNew = false;
+		for (AGPMCar* C : Cars)
+		{
+			if (C->bFinished || C->bOut) continue;
+			if (C->Lap > TotalLaps || (C->FlagLap >= 0 && C->Lap > C->FlagLap))
+			{
+				C->bFinished = true; C->FinishTime = Clock; bNew = true;
+				C->FinProgress = float(C->Lap) * (C->GetTrack() ? C->GetTrack()->WX.Num() : 1);
+			}
+		}
+		if (bNew) for (AGPMCar* C : Cars) if (!C->bFinished && !C->bOut && C->FlagLap < 0) C->FlagLap = C->Lap;
+	}
+	if (Phase == EPhase::Race && Car && (Car->bFinished || Car->bOut))
+	{
+		if (Car->bFinished) Car->bPlayerControlled = false;   // le pilote automatique ramène la voiture
 		DoneT += DeltaSeconds;
 		bool bAll = true;
-		for (AGPMCar* C : Cars) bAll &= C->bFinished;
+		for (AGPMCar* C : Cars) bAll &= C->bFinished || C->bOut;
 		if (DoneT > 4.f || bAll)
 		{
 			Phase = EPhase::Done;
+			// voitures encore en piste : elles finissent leur tour au rythme de leur dernier tour (temps calculé, classement figé)
+			// (le joueur a abandonné avant le drapeau : le reste de la course est calculé jusqu'au bout, arrêts et casses compris)
+			bool bFlagOut = false;
+			for (const AGPMCar* C : Cars) bFlagOut |= C->bFinished;
+			for (AGPMCar* C : Cars)
+			{
+				const FGPMTrackData* Tc = C->GetTrack();
+				if (C->bFinished || C->bOut || !Tc) continue;
+				const int32 Nc = FMath::Max(1, Tc->WX.Num());
+				const float LapT = C->LastLap > 0.f ? C->LastLap : LapEstimate;
+				if (bFlagOut)
+				{
+					C->FinishTime = Clock + (1.f - float(C->Idx) / Nc) * LapT + (C->PitPhase ? 12.f : 0.f);
+					C->FinProgress = float(C->Lap + 1) * Nc;
+					continue;
+				}
+				const float* FailAt = EngineBlown.Contains(C) ? EngineFailAt.Find(C) : nullptr;
+				if (FailAt)
+				{
+					C->bOut = true; C->OutWhy = TEXT("moteur");
+					C->FinProgress = FMath::Max(C->Progress(), (1.f + *FailAt * TotalLaps) * Nc);
+					continue;
+				}
+				const float Pace = (C->BestLap > 0.f ? C->BestLap * 1.012f : LapT) * (1.f + 0.003f * (FMath::FRand() * 2.f - 1.f));
+				const int32 StopsLeft = FMath::Max(0, C->Plan.Num() - 1 - C->Stops);
+				C->FinishTime = Clock + FMath::Max(0.f, TotalLaps + 1 - C->Lap - float(C->Idx) / Nc) * Pace + StopsLeft * Tc->PitLoss + (C->PitPhase ? 12.f : 0.f);
+				C->FinProgress = float(TotalLaps + 1) * Nc;
+			}
+			Order.Sort([](const AGPMCar& A, const AGPMCar& B)
+			{
+				if (A.bOut != B.bOut) return B.bOut;
+				if (A.FinProgress != B.FinProgress) return A.FinProgress > B.FinProgress;
+				return A.bOut ? false : A.FinishTime + A.Penalty < B.FinishTime + B.Penalty;
+			});
 			RecordResult();
 			// tour d'honneur autour de la voiture après un podium (confettis pour une victoire)
-			const int32 P = PositionOf(Car);
+			const int32 P = Car->bOut ? 0 : PositionOf(Car);
 			if (P >= 1 && P <= 3)
 			{
 				CineTitle = P == 1 ? TEXT("VICTOIRE !") : FString::Printf(TEXT("PODIUM : P%d"), P);
@@ -679,11 +783,15 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		}
 	}
 	// classement : arrivés par temps, puis tours et distance parcourue
-	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
+	// (abandons derniers, le plus loin d'abord ; à tours égaux, les arrivés par temps, pénalités comprises)
+	if (Phase != EPhase::Done && Phase != EPhase::Outro) Order.Sort([](const AGPMCar& A, const AGPMCar& B)
 	{
-		if (A.bFinished != B.bFinished) return A.bFinished;
-		if (A.bFinished) return A.FinishTime + A.Penalty < B.FinishTime + B.Penalty;
-		return A.Progress() > B.Progress();
+		if (A.bOut != B.bOut) return B.bOut;
+		if (A.bOut) return A.FinProgress > B.FinProgress;
+		const float Ka = A.bFinished ? A.FinProgress : A.Progress(), Kb = B.bFinished ? B.FinProgress : B.Progress();
+		if (A.bFinished && B.bFinished && Ka == Kb) return A.FinishTime + A.Penalty < B.FinishTime + B.Penalty;
+		if (Ka != Kb) return Ka > Kb;
+		return A.bFinished && !B.bFinished;
 	});
 	if (Phase == EPhase::Done)
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
@@ -758,7 +866,9 @@ void AGPMGameMode::UpdateSafety(float Dt)
 	if (!SC) return;
 	SCT += Dt;
 	// fin : peloton regroupé (moins de 22 m par voiture), ou au bout de 75 s
-	const float Spread = Order.Num() > 1 ? (Order[0]->Progress() - Order.Last()->Progress()) * 2.f : 0.f;
+	const AGPMCar* LastRun = nullptr;   // dernière voiture encore en course (les abandons ne comptent pas)
+	for (int32 k = Order.Num() - 1; k >= 0 && !LastRun; --k) if (!Order[k]->bOut) LastRun = Order[k];
+	const float Spread = LastRun && Order.Num() > 1 ? (Order[0]->Progress() - LastRun->Progress()) * 2.f : 0.f;
 	if (SCEnding <= 0.f && ((SCT > 25.f && Spread < Order.Num() * 22.f) || SCT > 75.f))
 	{
 		SCEnding = 4.f;
@@ -780,7 +890,7 @@ void AGPMGameMode::UpdateSafety(float Dt)
 	for (auto It = SCAhead.CreateIterator(); It; ++It)
 	{
 		AGPMCar* C = *It;
-		if (C->PitPhase) { It.RemoveCurrent(); continue; }
+		if (C->PitPhase || C->bOut) { It.RemoveCurrent(); continue; }
 		if (Car->Progress() - C->Progress() > 4.f)
 		{
 			It.RemoveCurrent();
@@ -816,6 +926,19 @@ void AGPMGameMode::Strategy(float Dt)
 	{
 		const FGPMTrackData* T = C->GetTrack();
 		if (!T) continue;
+		// abandon : la voiture s'arrête en roue libre, puis les commissaires l'évacuent (celle du joueur reste sur place)
+		if (C->bOut)
+		{
+			C->OutT += Dt;
+			C->PowerMul = 0.05f; C->AccMul = 0.f; C->DmgNew = C->DmgNewR = 0.f;
+			C->V = FMath::Max(0.f, C->V - 7.f * Dt);
+			if (C != Car && !C->bParked && (C->V < 2.f || C->OutT > 12.f))
+			{
+				Park(C, true);
+				for (AGPMCar* O : Cars) O->Field.Remove(C);
+			}
+			continue;
+		}
 		// chocs de l'image (murs, contacts) : dégâts sur l'aileron touché
 		if (C->DmgNew > 0.f) { AddDamage(C, C->DmgNew, false); C->DmgNew = 0.f; }
 		if (C->DmgNewR > 0.f) { AddDamage(C, C->DmgNewR, true); C->DmgNewR = 0.f; }
@@ -833,7 +956,7 @@ void AGPMGameMode::Strategy(float Dt)
 		{
 			// usure : distance, glissades (fortement), sorties de piste, mode ; les pneus pluie fondent sur le sec
 			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
-			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode) * C->UpTyre;
+			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode) * C->UpTyre * C->SetupFx.Wear;
 			K *= AGPMCar::WetWear(C->Tyre, TrackWet);
 			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
 			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel * AGPMCar::ModeFuel(C->Mode));
@@ -842,7 +965,7 @@ void AGPMGameMode::Strategy(float Dt)
 			{
 				C->bFlat = true;
 				if (Left >= 1 && !C->bFinished) { C->bBox = true; C->NextTyre = NextStopTyre(C); }
-				if (C == Car) Say(TEXT("Muret : crevaison ! Rentre au stand doucement, on change les pneus."));
+				if (C == Car) { bHadFlat = true; Say(TEXT("Muret : crevaison ! Rentre au stand doucement, on change les pneus.")); }
 				else Say(FString::Printf(TEXT("Muret : crevaison pour %s !"), *C->DriverName));
 			}
 		}
@@ -851,6 +974,7 @@ void AGPMGameMode::Strategy(float Dt)
 		const bool bDry = C->Fuel <= 0.f && !C->bFinished && Phase == EPhase::Race;
 		C->PowerMul = AGPMCar::ModeV(C->Mode) * (C->bFlat ? 0.8f : 1.f) * (bDry ? 0.35f : 1.f);
 		C->AccMul = AGPMCar::ModeA(C->Mode) * (bDry ? 0.3f : 1.f);
+		if (EngineTrouble(C)) { C->PowerMul *= 0.93f; C->AccMul *= 0.8f; }   // ennui moteur : moins de puissance jusqu'à l'arrivée
 		if (C == Car && !C->bFinished && Phase == EPhase::Race)
 		{
 			if (bDry && FuelWarn < 2) { FuelWarn = 2; Say(TEXT("Muret : panne sèche ! Plus d'essence, la voiture n'avance plus qu'au ralenti.")); }
@@ -885,8 +1009,13 @@ void AGPMGameMode::Strategy(float Dt)
 				C->Fuel = FMath::Max(C->Fuel, FMath::Min(Tank, FuelFor(C, FMath::Max(1, Upto - C->Lap) + 0.3f) * 1.04f));
 				FuelWarn = 0; bTyreWarn = false; ManualTyre = 0; bTyrePicked = false;
 				C->PitStopT = FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + C->UpPit) + Fix;
+				// l'équipier est encore dans le carré : les mécaniciens finissent sa voiture d'abord
+				float Wait = 0.f;
+				for (const AGPMCar* O : Cars) if (O != C && O->TeamIdx == C->TeamIdx && O->PitPhase == 2) Wait = FMath::Max(Wait, FMath::Min(O->PitStopT, 8.f) + 1.f);
+				C->PitStopT += Wait;
 				const int32 Kg = FMath::RoundToInt(C->Fuel - Before);
-				Say(FString::Printf(TEXT("Muret : parfait ! Pneus %s%s%s…"), *TyreName(C->NextTyre), Kg > 0 ? *FString::Printf(TEXT(", +%d kg"), Kg) : TEXT(""), Fix > 0.f ? TEXT(" et réparation") : TEXT("")));
+				if (Wait > 0.f) Say(TEXT("Muret : ton équipier est encore dans le carré, on s'occupe de toi juste après…"));
+				else Say(FString::Printf(TEXT("Muret : parfait ! Pneus %s%s%s…"), *TyreName(C->NextTyre), Kg > 0 ? *FString::Printf(TEXT(", +%d kg"), Kg) : TEXT(""), Fix > 0.f ? TEXT(" et réparation") : TEXT("")));
 			}
 			else if (Msg == 2) Say(TEXT("Muret : go, go, go ! Garde le limiteur jusqu'à la sortie."));
 			else if (Msg == 3) Say(TEXT("Muret : tu as dépassé ton carré ! Arrête-toi et recule (frein à l'arrêt), ou ressors sans changer."));
@@ -929,9 +1058,17 @@ void AGPMGameMode::Strategy(float Dt)
 			C->bAdvised = true;
 			Say(FString::Printf(TEXT("Muret : rentre ce tour, prends la voie des stands à droite : pneus %s%s."), *TyreName(NextStopTyre(C)), C->Dmg > 0.5f || C->DmgR > 0.5f ? TEXT(" et nouvel aileron") : TEXT("")));
 		}
+		// un seul carré par écurie : si l'équipier y est déjà (ou s'y rend, ou si le joueur a demandé son arrêt), on attend le tour
+		// suivant ; sur crevaison on rentre quand même et les mécaniciens font attendre la voiture
+		float Queue = 0.f;
+		if (C->bBox && bAuto)
+			for (const AGPMCar* O : Cars)
+				if (O != C && O->TeamIdx == C->TeamIdx && !O->bOut && (O->PitPhase == 1 || O->PitPhase == 2 || (O == Car && O->bBox && O->bPlayerControlled)))
+					Queue = FMath::Max(Queue, 3.f + (O->PitPhase == 2 ? FMath::Min(O->PitStopT, 8.f) : 4.f));
+		if (Queue > 0.f && !C->bFlat) continue;
 		if (C->bBox && bAuto)
 		{
-			const float Fix = (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
+			const float Fix = Queue + (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
 			// pièces Stands et Centre des mécaniciens : l'équipe du joueur gagne du temps à chaque arrêt
 			const float Crew = Car && C->TeamIdx == Car->TeamIdx ? Car->UpPit : 0.f;
 			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + Crew) + Fix);
@@ -967,7 +1104,7 @@ void AGPMGameMode::RecordResult()
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (!Season) return;
 	TArray<FGPMFinish> Fin;
-	for (const AGPMCar* C : Order) Fin.Add({ C->DriverName, C->TeamName, C->BestLap, C == Car });
+	for (const AGPMCar* C : Order) Fin.Add({ C->DriverName, C->TeamName, C->BestLap, C == Car, C->bOut });
 	const int32 Pos = Order.IndexOfByKey(Car) + 1;
 	LastPts = Season->RecordRace(Fin);
 	UGPMSaveGame* G = Season->State();
@@ -977,13 +1114,36 @@ void AGPMGameMode::RecordResult()
 	static const float Prize[10] = { 5.f, 4.f, 3.4f, 2.8f, 2.4f, 2.1f, 1.8f, 1.6f, 1.4f, 1.2f };
 	LastPartner = Factory->PartnerIncome();
 	LastPrize = (Pos >= 1 && Pos <= 10 ? Prize[Pos - 1] : 0.8f) * (0.8f + G->Rep / 250.f) * Factory->PrizeMul() + LastPartner;
+	if (G->FinStart < 0.f) G->FinStart = G->Budget;   // bilan financier : budget au départ de la saison
+	G->FinPrize += LastPrize - LastPartner; G->FinPartner += LastPartner;
 	Factory->AddMoney(LastPrize);
-	G->Moral = FMath::Clamp(G->Moral + (Pos <= 3 ? 6 : Pos <= 10 ? 2 : -3), 0, 100);
-	G->Rep = FMath::Clamp(G->Rep + (Pos <= 3 ? 2 : Pos <= 10 ? 1 : 0), 0, 100);
-	// les écuries rivales progressent un peu à chaque course
+	// moral : un podium le fait monter, les points le tiennent, une course sans point le fait baisser ; l'euphorie retombe
+	// un peu d'une course à l'autre (sinon la jauge restait bloquée à 100). Réputation : elle peut aussi redescendre.
+	// (le moral se juge sur la place attendue par la direction : mieux que prévu il monte, moins bien il baisse, et il revient
+	// peu à peu vers 60 ; un podium fait toujours plaisir)
+	{
+		const UGPMCareerSubsystem* CareerM = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+		const int32 Exp = CareerM ? CareerM->Expected() : 9;
+		const int32 Swing = FMath::Clamp(FMath::RoundToInt((Exp - Pos) * 0.8f), -4, 4) + (Pos == 1 ? 2 : Pos <= 3 ? 1 : 0);
+		G->Moral = FMath::Clamp(G->Moral + Swing - FMath::RoundToInt((G->Moral - 60) / 12.f), 0, 100);
+	}
+	G->Rep = FMath::Clamp(G->Rep + (Pos <= 3 ? 2 : Pos <= 6 ? 1 : Pos <= 12 ? 0 : -1), 0, 100);
+	// Les écuries rivales développent leur voiture à chaque course, comme le joueur : vite au début d'un règlement, de moins en
+	// moins quand leur voiture approche de son plafond (+0,15), plus vite quand elles ont du retard sur la meilleure voiture du
+	// plateau (celle du joueur comprise), et selon leurs moyens (les grandes écuries investissent plus).
 	if (UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+	{
+		float BestCar = Factory->PlayerPerf();
+		for (int32 t = 1; t < Data->Teams.Num(); ++t) BestCar = FMath::Max(BestCar, Data->Teams[t].Perf + G->RivalDev.FindRef(Data->Teams[t].Name));
 		for (int32 t = 1; t < Data->Teams.Num(); ++t)
-			Factory->RivalGain(Data->Teams[t].Name, (0.0012f + FMath::FRand() * 0.0018f) * 0.67f * Factory->RivalDevMul(Data->Teams[t].Name));
+		{
+			const float Dev = G->RivalDev.FindRef(Data->Teams[t].Name), Mine = Data->Teams[t].Perf + Dev;
+			const float Room = FMath::Clamp(1.f - Dev / 0.15f, 0.15f, 1.3f);
+			const float Catch = 1.f + 0.6f * FMath::Clamp((BestCar - Mine) / 0.05f, 0.f, 1.f);
+			const float Means = 0.85f + 0.25f * FMath::Clamp((Data->Teams[t].Perf - 0.95f) / 0.04f, 0.f, 1.f);
+			Factory->RivalGain(Data->Teams[t].Name, (0.0022f + FMath::FRand() * 0.0028f) * Room * Catch * Means * Factory->RivalDevMul(Data->Teams[t].Name));
+		}
+	}
 	// l'usine avance jusqu'au GP suivant (GAPS de season.js, en jours)
 	G->News.Reset();
 	int32 Days = 30;
@@ -1004,6 +1164,9 @@ void AGPMGameMode::RecordResult()
 		Career->ClearBoost();
 		FGPMRaceCtx R;
 		R.Pos = Pos; R.Grid = GridSlot + 1; R.Stops = Car->Stops; R.Pen = Car->Penalty; R.bSC = bSCUsed;
+		R.bWet = bRainStart || WxChangeAt >= 0.f;   // il a plu pendant la course (questions de presse et flash info sur la pluie)
+		R.bFlat = bHadFlat;
+		R.bDnf = Car->bOut;
 		R.Circuit = CurTrack() ? CurTrack()->Name : FString();
 		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
 		const int32 RivalIdx = Pos >= 2 ? Pos - 2 : 1;
@@ -1013,12 +1176,61 @@ void AGPMGameMode::RecordResult()
 		R.bFastest = Car->BestLap > 0.f && Car->BestLap <= Best;
 		for (int32 k = 0; k < Order.Num(); ++k) if (Order[k] != Car && Order[k]->TeamIdx == Car->TeamIdx) R.MatePos = k + 1;
 		for (int32 k = 0; k < Order.Num(); ++k) if (!G->MisWho.IsEmpty() && Order[k]->DriverName == G->MisWho) R.RivalPos = k + 1;
+		const float BeforeLife = G->Budget;
 		LastLines = Career->AfterRace(R);
+		G->FinPartner += G->Budget - BeforeLife;   // sponsor principal, contrats ponctuels, missions, primes de l'équipier
 		if (!Built.IsEmpty()) LastLines.Add(Built);
+		if (Car->bOut && Car->OutWhy == TEXT("moteur")) LastLines.Add(TEXT("Casse moteur : abandon. Le pôle Fiabilité de l'usine et un motoriste plus fiable réduisent ce risque."));
+		else if (Car->bOut) LastLines.Add(TEXT("Accident : abandon, la voiture sera réparée pour le prochain Grand Prix."));
+		else if (EngineFailAt.Contains(Car.Get())) LastLines.Add(TEXT("Ennui moteur pendant la course : de la puissance perdue. Le pôle Fiabilité de l'usine réduit ce risque."));
 		// règlement : rumeurs de refonte, règlement de l'an prochain
 		TArray<TPair<FString, FString>> RegMails;
 		Factory->EraAfterRace(G->Round, Season->NumRounds(), Season->IsOver(), RegMails, LastLines);
 		Career->RaceMails(R, LastLines);
+		// compte rendu de l'ingénieur : indispensable après une course simulée, utile après une course jouée
+		{
+			const bool bSim = Car->RaceTime < 1.f;
+			FString Body = FString::Printf(TEXT("%s · %d tours · %s\n\nTa course : parti P%d, %s."), bSim ? TEXT("Course simulée") : TEXT("Course jouée"), TotalLaps,
+				bRainStart || WxChangeAt >= 0.f ? TEXT("pluie pendant la course") : TEXT("piste sèche"), GridSlot + 1,
+				Car->bOut ? (Car->OutWhy == TEXT("moteur") ? TEXT("abandon sur casse moteur") : TEXT("abandon sur accident")) : *FString::Printf(TEXT("arrivé P%d (%s)"), Pos, Pos == 1 ? TEXT("victoire") : *ResultGap(Car)));
+			FString Plan;
+			for (const TPair<TCHAR, int32>& S : Stints) Plan += FString::Printf(TEXT("%s%s %d t."), Plan.IsEmpty() ? TEXT("") : TEXT(" → "), *TyreName(S.Key), S.Value);
+			if (!Plan.IsEmpty()) Body += FString::Printf(TEXT("\nStratégie prévue : %s · %d arrêt%s."), *Plan, Car->Stops, Car->Stops > 1 ? TEXT("s") : TEXT(""));
+			if (EngineFailAt.Contains(Car.Get()) && !Car->bOut) Body += TEXT("\nEnnui moteur : de la puissance perdue en fin de course.");
+			if (Car->Penalty > 0.f) Body += FString::Printf(TEXT("\nPénalité : %.0f s."), Car->Penalty);
+			if (R.MatePos > 0 && Order.IsValidIndex(R.MatePos - 1))
+				Body += FString::Printf(TEXT("\nTon équipier %s : %s."), *Order[R.MatePos - 1]->DriverName, Order[R.MatePos - 1]->bOut ? TEXT("abandon") : *FString::Printf(TEXT("P%d"), R.MatePos));
+			Body += TEXT("\n\nPodium : ");
+			for (int32 k = 0; k < 3 && k < Order.Num(); ++k) Body += FString::Printf(TEXT("%s%d. %s (%s)"), k ? TEXT(" · ") : TEXT(""), k + 1, Order[k] == Car ? TEXT("toi") : *Order[k]->DriverName, *Order[k]->TeamName);
+			const AGPMCar* FastC = nullptr;
+			for (const AGPMCar* C : Order) if (!C->bOut && C->BestLap > 0.f && (!FastC || C->BestLap < FastC->BestLap)) FastC = C;
+			if (FastC) Body += FString::Printf(TEXT("\nMeilleur tour : %s, %d:%06.3f."), FastC == Car ? TEXT("toi") : *FastC->DriverName, int32(FastC->BestLap) / 60, FMath::Fmod(FastC->BestLap, 60.f));
+			FString Outs;
+			for (const AGPMCar* C : Order) if (C->bOut && C != Car) Outs += FString::Printf(TEXT("%s%s (%s)"), Outs.IsEmpty() ? TEXT("") : TEXT(", "), *C->DriverName, C->OutWhy == TEXT("moteur") ? TEXT("moteur") : TEXT("accident"));
+			if (!Outs.IsEmpty()) Body += TEXT("\nAbandons : ") + Outs + TEXT(".");
+			if (bSCUsed) Body += TEXT("\nLa voiture de sécurité est sortie.");
+			Career->SendMail(TEXT("equipe"), TEXT("Ingénieur de course"), FString::Printf(TEXT("Compte rendu : GP %s"), *R.Circuit), Body);
+		}
+		// fin de saison : bilan financier et palmarès
+		if (Season->IsOver())
+		{
+			int32 Wins = 0, Pods = 0, MyD = 0, MyT = 0, MyPts = 0;
+			for (const FGPMRaceResult& Rr : G->Results) { Wins += Rr.Pos == 1; Pods += Rr.Pos >= 1 && Rr.Pos <= 3; }
+			const TArray<FGPMStanding> Dr = Season->Drivers(), Tm = Season->Teams();
+			for (int32 k = 0; k < Dr.Num(); ++k) if (Dr[k].bPlayer) { MyD = k + 1; MyPts = Dr[k].Pts; }
+			for (int32 k = 0; k < Tm.Num(); ++k) if (Tm[k].bPlayer) MyT = k + 1;
+			G->Honours.Add(FString::Printf(TEXT("%d : pilote P%d (%d pts), écurie P%d · %d victoire%s, %d podium%s · champion : %s (%s)%s"), G->Year, MyD, MyPts, MyT, Wins, Wins > 1 ? TEXT("s") : TEXT(""),
+				Pods, Pods > 1 ? TEXT("s") : TEXT(""), Dr.Num() ? *Dr[0].Name : TEXT("?"), Tm.Num() ? *Tm[0].Name : TEXT("?"), MyD == 1 && MyT == 1 ? TEXT(" · DOUBLÉ pilotes et écuries") : MyD == 1 ? TEXT(" · TITRE PILOTES") : MyT == 1 ? TEXT(" · TITRE ÉCURIES") : TEXT("")));
+			FString Pal;
+			for (int32 k = G->Honours.Num() - 1; k >= 0; --k) Pal += (Pal.IsEmpty() ? TEXT("• ") : TEXT("\n• ")) + G->Honours[k];
+			Career->SendMail(TEXT("equipe"), TEXT("Service de presse"), FString::Printf(TEXT("Palmarès de %s"), *G->TeamName), Pal);
+			const float Start = G->FinStart < 0.f ? G->Budget : G->FinStart, Spent = Start + G->FinPrize + G->FinPartner - G->Budget;
+			int32 Levels = 0;
+			for (const FGPMBuilding& B : Factory->Buildings()) Levels += Factory->Level(B.Id);
+			Career->SendMail(TEXT("direction"), TEXT("Direction financière"), FString::Printf(TEXT("Bilan financier %d"), G->Year),
+				FString::Printf(TEXT("Budget au début de la saison : %.1f M€\nPrimes de course : +%.1f M€\nPartenaires, sponsors et contrats : %+.1f M€\nDépenses (pièces, chantiers, chefs, transferts, événements) : %+.1f M€\nBudget en fin de saison : %.1f M€\n\nÀ payer à l'intersaison : le motoriste, le salaire de ton équipier et des chefs de pôle, et l'entretien des installations (%.1f M€)."),
+					Start, G->FinPrize, G->FinPartner, -Spent, G->Budget, 1.5f * Levels));
+		}
 		for (const TPair<FString, FString>& M : RegMails) Career->SendMail(TEXT("reglement"), TEXT("Instance dirigeante du championnat"), M.Key, M.Value);
 	}
 	Season->Save();
@@ -1047,7 +1259,9 @@ void AGPMGameMode::ApplyCareer()
 	}
 	for (AGPMCar* C : Cars)
 		if (C != Car && Data->Teams.IsValidIndex(C->TeamIdx))
-			C->Perf = Data->Teams[C->TeamIdx].Perf + Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
+			// l'équipier roule avec la même voiture que le joueur : il profite aussi des pièces de l'usine et du moral
+			C->Perf = C->TeamIdx == Car->TeamIdx ? Factory->PlayerPerf() * (1.f + (Season->State()->Moral - 60) / 4000.f)
+				: Data->Teams[C->TeamIdx].Perf + Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
 }
 
 void AGPMGameMode::Continue()
@@ -1065,10 +1279,23 @@ void AGPMGameMode::Continue()
 	}
 	if (Phase == EPhase::Season && Season)
 	{
+		if (!Season->IsOver() && PreStage() < 3) return;   // la pré-saison d'abord (boutons de l'écran de saison)
 		if (Season->IsOver())
 		{
 			// intersaison : nouvelle saison, puis l'écran de saison sur le premier circuit
 			if (Career) Career->Intersaison();
+			// entretien des installations pour la nouvelle saison : 1,5 M€ par niveau de bâtiment
+			if (UGPMFactorySubsystem* FacU = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>())
+			{
+				int32 Levels = 0;
+				for (const FGPMBuilding& B : FacU->Buildings()) Levels += FacU->Level(B.Id);
+				if (Levels > 0)
+				{
+					FacU->AddMoney(-1.5f * Levels);
+					if (Career) Career->SendMail(TEXT("usine"), TEXT("Direction financière"), TEXT("Entretien des installations"),
+						FString::Printf(TEXT("L'entretien de nos installations (%d niveaux de bâtiments) coûte %.1f M€ pour la nouvelle saison."), Levels, 1.5f * Levels));
+				}
+			}
 			// grande refonte du règlement (nouvelle ère) ou règlement annuel, puis la nouvelle saison
 			FString RegSubj, RegBody, PubSubj, PubBody;
 			if (UGPMFactorySubsystem* Fac = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>())
@@ -1119,13 +1346,25 @@ void AGPMGameMode::NewCareer()
 	Phase = EPhase::Setup;
 }
 
+void AGPMGameMode::RespawnCars()
+{
+	for (AGPMCar* C : Cars) if (C) C->Destroy();
+	if (SC) { SC->Destroy(); SC = nullptr; }
+	Cars.Reset(); Car = nullptr; Order.Reset(); QOrder.Reset(); QTimes.Reset(); SCAhead.Reset();
+	EngineSound = nullptr;
+	EngineFailAt.Reset(); EngineTold.Reset(); EngineBlown.Reset();
+}
+
 void AGPMGameMode::FinishSetup()
 {
 	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (!Career || !Season) return;
 	Career->CreateCareer();
+	RespawnCars();   // les écuries ont changé de place, de couleurs ou de nombre
 	bCareer = true; bChampShown = false;
+	// carrière recommencée : plus rien de l'ancienne (bilan de course, rencontres déjà faites, sacre déjà joué)
+	LastLines.Reset(); MetDrivers.Reset(); CrownYear = -1; LastPts = 0; LastPrize = LastPartner = 0.f; MercatoPage = 0; bNegoFromMercato = false;
 	IntroSeen.Reset();
 	Pending = 2;
 	Phase = EPhase::Season;
@@ -1165,10 +1404,10 @@ void AGPMGameMode::OpenMercato()
 
 float AGPMGameMode::ResultTime(const AGPMCar* C) const
 {
-	if (C->bFinished) return C->FinishTime + C->Penalty;
+	if (C->Classified()) return C->FinishTime + C->Penalty;
 	const FGPMTrackData* T = C->GetTrack();
 	const float Total = (TotalLaps + 1) * (T ? T->WX.Num() : 1);
-	return Clock * Total / FMath::Max(1.f, C->Progress());
+	return Clock * Total / FMath::Max(1.f, C->bOut ? C->FinProgress : C->Progress());
 }
 
 // Aspiration : voiture devant à moins de 45 m, alignée ; dans les 30 derniers mètres l'air sale coûte de l'appui
@@ -1180,7 +1419,7 @@ void AGPMGameMode::Aspiration(float Dt)
 		const float Fx = FMath::Sin(C->Heading), Fz = FMath::Cos(C->Heading);
 		for (AGPMCar* O : Cars)
 		{
-			if (O == C || O->PitPhase) continue;
+			if (O == C || O->PitPhase || O->bParked) continue;
 			const float Dx = O->X - C->X, Dz = O->Z - C->Z, Along = Dx * Fx + Dz * Fz;
 			if (Along < 4 || Along > 45) continue;
 			const float Side = FMath::Abs(Dx * -Fz + Dz * Fx);
@@ -1201,7 +1440,7 @@ void AGPMGameMode::Collide()
 		{
 			AGPMCar& A = *Cars[a];
 			AGPMCar& B = *Cars[b];
-			if (A.PitPhase || B.PitPhase) continue;
+			if (A.PitPhase || B.PitPhase || A.bParked || B.bParked) continue;
 			if (FMath::Abs(A.X - B.X) > 6 || FMath::Abs(A.Z - B.Z) > 6 || FMath::Abs(A.Y - B.Y) > 3) continue;
 			const float FaX = FMath::Sin(A.Heading), FaZ = FMath::Cos(A.Heading), FbX = FMath::Sin(B.Heading), FbZ = FMath::Cos(B.Heading);
 			for (float Pa : Pts) for (float Pb : Pts)
@@ -1223,6 +1462,8 @@ void AGPMGameMode::Collide()
 					if (Close > 5)
 					{
 						// dégâts sur l'aileron touché (avant ou arrière), seulement sur un nouveau contact franc
+						// commissaires : la voiture qui percute l'arrière d'une autre avec son nez est en tort
+						if (Pa > 0 && Pb < 0) ContactPenalty(&A, &B, Close); else if (Pb > 0 && Pa < 0) ContactPenalty(&B, &A, Close);
 						if (A.ContactT <= 0.f) (Pa > 0 ? A.DmgNew : A.DmgNewR) += Close * 0.01f;
 						if (B.ContactT <= 0.f) (Pb > 0 ? B.DmgNew : B.DmgNewR) += Close * 0.01f;
 						const float Kick = FMath::Min(0.5f, (Close - 5) * 0.03f) * (FMath::FRand() < 0.5f ? -1.f : 1.f);

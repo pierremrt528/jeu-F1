@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "GPMTypes.h"
+#include "GPMSetup.h"
 #include "GPMCar.generated.h"
 
 class UStaticMeshComponent;
@@ -57,8 +58,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GPM") int32 Gear() const;
 	/** Régime moteur (tr/min) d'après la vitesse et le rapport, pour le son et le compte-tours. */
 	float Rpm() const;
+	/** Caméra suivante : arrière → T-cam (au-dessus de la tête du pilote) → cockpit → arrière. */
 	UFUNCTION(BlueprintCallable, Category = "GPM") void ToggleCamera();
-	bool IsCockpit() const { return bCockpit; }
+	/** 0 arrière, 1 T-cam, 2 cockpit. */
+	void SetCamMode(int32 NewMode);
+	int32 GetCamMode() const { return CamMode; }
+	bool IsCockpit() const { return CamMode == 2; }
+	/** Caméra embarquée active (T-cam ou cockpit), sinon nullptr : les gouttes sur l'objectif s'y accrochent. */
+	USceneComponent* OnboardCam() const { return CamMode == 1 ? (USceneComponent*)TCam.Get() : CamMode == 2 ? (USceneComponent*)CockpitCam.Get() : nullptr; }
+	/** Nom de la caméra pour le bouton du HUD : « ARRIÈRE », « T-CAM », « COCKPIT ». */
+	/** Feu arrière rouge des jours de pluie. */
+	void SetRainLight(bool bOn);
+	/** Voiture loin de la caméra : pas d'ombre (moins de travail pour la carte graphique). */
+	void SetNear(bool bNear);
+	FString CamLabel() const { return CamMode == 1 ? TEXT("T-CAM") : CamMode == 2 ? TEXT("COCKPIT") : TEXT("ARRIÈRE"); }
 
 	/** Commandes tactiles (remplies par AGPMHUD) : prioritaires sur le clavier quand l'écran est touché. */
 	float TouchSteer = 0.f, TouchGas = 0.f, TouchBrake = 0.f;
@@ -75,6 +88,11 @@ public:
 	float Dive = 0, Roll = 0, YOff = 0, Slip = 0, HitWall = 0;
 	int32 Idx = 0;
 	bool bOffTrack = false, bKerb = false, bLock = false, bAbsOn = false, bTcOn = false;
+	uint8 Ground = 0;                      // sous la voiture : 0 piste, 1 herbe (glissante), 2 bac à gravier (freine fort), 3 voie de dégagement
+	// limites de piste (commissaires, GPMPenalty.cpp) : sortie en cours, avertissements, délai entre deux pénalités
+	int32 OffIdx = -1, OffSide = 0, Strikes = 0;
+	float OffT = 0.f, PenCd = 0.f;
+	bool bOffGravel = false;
 
 	/** Pilote IA (js/ai.js) : poursuite pure sur la trajectoire, profil de vitesse × niveau, dépassements, consigne d'équipe. */
 	void DriveAI(float Dt);
@@ -84,10 +102,27 @@ public:
 	FLinearColor TeamColor = FLinearColor::White;
 	bool bFinished = false;                // drapeau à damier passé
 	float FinishTime = 0.f;
+	float FinProgress = 0.f;               // distance couverte au drapeau à damier (ou à l'abandon), pour le classement
+	int32 FlagLap = -1;                    // tour en cours quand le vainqueur a passé la ligne : arrivée au passage suivant
+	bool bOut = false;                     // abandon (casse moteur, accident)
+	float OutT = 0.f;                      // secondes depuis l'abandon
+	FString OutWhy;                        // « moteur », « accident »
+	/** Classée à l'arrivée : drapeau passé, ou temps calculé quand la course s'arrête juste après l'arrivée du joueur. */
+	bool Classified() const { return bFinished || (!bOut && FinProgress > 0.f); }
 	float Skill = 1.f;                     // niveau du pilote × difficulté
 	float Lane = 0.f, LaneBias = 0.f, PassTimer = 0.f, PassSide = 1.f, YieldCd = 0.f, YieldRun = 0.f;
 	bool bYielding = false;
-	AGPMCar* YieldTo = nullptr;            // statut N°2 : laisse passer cette voiture (le joueur)
+	// IA : défense de la corde, erreurs de pilotage, temps de réaction au départ, drapeau bleu
+	float DefendCd = 0.f, DefendT = 0.f, DefendLane = 0.f, MistakeT = 0.f, MistakeSide = 0.f, LaunchT = 0.f;
+	bool bHoldPrev = false, bBlue = false, bMistake = false;
+	/** Options des pilotes IA (réglages du jeu) : agressivité 0 prudent, 1 normal, 2 agressif ; erreurs de pilotage. */
+	static int32 AIAggro;
+	static bool bAIErrors;
+	static void LoadAIOptions();
+	static void SetAIOptions(int32 InAggro, bool bInErrors);
+	/** Réglages de la voiture (écran de réglages) appliqués à la physique. */
+	FGPMSetupFx SetupFx;
+	AGPMCar* YieldTo = nullptr;           // statut N°2 : laisse passer cette voiture (le joueur)
 	TArray<AGPMCar*> Field;                // toutes les voitures de la course (rempli par le mode de jeu)
 	float Slipstream = 0.f, Wake = 0.f;    // aspiration (vitesse de pointe) et air sale (appui), calculés par le mode de jeu
 	bool bHold = false;                    // avant le départ : freins serrés
@@ -184,9 +219,13 @@ private:
 	float WingBend[2] = { 0.f, 0.f };
 	bool bWingsShaped = false;
 	FLinearColor LiveryMain = FLinearColor::Red, LiveryAccent = FLinearColor::White;
+	FString HelmetOf;   // pilote dont le casque est peint (couleur propre à chaque pilote, d'après son nom)
 	void ShapeWings();
 	float SteerSmooth = 0.f, Accum = 0.f;
-	bool bCockpit = false;
+	int32 CamMode = 0;
+	bool bRainLightOn = false, bNearCam = true;
+	float ShakeT = 0.f;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> RainLight;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Body;
@@ -195,6 +234,7 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USpringArmComponent> Arm;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> ChaseCam;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> CockpitCam;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> TCam;   // T-cam : sur l'arceau, au-dessus du casque
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> MainParts;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> AccentParts;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Wheels;

@@ -105,6 +105,10 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	};
 
 	FSection Road, Kerbs, Green, Walls, Floor, Start, Pit;
+	// dégagements à l'extérieur des virages : bacs à gravier et voies de dégagement en asphalte (posés sur l'herbe)
+	FSection Gravel, Runoff;
+	int32 RunPrev[2] = { -1, -1 };
+	uint8 RunKind[2] = { 0, 0 };
 
 	// Vrais matériaux (Tools/gpm_assets.py) : asphalte et bas-côtés en photo, vibreurs et murs éclairés.
 	// Sans eux : couleurs par sommet. Avec : sommets blancs (la photo donne la couleur), bandes de tonte en nuances.
@@ -162,6 +166,19 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), GrassC);
 		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), GrassC);
 		if (i > 0) { const int32 b = Green.V.Num() - 8; Green.Quad(b, b + 1, b + 4, b + 5); Green.Quad(b + 2, b + 3, b + 6, b + 7); }
+		for (int32 Sd = 0; Sd < 2; ++Sd)
+		{
+			const uint8 K = Track->RunAt(j, Sd == 1);
+			if (!K) { RunPrev[Sd] = -1; continue; }
+			FSection& S = K == 1 ? Gravel : Runoff;
+			const float Sign = Sd ? 1.f : -1.f, In = Half + (K == 1 ? 200.f : 15.f), Out = FMath::Max(In + 100.f, (Sd ? DR : DL) - 25.f);
+			const FLinearColor Cg = K == 1 ? (bArt ? FLinearColor(0.72f, 0.69f, 0.66f) : FLinearColor(0.46f, 0.43f, 0.37f))
+				: (bArt ? FLinearColor(1.22f, 1.22f, 1.22f) : Asphalt * 1.35f);
+			const int32 a = S.Add(P + R * (Sign * In) - Up * 1.f, Up, FVector2D(0, U), Cg);
+			S.Add(P + R * (Sign * Out) - Up * 1.f, Up, FVector2D((Out - In) / 600.f, U), Cg);
+			if (RunPrev[Sd] >= 0 && RunKind[Sd] == K) S.Quad(RunPrev[Sd], RunPrev[Sd] + 1, a, a + 1);
+			RunPrev[Sd] = a; RunKind[Sd] = K;
+		}
 	}
 
 	// Murs : barrière de béton (soubassement sali, bandeau publicitaire de marques inventées, chaperon clair),
@@ -354,7 +371,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 			if (FVector::DotProduct(FVector::CrossProduct(B - A, C - A), S.N[S.I[k]]) > 0.f) Swap(S.I[k + 1], S.I[k + 2]);
 		}
 	};
-	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start, &Pit, &Fence }) FixWinding(*S);
+	for (FSection* S : { &Road, &Kerbs, &Green, &Walls, &Floor, &Start, &Pit, &Fence, &Gravel, &Runoff }) FixWinding(*S);
 
 	const TArray<FProcMeshTangent> NoTangents;
 	auto Make = [&](int32 Index, FSection& S, UMaterialInterface* M, bool bCollide)
@@ -370,6 +387,9 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	Make(5, Start, bArt ? KerbM : KerbMaterial.Get(), false);
 	Make(6, Pit, bArt ? RoadM : AsphaltMaterial.Get(), false);
 	if (FenceM && Fence.V.Num()) Make(7, Fence, FenceM, false);
+	UMaterialInstanceDynamic* GravelM = bArt ? GPMArt::Surface(TEXT("sand"), 2.5f, this) : nullptr;
+	if (Gravel.I.Num()) Make(8, Gravel, GravelM ? (UMaterialInterface*)GravelM : GrassMaterial.Get(), false); else Mesh->ClearMeshSection(8);
+	if (Runoff.I.Num()) Make(9, Runoff, bArt ? (UMaterialInterface*)RoadM : AsphaltMaterial.Get(), false); else Mesh->ClearMeshSection(9);
 
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s construit : %d points, %d triangles"), *Track->Name, N,
 		(Road.I.Num() + Kerbs.I.Num() + Green.I.Num() + Walls.I.Num() + 6) / 3);

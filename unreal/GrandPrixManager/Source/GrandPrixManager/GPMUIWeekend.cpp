@@ -1,4 +1,4 @@
-// Écrans du week-end en Slate (comme tuning.js et prerace.js du jeu web) : réglages de la voiture avant les
+// Écrans du week-end en Slate (comme tuning.js et prerace.js du jeu web) : réglages détaillés de la voiture avant les
 // qualifications, puis stratégie de course avant le départ (3 propositions, relais modifiables).
 #include "GPMUI.h"
 #include "GPMHUD.h"
@@ -52,103 +52,126 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 	AGPMHUD* H = Hud.Get();
 	const AGPMCar* Me = H ? Cast<AGPMCar>(H->GetOwningPawn()) : nullptr;
 	TWeakObjectPtr<AGPMGameMode> WGM = GM;
-	const int32 Best = GM->BestSetup();
-	const int32 Sel = GM->SetupK >= 0 ? FMath::Clamp(GM->SetupK, 0, 4) : Best;
+	GM->EnsureSetup();
+	const FGPMCarSetup& S = GM->Setup;
+	const FGPMCarSetup& Adv = GM->Advice();
+	const int32 Row = FMath::Clamp(GM->SetupRow, 0, FGPMCarSetup::Num - 1);
 
-	// tour estimé avec chaque réglage (tour de référence × écart du tour simulé)
-	float Sim[5];
-	for (int32 k = 0; k < 5; ++k) Sim[k] = GM->SetupLap(k);
-	const float Ref = FMath::Max(1.f, Sim[2]), Base = GM->BaseLap() * 0.985f;
-	float Est[5], Fastest = 1e9f;
-	for (int32 k = 0; k < 5; ++k) { Est[k] = Base * Sim[k] / Ref; Fastest = FMath::Min(Fastest, Est[k]); }
+	// tour estimé : tour de référence × écart du tour simulé avec la voiture de base
+	const float Neutral = FMath::Max(1.f, GM->SetupLap(FGPMCarSetup()));
+	const float Base = GM->BaseLap() * 0.985f;
+	const float Mine = Base * GM->SetupLap(S) / Neutral, Best = Base * GM->SetupLap(Adv) / Neutral;
+	const float Delta = Mine - Best;
+	const float Pointe = Me ? AGPMCar::VTop * Me->Perf * Me->UpVTop * S.Fx().VTop * 3.6f : 0.f;
+	const float Bal = GM->SetupBalance(S);
+	const FString BalTxt = Bal < -0.015f ? TEXT("Sous-vireuse") : Bal > 0.015f ? TEXT("Survireuse") : TEXT("Neutre");
+	const FLinearColor BalCol = FMath::Abs(Bal) > 0.04f ? CBad : FMath::Abs(Bal) > 0.015f ? CGold : CGood;
 
-	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-	for (int32 k = 0; k < 5; ++k)
+	// une ligne par réglage : nom, réglette avec − et +, valeur ; la ligne choisie montre son explication en bas
+	auto RowOf = [this, WGM, &S, &Adv, Row](int32 k) -> TSharedRef<SWidget>
 	{
-		const AGPMGameMode::FSetup& St = AGPMGameMode::Setups[k];
-		const bool bBest = k == Best;
-		const float Pointe = Me ? AGPMCar::VTop * Me->Perf * Me->UpVTop * (1.f + St.VTop) * 3.6f : 0.f;
-		TSharedRef<SHorizontalBox> NameRow = SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(St.Name, 19, CText, true) ];
-		if (bBest)
-			NameRow->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f, 0.f, 0.f))
+		auto Step = [WGM, k](int32 D) { if (WGM.IsValid()) { WGM->Setup.V[k] = FMath::Clamp(WGM->Setup.V[k] + D, 0, 10); WGM->SetupRow = k; } };
+		const bool bAdv = S.V[k] == Adv.V[k];
+		return Pick(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
-				SNew(SBorder).BorderImage(GPMUIStyle::Rounded(12.f)).BorderBackgroundColor(FSlateColor(CGood)).Padding(FMargin(14.f, 3.f, 14.f, 4.f))
-				[ Txt(TEXT("CONSEIL DE L'INGÉNIEUR"), 11, InkOn(CGood), true) ]
-			];
-		const float Delta = Est[k] - Fastest;
-		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
-		[
-			Pick(SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(FGPMCarSetup::Name(k), 15, CText, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(bAdv ? FString(TEXT("comme l'ingénieur")) : FString::Printf(TEXT("ingénieur : %s"), *Adv.Value(k)), 11, bAdv ? CGood : CFaint) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Button(TEXT("-"), CNeutral, [Step]() { Step(-1); }, S.V[k] > 0, 34.f, 32.f, 16) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.f, 0.f))
+			[
+				SNew(SBox).WidthOverride(92.f)
 				[
 					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight()[ NameRow ]
-					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Txt(St.Desc, 14, CDim, false, true) ]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Txt(S.Value(k), 14, CGold, true) ]
+					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Bar(S.V[k] / 10.f, CInfo, 5.f) ]
 				]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(16.f, 0.f))
-				[
-					SNew(SBox).WidthOverride(170.f)
-					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Appui"), 12, CFaint) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 6.f))[ Bar(0.5f + St.Kd / 0.1f, CInfo, 6.f) ]
-						+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("Pointe %.0f km/h"), Pointe), 12, CFaint) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))[ Bar(0.5f + St.VTop / 0.08f, CGold, 6.f) ]
-					]
-				]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[
-					SNew(SBox).WidthOverride(120.f)
-					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ Txt(Clock(Est[k]), 18, Delta < 0.0005f ? CPurple : CText, true) ]
-						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)[ Txt(Delta < 0.0005f ? FString(TEXT("le plus rapide")) : FString::Printf(TEXT("+%.3f"), Delta), 13, Delta < 0.0005f ? CGood : CDim) ]
-					]
-				],
-				k == Sel, [WGM, k]() { if (WGM.IsValid()) WGM->SetupK = k; })
-		];
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Button(TEXT("+"), CNeutral, [Step]() { Step(1); }, S.V[k] < 10, 34.f, 32.f, 16) ],
+			k == Row, [WGM, k]() { if (WGM.IsValid()) WGM->SetupRow = k; });
+	};
+	struct FGroup { const TCHAR* Name; int32 From, To; };
+	static const FGroup Groups[] = { { TEXT("AÉRODYNAMIQUE"), 0, 1 }, { TEXT("TRANSMISSION"), 2, 2 }, { TEXT("FREINS"), 3, 4 }, { TEXT("DIFFÉRENTIEL"), 5, 5 },
+		{ TEXT("SUSPENSION"), 6, 8 }, { TEXT("PNEUS"), 9, 10 } };
+	TSharedRef<SVerticalBox> ColA = SNew(SVerticalBox), ColB = SNew(SVerticalBox);
+	for (int32 g = 0; g < UE_ARRAY_COUNT(Groups); ++g)
+	{
+		TSharedRef<SVerticalBox> Col = g < 3 ? ColA : ColB;
+		Col->AddSlot().AutoHeight().Padding(FMargin(2.f, g == 0 || g == 3 ? 0.f : 6.f, 0.f, 4.f))[ Txt(Groups[g].Name, 11, CDim, true) ];
+		for (int32 k = Groups[g].From; k <= Groups[g].To; ++k) Col->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 5.f))[ RowOf(k) ];
 	}
 
-	UGPMSeasonSubsystem* S = SeasonSys();
-	const FString Kicker = GM->bCareer && S ? FString::Printf(TEXT("GRAND PRIX %d / %d · RÉGLAGES"), S->Round() + 1, S->NumRounds()) : FString(TEXT("COURSE SOLO · RÉGLAGES"));
+	// réglages de base : ailerons et boîte d'un coup ; conseil de l'ingénieur : tous les réglages
+	const int32 Pre = GM->PresetOf(S);
+	TSharedRef<SHorizontalBox> Presets = SNew(SHorizontalBox);
+	for (int32 k = 0; k < 5; ++k)
+		Presets->AddSlot().AutoWidth().Padding(FMargin(k ? 5.f : 0.f, 0.f, 0.f, 0.f))
+		[ Button(AGPMGameMode::Setups[k].Name, k == Pre ? Acc2 : CNeutral, [WGM, k]() { if (WGM.IsValid()) WGM->ApplyPreset(k); }, true, 0.f, 36.f, 12) ];
+	Presets->AddSlot().FillWidth(1.f)[ SNew(SSpacer) ];
+	Presets->AddSlot().AutoWidth()
+	[ Button(S == Adv ? TEXT("RÉGLAGES DE L'INGÉNIEUR") : TEXT("CONSEIL DE L'INGÉNIEUR"), S == Adv ? CGood : Acc2, [WGM]() { if (WGM.IsValid()) WGM->Setup = WGM->Advice(); }, true, 0.f, 36.f, 12) ];
+
+	UGPMSeasonSubsystem* Ss = SeasonSys();
+	const FString Kicker = GM->bCareer && Ss ? FString::Printf(TEXT("GRAND PRIX %d / %d · RÉGLAGES"), Ss->Round() + 1, Ss->NumRounds()) : FString(TEXT("COURSE SOLO · RÉGLAGES"));
 	TSharedRef<SWidget> Nav = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth()
 		[ Button(TEXT("RETOUR"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->Phase = WGM->bCareer ? AGPMGameMode::EPhase::Season : AGPMGameMode::EPhase::Solo; }, true, 150.f) ]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SSpacer) ]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 10.f, 0.f))
-		[ Button(TEXT("SIMULER LES QUALIFS"), Acc2, [WGM, Sel]() { if (WGM.IsValid()) WGM->SimQuali(Sel); }, true, 0.f, 56.f, 16) ]
+		[ Button(TEXT("SIMULER LES QUALIFS"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->SimQuali(); }, true, 0.f, 56.f, 16) ]
 		+ SHorizontalBox::Slot().AutoWidth()
-		[ Button(TEXT("TOUR CHRONO"), Acc, [WGM, Sel]() { if (WGM.IsValid()) WGM->PlayQuali(Sel); }, true, 220.f, 56.f, 19) ];
+		[ Button(TEXT("TOUR CHRONO"), Acc, [WGM]() { if (WGM.IsValid()) WGM->PlayQuali(); }, true, 220.f, 56.f, 19) ];
 
+	const FString DeltaTxt = Delta < 0.0005f ? FString(TEXT("aussi rapide que le conseil")) : FString::Printf(TEXT("+%.3f s sur le conseil"), Delta);
 	TSharedRef<SWidget> Left = SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
 		[
 			Title(Kicker, T ? T->Name : FString(TEXT("Réglages")),
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Météo"), GM->WeatherLabel(), WeatherColor(GM)) ]
-				+ SHorizontalBox::Slot().AutoWidth()[ Chip(TEXT("Tour estimé"), Clock(Est[Sel]), CGold) ])
+				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Pointe"), FString::Printf(TEXT("%.0f km/h"), Pointe), CText) ]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Équilibre"), BalTxt, BalCol) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ Chip(TEXT("Tour estimé"), Clock(Mine), Delta < 0.0005f ? CPurple : CGold) ])
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Presets ]
+		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
-			Txt(FString::Printf(TEXT("Plus d'appui = plus vite dans les virages, plus de vitesse = plus vite en ligne droite. Sur ce circuit, l'ingénieur conseille « %s ». Parc fermé : le réglage choisi reste pour la course."), AGPMGameMode::Setups[Best].Name), 15, CDim, false, true)
+			SNew(SScrollBox) + SScrollBox::Slot()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ ColA ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ ColB ]
+			]
 		]
-		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Txt(TEXT("Flèches : changer de réglage · Entrée : tour chrono · Échap : retour"), 13, CFaint) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))
+		[
+			Card(SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(FString::Printf(TEXT("%s · %s / %s"), FGPMCarSetup::Name(Row), FGPMCarSetup::LowLabel(Row), FGPMCarSetup::HighLabel(Row)), 13, CText, true) ]
+					+ SHorizontalBox::Slot().AutoWidth()[ Txt(DeltaTxt, 13, Delta < 0.0005f ? CGood : CDim, true) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Txt(FGPMCarSetup::Help(Row), 13, CDim, false, true) ],
+				CCardBg, 10.f)
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 8.f))[ Txt(TEXT("Flèches haut / bas : choisir un réglage · gauche / droite : le changer · I : conseil de l'ingénieur · Entrée : tour chrono · Parc fermé : les réglages restent pour la course"), 12, CFaint, false, true) ]
 		+ SVerticalBox::Slot().AutoHeight()[ Nav ];
 
 	return SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().FillWidth(0.62f)
+		+ SHorizontalBox::Slot().FillWidth(0.66f)
 		[
 			SNew(SBorder)
 			.BorderImage(GPMUIStyle::Rounded(0.f))
 			.BorderBackgroundColor(FSlateColor(FLinearColor(0.01f, 0.012f, 0.025f, 0.9f)))
-			.Padding(FMargin(34.f, 24.f))
+			.Padding(FMargin(30.f, 20.f))
 			[
 				Left
 			]
 		]
-		+ SHorizontalBox::Slot().FillWidth(0.38f)[ SNew(SSpacer) ];
+		+ SHorizontalBox::Slot().FillWidth(0.34f)[ SNew(SSpacer) ];
 }
 
 // ---------- stratégie ----------
@@ -237,7 +260,7 @@ TSharedRef<SWidget> FGPMUI::PreraceScreen(AGPMGameMode* GM)
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					Button(TEXT("−"), CNeutral, [WGM, i, Other]()
+					Button(TEXT("-"), CNeutral, [WGM, i, Other]()
 					{
 						if (!WGM.IsValid() || !WGM->Stints.IsValidIndex(i) || !WGM->Stints.IsValidIndex(Other) || WGM->Stints[i].Value <= 1) return;
 						--WGM->Stints[i].Value; ++WGM->Stints[Other].Value;
@@ -318,7 +341,7 @@ TSharedRef<SWidget> FGPMUI::PreraceScreen(AGPMGameMode* GM)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-			[ Button(TEXT("−"), CNeutral, [WGM]() { if (WGM.IsValid() && WGM->FuelK > 0) { --WGM->FuelK; WGM->SaveSettings(); } }, Fk > 0, 46.f, 42.f, 20) ]
+			[ Button(TEXT("-"), CNeutral, [WGM]() { if (WGM.IsValid() && WGM->FuelK > 0) { --WGM->FuelK; WGM->SaveSettings(); } }, Fk > 0, 46.f, 42.f, 20) ]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
 				SNew(SVerticalBox)
@@ -342,12 +365,12 @@ TSharedRef<SWidget> FGPMUI::PreraceScreen(AGPMGameMode* GM)
 
 	UGPMSeasonSubsystem* S = SeasonSys();
 	const FString Kicker = GM->bCareer && S ? FString::Printf(TEXT("GRAND PRIX %d / %d · STRATÉGIE"), S->Round() + 1, S->NumRounds()) : FString(TEXT("COURSE SOLO · STRATÉGIE"));
-	const int32 Sk = GM->SetupK >= 0 ? FMath::Clamp(GM->SetupK, 0, 4) : 2;
+	const int32 Sk = GM->PresetOf(GM->Setup);
 	TSharedRef<SHorizontalBox> Info = SNew(SHorizontalBox);
 	auto AddInfo = [&Info](const TSharedRef<SWidget>& W) { Info->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ W ]; };
 	AddInfo(Chip(TEXT("Course"), FString::Printf(TEXT("%d tours"), Laps), CText));
 	if (GridPos > 0) AddInfo(Chip(TEXT("Départ"), FString::Printf(TEXT("P%d"), GridPos), GridPos <= 3 ? CGold : CText));
-	AddInfo(Chip(TEXT("Réglage"), AGPMGameMode::Setups[Sk].Name, CInfo));
+	AddInfo(Chip(TEXT("Réglage"), GM->Setup == GM->Advice() ? FString(TEXT("Ingénieur")) : Sk >= 0 ? FString(AGPMGameMode::Setups[Sk].Name) : FString(TEXT("Personnalisé")), CInfo));
 	AddInfo(Chip(TEXT("Arrêt"), FString::Printf(TEXT("~%.0f s"), T ? T->PitLoss : 22.f), CDim));
 	AddInfo(Chip(TEXT("Météo"), GM->WeatherLabel(), WeatherColor(GM)));
 

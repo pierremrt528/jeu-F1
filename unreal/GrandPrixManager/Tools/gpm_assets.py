@@ -5,7 +5,7 @@ import os
 import traceback
 import unreal
 
-VERSION = 3
+VERSION = 5
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(TOOLS)
 TEX_SRC = os.path.join(TOOLS, "Textures")
@@ -194,18 +194,36 @@ def make_ground(tex_default, normal_default):
     vc = node(mat, unreal.MaterialExpressionVertexColor, -800, 300)
     c3 = mul(mat, c2, "", vc, "", -300, -100)
     wet = scalar(mat, "Wet", 0.0, -600, 520)
-    dark = mul(mat, c3, "", lerp(mat, None, "", None, "", wet, "", -300, 40, const_a=1.0, const_b=0.55), "", -120, -60)
+    # flaques : taches à très grande échelle de la photo, qui s'étendent avec l'eau (seuil 1,05 sec → 0,5 détrempé)
+    uv3 = mul(mat, uv, "", const(mat, 0.023, -1300, 300), "", -1150, 300)
+    tex3 = node(mat, unreal.MaterialExpressionTextureSampleParameter2D, -1050, 320, parameter_name="Tex", texture=tex_default)
+    link(uv3, "", tex3, "UVs")
+    # la photo est sombre et peu contrastée (vert linéaire 0,055 à 0,13) : on la recentre avant le seuil
+    gv = node(mat, unreal.MaterialExpressionAdd, -850, 320)
+    link(tex3, "G", gv, "A")
+    gv.set_editor_property("const_b", -0.09)
+    gn = mul(mat, gv, "", const(mat, 28.0, -850, 460), "", -720, 320)
+    thr = lerp(mat, None, "", None, "", wet, "", -850, 560, const_a=2.0, const_b=0.3)
+    diff = node(mat, unreal.MaterialExpressionSubtract, -600, 380)
+    link(gn, "", diff, "A")
+    link(thr, "", diff, "B")
+    puddle = node(mat, unreal.MaterialExpressionSaturate, -450, 380)
+    link(mul(mat, diff, "", const(mat, 2.0, -600, 500), "", -520, 420), "", puddle, "")
+    dark0 = mul(mat, c3, "", lerp(mat, None, "", None, "", wet, "", -300, 40, const_a=1.0, const_b=0.55), "", -120, -60)
+    dark = mul(mat, dark0, "", lerp(mat, None, "", None, "", puddle, "", -300, 140, const_a=1.0, const_b=0.75), "", 0, -40)
     output(dark, "", MP.MP_BASE_COLOR)
-    # rugosité, reflets
-    rough = lerp(mat, scalar(mat, "Rough", 0.85, -450, 380), "", None, "", wet, "", -120, 360, const_b=0.12)
+    # rugosité, reflets : les flaques sont des miroirs
+    rough0 = lerp(mat, scalar(mat, "Rough", 0.85, -450, 380), "", None, "", wet, "", -120, 360, const_b=0.12)
+    rough = lerp(mat, rough0, "", None, "", puddle, "", 0, 360, const_b=0.03)
     output(rough, "", MP.MP_ROUGHNESS)
     output(scalar(mat, "Spec", 0.35, -120, 480), "", MP.MP_SPECULAR)
-    # relief (Bump = 0 : plat)
+    # relief (Bump = 0 : plat), lisse dans les flaques
     ntex = node(mat, unreal.MaterialExpressionTextureSampleParameter2D, -1050, 600, parameter_name="NTex",
                 texture=normal_default, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     link(uv, "", ntex, "UVs")
     flat = node(mat, unreal.MaterialExpressionConstant3Vector, -800, 760, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
-    nrm = lerp(mat, flat, "", ntex, "RGB", scalar(mat, "Bump", 1.0, -800, 860), "", -450, 700)
+    nrm0 = lerp(mat, flat, "", ntex, "RGB", scalar(mat, "Bump", 1.0, -800, 860), "", -450, 700)
+    nrm = lerp(mat, nrm0, "", flat, "", puddle, "", -250, 760)
     output(nrm, "", MP.MP_NORMAL)
     finish(mat)
 
@@ -337,6 +355,27 @@ def make_fence():
     finish(mat)
 
 
+def make_water():
+    """Eau de la pluie (gerbes derrière les voitures, gouttes qui tombent) : translucide sans éclairage, bords adoucis.
+    Données d'instance 0 = opacité de chaque bouffée (elle s'éteint en vieillissant)."""
+    mat = material("M_GPM_Water")
+    setp(mat, "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    setp(mat, "blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    setp(mat, "two_sided", True)
+    output(mul(mat, vector(mat, "Color", (0.78, 0.81, 0.85), -500, -200), "", scalar(mat, "Bright", 1.0, -500, -60), "", -250, -120),
+           "", MP.MP_EMISSIVE_COLOR)
+    fres = node(mat, unreal.MaterialExpressionFresnel, -900, 120, exponent=1.6)
+    soft = node(mat, unreal.MaterialExpressionOneMinus, -750, 120)
+    link(fres, "", soft, "")
+    cd0 = node(mat, unreal.MaterialExpressionPerInstanceCustomData, -900, 300, data_index=0)
+    a = mul(mat, soft, "", cd0, "", -600, 200)
+    b = mul(mat, a, "", scalar(mat, "Opacity", 0.35, -750, 420), "", -450, 260)
+    sat = node(mat, unreal.MaterialExpressionSaturate, -300, 260)
+    link(b, "", sat, "")
+    output(sat, "", MP.MP_OPACITY)
+    finish(mat, instanced=True)
+
+
 def main():
     log("version %d, projet %s" % (VERSION, PROJECT))
     textures = {}
@@ -354,7 +393,7 @@ def main():
         except Exception:
             fail("texture %s : %s" % (asset_name, traceback.format_exc()))
     for fn, args in [(make_lit, ()), (make_ground, (textures.get("T_Asphalt"), textures.get("T_Asphalt_N"))), (make_inst, ()),
-                     (make_sky, ()), (make_clouds, (textures.get("T_Clouds"), textures.get("T_CloudsA"))), (make_fence, ())]:
+                     (make_sky, ()), (make_clouds, (textures.get("T_Clouds"), textures.get("T_CloudsA"))), (make_fence, ()), (make_water, ())]:
         try:
             fn(*args)
         except Exception:

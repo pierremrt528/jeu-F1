@@ -44,6 +44,8 @@ public:
 	void RadioBeep();
 	void Cheer(float Vol);
 	void Click();
+	/** Compteur du fil audio : il n'avance plus quand la sortie son du Mac est bloquée (après une mise en veille, par exemple). */
+	uint32 AudioTicks() const { return Ticks.load(); }
 
 protected:
 	virtual bool Init(int32& SampleRate) override;
@@ -51,6 +53,7 @@ protected:
 
 private:
 	std::atomic<float> Rpm{ 4000.f }, Load{ 0.f }, Skid{ 0.f }, Speed{ 0.f };
+	std::atomic<uint32> Ticks{ 0 };
 	std::atomic<float> OtherRpm{ 4000.f }, OtherVol{ 0.f }, OtherPitch{ 1.f }, RainAmt{ 0.f }, CrowdAmt{ 0.f }, RaceAmt{ 0.f }, UiAmt{ 1.f };
 	// état du fil audio
 	float Rate = 48000.f, Phase = 0.f, SubPhase = 0.f, RpmS = 4000.f, LoadS = 0.f, SkidS = 0.f, SpeedS = 0.f;

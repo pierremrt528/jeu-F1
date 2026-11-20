@@ -71,6 +71,7 @@ void UGPMEngineSound::StartVoice(float Freq, float Dur, float Vol, bool bSquareW
 
 int32 UGPMEngineSound::OnGenerateAudio(float* OutAudio, int32 NumSamples)
 {
+	Ticks.fetch_add(1);
 	const float TRpm = Rpm.load(), TLoad = Load.load(), TSkid = Skid.load(), TSpeed = Speed.load();
 	const float TORpm = OtherRpm.load(), TOVol = OtherVol.load(), TOPitch = OtherPitch.load();
 	const float TRain = RainAmt.load(), TCrowd = CrowdAmt.load(), TRace = RaceAmt.load(), TUi = UiAmt.load();

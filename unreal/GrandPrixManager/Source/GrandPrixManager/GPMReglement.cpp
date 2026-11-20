@@ -306,7 +306,7 @@ bool UGPMFactorySubsystem::Intersaison(int32 NextYear, FString& OutSubj, FString
 		OutBody = FString::Printf(TEXT("Les nouvelles règles s'appliquent : tes pièces %s ont été retirées. Tout le plateau repart de zéro dans %s."), *Names, NReg > 1 ? TEXT("ces domaines") : TEXT("ce domaine"));
 	}
 	// les rivaux gardent la moitié de leurs progrès ; un nouveau règlement les fait reculer et rebat un peu les cartes
-	for (const FString& T : Rivals) G->RivalDev.Add(T, G->RivalDev.FindRef(T) * 0.5f - NReg * 0.004f + (FMath::FRand() - 0.5f) * 0.008f * NReg);
+	for (const FString& T : Rivals) G->RivalDev.Add(T, G->RivalDev.FindRef(T) * 0.5f - NReg * 0.004f + (FMath::FRand() - 0.5f) * (0.02f + 0.008f * NReg));   // voiture d'hiver réussie ou ratée : la hiérarchie bouge chaque année
 	G->Reg.Reset();
 	Persist();
 	return false;

@@ -134,6 +134,8 @@ void AGPMGameMode::AddDamage(AGPMCar* C, float Amount, bool bRear)
 	Part = FMath::Min(1.f, Part + Amount);
 	if (Debris) Debris->Burst(C, FMath::Min(20, 3 + FMath::RoundToInt(Amount * 50.f)), bRear);
 	if (Amount > 0.18f) RequestSafety(false);
+	// gros choc (mur de face à plus de 170 km/h, contact très violent) : la voiture peut être trop abîmée pour continuer
+	if (Phase == EPhase::Race && !C->PitPhase && !C->bFinished && Amount >= 0.2f && FMath::FRand() < (Amount - 0.15f) * 4.f) { Retire(C, TEXT("accident")); return; }
 	const bool bGone = bRear ? C->bRwOff : C->bFwOff;
 	if (!bGone && ((Amount > 0.22f && FMath::FRand() < Amount * 2.5f) || (Part >= 0.95f && Amount > 0.08f)))
 	{
@@ -155,7 +157,7 @@ void AGPMGameMode::AddDamage(AGPMCar* C, float Amount, bool bRear)
 bool AGPMGameMode::WantBox(const AGPMCar* C) const
 {
 	const int32 Left = TotalLaps - C->Lap;
-	if (C->Lap < 1 || Left < 1) return false;
+	if (C->Lap < 1 || Left < 1 || C->bOut) return false;
 	if (C->bFlat) return true;
 	// pluie : slicks → intermédiaires ou pluie ; trop d'eau pour les intermédiaires ; piste qui sèche → slicks
 	const TCHAR Want = WetTyreFor(C);
@@ -197,7 +199,7 @@ TCHAR AGPMGameMode::WetTyreFor(const AGPMCar* C) const
 
 void AGPMGameMode::RadioCall(int32 K)
 {
-	if (!Car || Phase != EPhase::Race || Car->bFinished) return;
+	if (!Car || Phase != EPhase::Race || Car->bFinished || Car->bOut) return;
 	if (K == 0) { Say(RadioBrief()); RadioT = 8.f; return; }
 	if (K == 1)
 	{
@@ -230,7 +232,7 @@ FString AGPMGameMode::RadioBrief() const
 	auto GapS = [this, N](const AGPMCar* Front, const AGPMCar* Back) { return (Front->Progress() - Back->Progress()) / N * LapEstimate; };
 	if (Me > 0) Msg += FString::Printf(TEXT(" · devant : %s à %.1f s"), *Order[Me - 1]->DriverName, GapS(Order[Me - 1], Car.Get()));
 	else Msg += TEXT(" · en tête");
-	if (Me >= 0 && Order.IsValidIndex(Me + 1)) Msg += FString::Printf(TEXT(" · derrière à %.1f s"), GapS(Car.Get(), Order[Me + 1]));
+	if (Me >= 0 && Order.IsValidIndex(Me + 1) && !Order[Me + 1]->bOut) Msg += FString::Printf(TEXT(" · derrière à %.1f s"), GapS(Car.Get(), Order[Me + 1]));
 	if (Stints.IsValidIndex(Car->Stops + 1))
 	{
 		int32 Planned = 0;

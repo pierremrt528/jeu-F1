@@ -109,6 +109,20 @@ struct FGPMTrackData
 		return Best;
 	}
 
+	// Dégagements à l'extérieur des virages, par côté (0 gauche, 1 droite) : 0 herbe, 1 bac à gravier, 2 voie de dégagement en asphalte
+	TArray<uint8> Run[2];
+	uint8 RunAt(int32 i, bool bRight) const { const TArray<uint8>& R = Run[bRight ? 1 : 0]; return R.IsValidIndex(i) ? R[i] : 0; }
+	/** Sens du virage autour du point i : 1 à droite (côté des Lat positifs), −1 à gauche. */
+	int32 TurnAt(int32 i) const
+	{
+		const int32 N = TX.Num();
+		if (N < 8) return 0;
+		const int32 a = ((i - 3) % N + N) % N, b = (i + 3) % N, c = ((i % N) + N) % N;
+		return (TX[b] - TX[a]) * -TZ[c] + (TZ[b] - TZ[a]) * TX[c] > 0.f ? 1 : -1;
+	}
+	/** Place les bacs à gravier et les voies de dégagement (une fois, au chargement du circuit). */
+	void BuildRunoff();
+
 	static FVector ToWorld(double X, double Alt, double Z) { return FVector(X * 100.0, Z * 100.0, Alt * 100.0); }
 	int32 Num() const { return Points.Num(); }
 };

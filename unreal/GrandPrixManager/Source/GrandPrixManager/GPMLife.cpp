@@ -234,7 +234,7 @@ void UGPMCareerSubsystem::ApplyFx(const TSharedPtr<FJsonObject>& Fx, float Jit)
 	if (Fx->TryGetNumberField(TEXT("grid"), V)) G->GridPen += int32(V);
 	if (Fx->TryGetObjectField(TEXT("deal"), Sub))
 	{
-		G->DealName.Add(LStr(*Sub, TEXT("name")));
+		G->DealName.Add(Fill(LStr(*Sub, TEXT("name"))));   // le nom peut venir d'une histoire ({v.firm})
 		double Gp = 0.0, Nn = 1.0;
 		(*Sub)->TryGetNumberField(TEXT("gp"), Gp); (*Sub)->TryGetNumberField(TEXT("n"), Nn);
 		G->DealGp.Add(float(Gp)); G->DealN.Add(int32(Nn));
@@ -288,7 +288,7 @@ FString UGPMCareerSubsystem::FxText(const TSharedPtr<FJsonObject>& Fx) const
 	{
 		double Gp = 0, Nn = 1;
 		(*Sub)->TryGetNumberField(TEXT("gp"), Gp); (*Sub)->TryGetNumberField(TEXT("n"), Nn);
-		Out.Add(FString::Printf(TEXT("%s : %+.1f M€ par GP pendant %d GP"), *LStr(*Sub, TEXT("name")), Gp, int32(Nn)));
+		Out.Add(FString::Printf(TEXT("%s : %+.1f M€ par GP pendant %d GP"), *Fill(LStr(*Sub, TEXT("name"))), Gp, int32(Nn)));
 	}
 	if (Fx->TryGetStringField(TEXT("signed"), S)) Out.Add(TEXT("Nouvel équipier : ") + S);
 	if (Fx->TryGetNumberField(TEXT("grid"), V)) Out.Add(FString::Printf(TEXT("%d places de pénalité sur la grille"), int32(V)));
@@ -412,6 +412,19 @@ bool UGPMCareerSubsystem::StoryDialog(const FString& Id, const FString& Step, in
 		return true;
 	}
 	return false;
+}
+
+void UGPMCareerSubsystem::PreEvents(bool bLaunch)
+{
+	UGPMSaveGame* G = Save();
+	if (!G || !G->bCreated) return;
+	Queue.Reset();
+	FGPMRaceCtx R;   // pas encore de course : contexte neutre
+	BuildCtx(R);
+	if (!bLaunch) { PickEvents(); return; }
+	if (const TArray<TSharedPtr<FJsonValue>>* Evs = LArr(Life, TEXT("EVENTS")))
+		for (const TSharedPtr<FJsonValue>& EV : *Evs)
+			if (LStr(EV->AsObject(), TEXT("id")) == TEXT("launch")) { EventDialog(EV->AsObject()); return; }
 }
 
 void UGPMCareerSubsystem::PickEvents()

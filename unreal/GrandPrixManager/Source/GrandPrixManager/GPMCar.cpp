@@ -12,6 +12,7 @@
 #include "GPMDataSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "GPMGameMode.h"
 
 namespace
 {
@@ -65,12 +66,13 @@ AGPMCar::AGPMCar()
 
 	Arm = CreateDefaultSubobject<USpringArmComponent>(TEXT("Perche"));
 	Arm->SetupAttachment(Root);
-	Arm->TargetArmLength = 750.f;
-	Arm->SocketOffset = FVector(0, 0, 220.f);
+	// caméra arrière plus basse (comme à la télé) ; le retard de rotation laisse voir le flanc de la voiture en virage
+	Arm->TargetArmLength = 700.f;
+	Arm->SocketOffset = FVector(0, 0, 175.f);
 	Arm->bDoCollisionTest = false;
 	Arm->bEnableCameraRotationLag = true;
-	Arm->CameraRotationLagSpeed = 8.f;
-	Arm->SetRelativeRotation(FRotator(-6.f, 0, 0));
+	Arm->CameraRotationLagSpeed = 6.f;
+	Arm->SetRelativeRotation(FRotator(-4.f, 0, 0));
 	ChaseCam = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraArriere"));
 	ChaseCam->SetupAttachment(Arm);
 	ChaseCam->FieldOfView = 75.f;
@@ -80,6 +82,49 @@ AGPMCar::AGPMCar()
 	CockpitCam->SetRelativeLocation(FVector(32, 0, 98));   // yeux du pilote (casque du modèle à X = 30 cm, Z = 84 cm)
 	CockpitCam->FieldOfView = 80.f;
 	CockpitCam->SetAutoActivate(false);
+
+	// T-cam : sur l'arceau de sécurité (haut de la prise d'air à 1,26 m, 15 cm derrière le casque), comme à la télé
+	TCam = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraTCam"));
+	TCam->SetupAttachment(Body);
+	TCam->SetRelativeLocation(FVector(-18, 0, 152));
+	TCam->SetRelativeRotation(FRotator(-6.f, 0, 0));
+	TCam->FieldOfView = 82.f;
+	TCam->SetAutoActivate(false);
+
+	// feu arrière de pluie : sous l'aileron arrière, au bout de la structure anti-choc
+	RainLight = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FeuPluie"));
+	RainLight->SetupAttachment(Body);
+	if (UStaticMesh* Cb = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"))) RainLight->SetStaticMesh(Cb);
+	RainLight->SetRelativeLocation(FVector(-280.f, 0.f, 46.f));
+	RainLight->SetRelativeScale3D(FVector(0.04f, 0.16f, 0.08f));
+	RainLight->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RainLight->CastShadow = false;
+	RainLight->SetVisibility(false);
+}
+
+void AGPMCar::SetRainLight(bool bOn)
+{
+	if (bOn == bRainLightOn) return;
+	bRainLightOn = bOn;
+	if (bOn && !Cast<UMaterialInstanceDynamic>(RainLight->GetMaterial(0)))
+	{
+		if (UMaterialInstanceDynamic* M = GPMArt::Make(TEXT("M_GPM_Inst"), this))
+		{
+			M->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.6f, 0.02f, 0.02f));
+			M->SetVectorParameterValue(TEXT("Color2"), FLinearColor(0.6f, 0.02f, 0.02f));
+			M->SetVectorParameterValue(TEXT("Glow"), FLinearColor(30.f, 0.6f, 0.4f));
+			RainLight->SetMaterial(0, M);
+		}
+		else UE_LOG(LogGPM, Warning, TEXT("Feu de pluie : matériau M_GPM_Inst introuvable"));
+	}
+	RainLight->SetVisibility(bOn);
+}
+
+void AGPMCar::SetNear(bool bNear)
+{
+	if (bNear == bNearCam) return;
+	bNearCam = bNear;
+	Model->SetCastShadow(bNear);
 }
 
 UStaticMeshComponent* AGPMCar::AddPart(const TCHAR* Name, const TCHAR* Shape, FVector Loc, FVector Scale, bool bAccent)
@@ -121,6 +166,7 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 	UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 	UGPMDataSubsystem* Data = GI ? GI->GetSubsystem<UGPMDataSubsystem>() : nullptr;
 	LiveryMain = Main; LiveryAccent = Accent;
+	HelmetOf = DriverName;
 	if (Data) ModelEra = ModelWant.IsEmpty() ? Data->CarEra : ModelWant;
 	if (const FGPMCarModel* CM = Data ? Data->GetCarModel(ModelEra) : nullptr)
 	{
@@ -131,16 +177,23 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 		// matériau éclairé de Tools/gpm_assets.py : la rugosité de chaque pièce passe par l'alpha du sommet
 		// (palette de car.json : livrée, accent, casque, carbone, noir, visière, écran, rétroviseur, feu, gris, jantes)
 		UMaterialInstanceDynamic* CarMat = GPMArt::Make(TEXT("M_GPM_Lit"), this);
+		// casque : une couleur vive propre à chaque pilote (tirée de son nom), pour reconnaître les deux voitures d'une écurie
+		FLinearColor Helmet = Accent;
+		if (!DriverName.IsEmpty())
+		{
+			const uint32 Hh = GetTypeHash(DriverName);
+			Helmet = FLinearColor(float(Hh % 360), 0.55f + 0.35f * float((Hh >> 9) % 100) / 100.f, 0.55f + 0.4f * float((Hh >> 17) % 100) / 100.f).HSVToLinearRGB();
+		}
 		for (int32 i = 0; i < CM->P.Num(); ++i)
 		{
 			const int32 K = CM->K[i];
-			Col[i] = K == 0 ? Main : K <= 2 ? Accent : CM->Fixed.IsValidIndex(K) ? CM->Fixed[K] : FLinearColor::Black;
+			Col[i] = K == 0 ? Main : K == 1 ? Accent : K == 2 ? Helmet : CM->Fixed.IsValidIndex(K) ? CM->Fixed[K] : FLinearColor::Black;
 			Col[i].A = CarMat ? PaintRough(K) : 1.f;
 		}
 		if (CarMat)
 		{
 			CarMat->SetScalarParameterValue(TEXT("Rough"), 1.f);
-			CarMat->SetScalarParameterValue(TEXT("Metal"), 0.3f);
+			CarMat->SetScalarParameterValue(TEXT("Metal"), 0.2f);   // moins métallique : couleurs de livrée plus franches
 			CarMat->SetScalarParameterValue(TEXT("Spec"), 0.6f);
 		}
 		// sens des triangles selon la normale (Unreal : normale de face = −(B−A)×(C−A))
@@ -167,7 +220,8 @@ void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 // rugosité par couleur de la palette de car.json : livrée, accent, casque, carbone, noir, visière, écran, rétroviseur, feu, gris, jantes
 float AGPMCar::PaintRough(int32 K)
 {
-	static const float Rough[11] = { 0.3f, 0.3f, 0.22f, 0.42f, 0.85f, 0.05f, 0.3f, 0.1f, 0.3f, 0.6f, 0.45f };
+	// livrée vernie : reflets du ciel plus nets sur la carrosserie (le carbone reste satiné, les pneus mats)
+	static const float Rough[11] = { 0.2f, 0.2f, 0.16f, 0.36f, 0.85f, 0.05f, 0.3f, 0.1f, 0.3f, 0.6f, 0.4f };
 	return Rough[FMath::Clamp(K, 0, 10)];
 }
 
@@ -188,7 +242,9 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Heading = Track->H[Idx];
 	V = Beta = Ax = Ay = SpinT = 0.f;
 	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
+	Ground = 0; OffIdx = -1; OffSide = Strikes = 0; OffT = PenCd = 0.f; bOffGravel = false;
 	bFinished = false; FinishTime = 0.f; Penalty = 0.f; bSCMode = false;
+	bOut = false; OutT = FinProgress = 0.f; FlagLap = -1; OutWhy.Reset();
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	// nouvelle séance : voiture réparée, mode normal
 	Mode = 1; PowerMul = AccMul = 1.f;
@@ -220,9 +276,23 @@ float AGPMCar::Rpm() const
 
 void AGPMCar::ToggleCamera()
 {
-	bCockpit = !bCockpit;
-	ChaseCam->SetActive(!bCockpit);
-	CockpitCam->SetActive(bCockpit);
+	SetCamMode((CamMode + 1) % 3);
+	// la caméra choisie est gardée pour les courses suivantes
+	if (GConfig && bPlayerControlled)
+	{
+		if (AGPMGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AGPMGameMode>() : nullptr) GM->bSetCockpit = CamMode == 2;
+		GConfig->SetBool(TEXT("GPM"), TEXT("Cockpit"), CamMode == 2, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("CamMode"), CamMode, GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+}
+
+void AGPMCar::SetCamMode(int32 NewMode)
+{
+	CamMode = FMath::Clamp(NewMode, 0, 2);
+	ChaseCam->SetActive(CamMode == 0);
+	TCam->SetActive(CamMode == 1);
+	CockpitCam->SetActive(CamMode == 2);
 }
 
 void AGPMCar::ReadKeyboard(float Dt)
@@ -250,12 +320,14 @@ void AGPMCar::ReadKeyboard(float Dt)
 void AGPMCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (HelmetOf != DriverName) SetLivery(LiveryMain, LiveryAccent);   // nouveau pilote dans la voiture : son casque
 	if (!Track) return;
 	if (bTestDrive) TestDrive();
 	else if (bPlayerControlled && Cast<APlayerController>(GetController())) ReadKeyboard(DeltaSeconds);
 	else DriveAI(DeltaSeconds);
 	if (bHold) { Throttle = 0.f; Brake = 1.f; }
 	if (bFinished && V > 20.f) Throttle = 0.f;   // tour de décélération
+	if (bOut) { Throttle = 0.f; if (V < 3.f) Brake = 1.f; }   // abandon : la voiture s'arrête en roue libre
 	// voiture de sécurité : limiteur doux pour le joueur
 	if (bSCMode && bPlayerControlled && Track && Track->AISpeed.IsValidIndex(Idx) && V > Track->AISpeed[Idx] * 0.72f) Throttle = 0.f;
 	Accum = FMath::Min(Accum + DeltaSeconds, 0.1f);
@@ -285,6 +357,14 @@ void AGPMCar::Tick(float DeltaSeconds)
 		const float K = FMath::Clamp(V / 85.f, 0.f, 1.f);
 		ChaseCam->SetFieldOfView(FMath::FInterpTo(ChaseCam->FieldOfView, 70.f + 14.f * K, DeltaSeconds, 2.5f));
 		CockpitCam->SetFieldOfView(FMath::FInterpTo(CockpitCam->FieldOfView, 78.f + 10.f * K, DeltaSeconds, 2.5f));
+		TCam->SetFieldOfView(FMath::FInterpTo(TCam->FieldOfView, 80.f + 10.f * K, DeltaSeconds, 2.5f));
+		// secousses : légères avec la vitesse, fortes sur les vibreurs, très fortes dans l'herbe et le gravier
+		ShakeT += DeltaSeconds;
+		const float Amp = 0.12f * K + (bKerb && V > 8.f ? 0.9f : 0.f) + ((Ground == 1 || Ground == 2) && V > 5.f ? (Ground == 2 ? 2.2f : 1.4f) : 0.f);
+		const FVector Jit(0.f, Amp * 0.4f * FMath::PerlinNoise1D(ShakeT * 19.f), Amp * (FMath::PerlinNoise1D(ShakeT * 31.f + 7.f) + 0.5f * FMath::Sin(ShakeT * 70.f) * (bKerb ? 1.f : 0.f)));
+		TCam->SetRelativeLocation(FVector(-18, 0, 152) + Jit);
+		CockpitCam->SetRelativeLocation(FVector(32, 0, 98) + Jit);
+		ChaseCam->SetRelativeLocation(Jit * 1.5f);
 	}
 }
 
@@ -296,14 +376,23 @@ void AGPMCar::Step(float Dt)
 	auto W = [N](int32 i) { return ((i % N) + N) % N; };
 	const float Half = T.Width / 2.f, ALat = FMath::Abs(Lat);
 	bOffTrack = ALat > Half + 1.3f;
+	// hors piste : l'herbe ne freine pas mais glisse ; le gravier (2 m après le bord) freine fort ; la voie de dégagement tient bien
+	{
+		const uint8 Zone = bOffTrack ? T.RunAt(I0, Lat > 0.f) : 0;
+		Ground = !bOffTrack ? 0 : Zone == 2 ? 3 : Zone == 1 && ALat > Half + 2.f ? 2 : 1;
+	}
+	const float GroundGrip = Ground == 1 ? 0.5f : Ground == 2 ? 0.6f : Ground == 3 ? 0.95f : 1.f;
 
 	const float Curv = T.Curvature.IsValidIndex(I0) ? T.Curvature[I0] : 0.f;
 	bKerb = FMath::Abs(Curv) > 1.f / 220.f && ALat > Half - 0.1f && ALat < Half + 1.4f;
 	const float Bump = FMath::Sin(I0 * 0.73f + 1.3f) * FMath::Sin(I0 * 0.191f) * FMath::Sin(I0 * 0.047f + 0.5f);
 	const float Vc = (T.WY[W(I0 - 6)] - 2 * T.WY[I0] + T.WY[W(I0 + 6)]) / 144.f;
 	const float Nz = FMath::Clamp(1.f + V * V * Vc / Grav, 0.45f, 1.6f);
-	const float Grip = (bOffTrack ? 0.55f : 1.f) * (bKerb ? 0.9f : 1.f) * (1.f + 0.03f * Bump * FMath::Min(1.f, V / 60.f));
-	const float VTopNow = VTop * Perf * UpVTop * PowerMul * (1.f - 0.02f * Dmg) * (bRwOff ? 1.03f : 1.f) * (bOffTrack ? 0.5f : 1.f) * (1.f + 0.07f * Slipstream);
+	// réglages : suspension ferme et voiture basse sentent les vibreurs et les bosses, une voiture basse et souple talonne
+	const FGPMSetupFx& Fx = SetupFx;
+	const float Bottoming = 1.f - 0.15f * Fx.Bottom * FMath::Abs(Bump) * FMath::Clamp((V - 55.f) / 25.f, 0.f, 1.f);
+	const float Grip = GroundGrip * (bKerb ? 0.9f * Fx.Kerb : 1.f) * (1.f + 0.03f * Fx.Bump * Bump * FMath::Min(1.f, V / 60.f)) * Bottoming;
+	const float VTopNow = VTop * Perf * UpVTop * Fx.VTop * PowerMul * (1.f - 0.02f * Dmg) * (bRwOff ? 1.03f : 1.f) * (Ground == 2 ? 0.4f : 1.f) * (1.f + 0.07f * Slipstream);
 
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
@@ -311,8 +400,12 @@ void AGPMCar::Step(float Dt)
 	const float MuB = Mu * UpMu * Grip * GripMul / (1.f + (Mass - 1.f) * 0.25f);
 	const float RollF = FMath::Min(1.f, FMath::Abs(Ay) / 45.f);
 	// aileron abîmé : moins d'appui sur l'essieu concerné (avant → sous-virage, arrière → survirage)
-	const float CapF = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero * DmgKd) * (1 - 0.05f * RollF * RollF));
-	const float CapR = FMath::Max(0.5f, MuB * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero * RwKd) * (1 - 0.05f * RollF * RollF));
+	const float CapF = FMath::Max(0.5f, MuB * Fx.MuF * (Grav * Nz * FMath::Pow(1 + Lt, 0.85f) + Aero * Fx.KdF * DmgKd) * (1 - 0.05f * RollF * RollF));
+	const float CapR = FMath::Max(0.5f, MuB * Fx.MuR * (Grav * Nz * FMath::Pow(1 - Lt, 0.85f) + Aero * Fx.KdR * RwKd) * (1 - 0.05f * RollF * RollF));
+	// répartition de freinage : trop à l'avant, les roues avant bloquent plus tôt et la voiture tourne moins bien ;
+	// trop à l'arrière, elle pivote mieux mais l'arrière se dérobe
+	const float BiasD = Fx.Bias - Fx.BiasIdeal;
+	const float BiasK = 1.f - (BiasD > 0.f ? 1.6f * BiasD : -1.f * BiasD);
 
 	// longitudinal
 	float A = -Sign(V) * (0.8f + 0.0009f * V * V), Spin = 0.f;
@@ -321,9 +414,10 @@ void AGPMCar::Step(float Dt)
 	if (Throttle > 0 && V < -0.5f) A = 30.f * Throttle;
 	else if (Throttle > 0)
 	{
-		float Ad = Throttle * Acc * Perf * UpAcc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
+		float Ad = Throttle * Acc * Perf * UpAcc * Fx.Acc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);
-		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * FMath::Sqrt(1 - Uy * Uy));
+		// différentiel bloqué : meilleure motricité en sortie de virage lent
+		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * Fx.MuLong * (0.92f + 0.16f * Fx.Diff) * FMath::Sqrt(1 - Uy * Uy));
 		if (Ad > Room)
 		{
 			if (Assist.bTC) { Ad = Room * 0.95f; bTcOn = true; }
@@ -331,17 +425,18 @@ void AGPMCar::Step(float Dt)
 		}
 		A = Ad;
 	}
-	if (bOffTrack) A -= V * 0.35f;
+	if (Ground == 2 && V > 0.f) A -= V * 0.6f + 3.f;   // bac à gravier : la voiture s'enfonce
 	if (Brake > 0)
 	{
 		if (V > 0.3f)
 		{
-			float Ab = Brake * (Brake0 + BrakeK * V * V) * UpBrake / FMath::Sqrt(Mass);
-			const float Lim = 1.1f * CapF, Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapF);
+			float Ab = Brake * (Brake0 + BrakeK * V * V) * UpBrake * Fx.BrakeP / FMath::Sqrt(Mass);
+			const float Lim = 1.1f * CapF * Fx.MuLong * BiasK, Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapF);
 			const float Room = Lim * FMath::Sqrt(1 - Uy * Uy);
 			if (Ab > Room)
 			{
-				if (Assist.bABS) { Ab = Room * 0.97f; bAbsOn = true; }
+				// l'ABS travaille moins bien quand la pression de freinage dépasse de loin l'adhérence
+				if (Assist.bABS) { Ab = Room * (0.97f - 0.15f * FMath::Min(1.f, (Ab - Room) / Room)); bAbsOn = true; }
 				else { Ab = Lim * 0.78f; bLock = V > 4; }
 			}
 			A -= Ab;
@@ -369,11 +464,16 @@ void AGPMCar::Step(float Dt)
 	{
 		const float Delta = SteerMax * UpSteer * Steer / (1 + FMath::Abs(V) / 20.f) * (bLock ? 0.25f : 1.f);
 		float Yaw = V * FMath::Tan(Delta) / WB;
-		const float Want = FMath::Abs(V * Yaw), RF = Want / (CapF * 1.06f);
+		// avant en virage : le différentiel bloqué pousse tout droit à la remise des gaz, la répartition de freinage
+		// change le comportement à l'entrée du virage
+		const float CapFy = CapF * (1.f - 0.07f * (Fx.Diff - 0.5f) * Throttle * RollF)
+			* (1.f + Brake * (BiasD < 0.f ? -1.f * BiasD : -0.8f * BiasD));
+		const float Want = FMath::Abs(V * Yaw), RF = Want / (CapFy * 1.06f);
 		float Got = Want;
-		if (Want > 0.01f) { Got = CapF * 1.06f * TyreCurve(RF); Under = FMath::Max(0.f, RF - 1); Yaw *= Got / Want; }
+		if (Want > 0.01f) { Got = CapFy * 1.06f * TyreCurve(RF); Under = FMath::Max(0.f, RF - 1); Yaw *= Got / Want; }
 		const float AyNow = FMath::Abs(V * Yaw);
-		const float Ux = FMath::Min(Assist.bTC ? 0.8f : 0.97f, FMath::Max(0.f, A) / (CapR * 0.65f) + (Brake > 0 ? 0.35f * Brake * FMath::Min(1.f, -A / (1.1f * CapF)) : 0.f));
+		const float RearBrake = 1.f + 12.f * FMath::Max(0.f, -BiasD);
+		const float Ux = FMath::Min(Assist.bTC ? 0.8f : 0.97f, FMath::Max(0.f, A) / (CapR * 0.65f) + (Brake > 0 ? 0.35f * RearBrake * Brake * FMath::Min(1.f, -A / (1.1f * CapF)) : 0.f));
 		const float CapRl = CapR * 1.06f * (1 - 0.6f * Spin) * FMath::Sqrt(FMath::Max(0.f, 1 - Ux * Ux));
 		if (V > 6 && AyNow > CapRl) YawO = Sign(Yaw) * (AyNow - CapRl) / V * (Assist.bStab ? 0.35f : 1.f);
 		if (bKerb && V > 25) Beta += (FMath::FRand() - 0.5f) * 0.05f * FMath::Min(1.f, V / 60.f) * FMath::Sqrt(Dt * 60.f) * (Assist.bStab ? 0.5f : 1.f);

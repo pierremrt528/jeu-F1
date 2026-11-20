@@ -60,7 +60,7 @@ struct FGPMColorOpt { FString Id, Name; FLinearColor Color; };
 struct FGPMSponsorOpt { FString Id, Name, Sector, Goal; float Year = 10.f, Sign = 2.f, Bonus = 0.5f; int32 Rep = 0; };
 
 /** Choix en cours pendant la création de l'écurie (indices dans les listes d'options). */
-struct FGPMPick { int32 Name = 0, Pilot = 0, Tier = 1, Col1 = 0, Col2 = 6, Engine = 1, Mate = 2, Sponsor = 0; };
+struct FGPMPick { int32 Name = 0, Pilot = 0, Tier = 1, Col1 = 0, Col2 = 6, Engine = 1, Mate = 2, Sponsor = 0, Join = -1; };   // Join : écurie existante rejointe (−1 : création)
 
 /** Négociation avec l'agent d'un pilote (nego.js). */
 struct FGPMNego
@@ -70,8 +70,14 @@ struct FGPMNego
 	int32 Interest = 50, Patience = 3, Years = 2;
 	float Ask = 1.f, Demand = 1.f, Fee = 0.f;
 	float Pod = 0.f, Win = 0.f;   // primes de l'offre en cours (par podium, par victoire)
+	float Clause = 0.f;           // clause libératoire de l'offre en cours (0 = aucune)
 	bool bWantN1 = false, bOpen = false;
+	bool bExtend = false;         // prolongation du contrat de l'équipier actuel
+	bool bSwap = false;           // l'écurie du pilote récupère l'équipier actuel (sinon elle promeut un autre pilote)
 };
+
+/** Offre d'une écurie rivale pour l'équipier. */
+struct FGPMRivalOffer { FString Team; float Fee = 0.f; };
 
 /**
  * Carrière et vie de l'écurie : création de l'écurie (career.js), direction et objectifs, sponsors (sponsors.js),
@@ -100,6 +106,11 @@ public:
 	TArray<FString> TeamNames, PilotNames;
 	FGPMPick Pick;
 	float PickBudget() const;
+	/** Les 10 écuries du monde du jeu telles qu'à l'origine (avant tout choix de carrière). */
+	const TArray<FGPMTeam>& Originals() const { return OrigTeams; }
+	/** Rejoindre l'écurie d'indice Idx : niveau, motoriste, sponsor et équipier qui vont avec sa voiture ; budget de départ. */
+	void JoinPlan(int32 Idx, int32& OutTier, int32& OutEngine, int32& OutSponsor, FGPMMarketDriver& OutMate) const;
+	float JoinBudget(int32 Idx) const;
 	bool PickValid(FString& Why) const;
 	void CreateCareer();
 
@@ -116,14 +127,23 @@ public:
 	void Intersaison();
 	/** Objectifs de la direction : texte et atteint ou non. */
 	TArray<TPair<FString, bool>> Objectives() const;
+	/** Ambitions de la direction (0 petite écurie, 1 milieu de grille, 2 écurie de pointe) : le niveau de départ, puis le classement de la saison précédente. */
+	int32 Ambition() const;
+	/** Place que la direction attend à chaque course selon ses ambitions (14, 9 ou 4). */
+	int32 Expected() const { const int32 A = Ambition(); return A == 0 ? 14 : A == 2 ? 4 : 9; }
 	static FString ConfText(int32 C) { return C >= 75 ? TEXT("excellente") : C >= 55 ? TEXT("bonne") : C >= 35 ? TEXT("fragile") : C >= 20 ? TEXT("en crise") : TEXT("rompue"); }
 	bool IsFired() const;
+	/** Après un licenciement : un repreneur rachète l'écurie et garde le joueur (budget divisé par deux, ambitions au plus bas). */
+	void SecondChance();
 	/** Mission du sponsor pour le prochain GP (makeMission d'events.js), proposée une fois par manche. */
 	void EnsureMission();
 	void AcceptMission();
 	/** Bonus de performance pour la prochaine course (réponses à la presse, événements), puis remis à zéro. */
 	float Boost(const TCHAR* Key) const;
 	void ClearBoost();
+	/** Pré-saison : jours gagnés (négatif : perdus) sur les recherches en cours ; événements de l'intersaison (bLaunch : la présentation de la voiture). */
+	void ShiftDev(float Days);
+	void PreEvents(bool bLaunch);
 
 	// --- Boîte mail (mail.js) ---
 	/** Ajoute un message en tête de la boîte (150 au plus). InTag : direction, presse, mercato, evenement, reglement, sponsor, usine, equipe. */
@@ -141,14 +161,25 @@ public:
 	// --- Mercato ---
 	TArray<FGPMMarketDriver> MarketList() const;
 	FString Status(const FGPMMarketDriver& D) const;
-	void OpenNego(const FGPMMarketDriver& D);
+	void OpenNego(const FGPMMarketDriver& D, bool bExtend = false);
+	/** Test : une écurie rivale fait tout de suite une offre pour l'équipier (GPM.TestMercato). */
+	void DebugRivalOffer();
+	/** Négociation de la prolongation du contrat de l'équipier. */
+	void OpenExtend();
+	bool CanExtend() const;
+	/** Dernière saison du contrat d'un pilote d'une écurie rivale. */
+	int32 UntilOf(const FString& Name) const;
+	/** Indemnité de transfert que demanderait l'écurie d'un pilote sous contrat. */
+	float FeeOf(const FGPMMarketDriver& D) const;
 	FGPMNego Nego;
+	FGPMRivalOffer Offer;
 	/** Mis à vrai par une signature réussie (le jeu joue la scène de la signature puis le remet à faux). */
 	bool bJustSigned = false;
 	void AIMercato(int32 Moves);
 
 private:
 	TArray<FGPMTeam> BaseTeams;
+	TArray<FGPMTeam> OrigTeams;
 	TSharedPtr<FJsonObject> Life;
 	TArray<FString> Outlets;
 	TArray<FLinearColor> OutletColors;
@@ -170,6 +201,18 @@ private:
 	void NegoDialog(const FString& Line);
 	void NegoAct(int32 Action);
 	void Sign();
+	// mercato : offres des rivaux pour l'équipier, pilote de réserve, carrières (âge, progression, retraites)
+	void RivalOfferCheck(const FGPMRaceCtx& R);
+	void OfferAct(int32 Action);
+	void MateLeaves(const FString& Team, float Gain);
+	FString PromoteReserve(bool bPayNow);
+	FString BestFree(float MaxSal) const;
+	float SkillOf(const FString& Name) const;
+	FString FillSeat(int32 T, int32 Seat, bool bRookie);
+	TArray<FString> AgeDrivers();
+	TArray<FString> Rookies(int32 N);
+	FGPMMarketDriver MateAsDriver() const;
+	void MakeOffer(const FString& Team);
 	int32 TeamPos() const;
 	FGPMMarketDriver StatsOf(const FString& Name) const;
 	void WriteSeats();

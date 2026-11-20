@@ -63,6 +63,23 @@ public:
 	UPROPERTY() FString TeamName;
 	UPROPERTY() FString PlayerName;
 	UPROPERTY() FString Tier = TEXT("mid");
+	// Bilan financier de la saison (budget au départ, primes de course, partenaires et sponsors), palmarès saison par saison, reprises après licenciement
+	UPROPERTY() float FinStart = -1.f;
+	UPROPERTY() float FinPrize = 0.f;
+	UPROPERTY() float FinPartner = 0.f;
+	UPROPERTY() TArray<FString> Honours;
+	UPROPERTY() int32 Rescues = 0;
+	// Disposition du plateau : 0 ancienne (l'écurie du joueur prend la place de la première), 1 le joueur a rejoint une écurie existante
+	// (JoinTeam), 2 le joueur a créé sa propre écurie : 11 écuries au départ
+	// Pré-saison de janvier : 0 révélation de la monoplace, 1 événements, 2 essais hivernaux (TestDay sur 3), 3 terminée
+	UPROPERTY() int32 PreStage = 3;
+	UPROPERTY() int32 TestDay = 0;
+	UPROPERTY() float TestDays = 0.f;            // jours de développement gagnés aux essais
+	UPROPERTY() TArray<int32> TestRes;           // par journée d'essais : 1 mission réussie, 0 ratée, −1 incident
+	UPROPERTY() TArray<FString> TestReport;
+	UPROPERTY() int32 Layout = 0;
+	UPROPERTY() FString JoinTeam;
+	UPROPERTY() int32 Ambition = -1;        // ambitions de la direction : 0 petite écurie, 1 milieu de grille, 2 écurie de pointe ; −1 = selon le niveau de départ
 	UPROPERTY() FString Engine;
 	UPROPERTY() FString Sponsor;
 	UPROPERTY() int32 Col1 = 0;
@@ -130,6 +147,14 @@ public:
 	// Contrat de l'équipier : primes par podium et par victoire
 	UPROPERTY() float MatePod = 0.f;
 	UPROPERTY() float MateWin = 0.f;
+	// Mercato : clause libératoire de l'équipier (0 = aucune), dernière offre d'un rival, contrats et carrière de tous les pilotes
+	UPROPERTY() float MateClause = 0.f;
+	UPROPERTY() int32 MateOfferAt = -99;          // manche de la dernière offre d'une écurie rivale pour l'équipier
+	UPROPERTY() TMap<FString, int32> DrvUntil;    // pilote → dernière saison de son contrat (écuries rivales)
+	UPROPERTY() TMap<FString, int32> DrvBorn;     // pilote → année de naissance (jeunes de Formule B arrivés en cours de carrière)
+	UPROPERTY() TMap<FString, float> DrvPot;      // pilote → potentiel
+	UPROPERTY() TMap<FString, FString> DrvFrom;   // pilote → provenance (« Formule B · 3e »)
+	UPROPERTY() TArray<FString> Retired;          // pilotes retraités
 	// Grandes refontes du règlement (reglement.js) : ère en cours (ERAS), génération, année de la refonte (0 = pas encore tirée),
 	// ère suivante ; voiture de la prochaine ère (pièces prêtes ; recherches rangées dans DevPart sous « F:pôle ») ; avance des rivaux
 	UPROPERTY() int32 EraI = 0;
@@ -147,7 +172,7 @@ public:
 struct FGPMStanding { FString Name, Team; int32 Pts = 0; FLinearColor Color = FLinearColor::White; bool bPlayer = false; };
 
 /** Arrivée d'un pilote, pour enregistrer une course. */
-struct FGPMFinish { FString Name, Team; float BestLap = 0.f; bool bPlayer = false; };
+struct FGPMFinish { FString Name, Team; float BestLap = 0.f; bool bPlayer = false; bool bOut = false; };
 
 /**
  * Saison / carrière (season.js) : calendrier des 22 GP, points 25-18-15… + 1 pour le meilleur tour (top 10),

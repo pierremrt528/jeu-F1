@@ -5,6 +5,57 @@
 #include "GPMCar.h"
 #include "GPMEngineSound.h"
 #include "GPMTypes.h"
+#include "GrandPrixManager.h"
+#include "AudioMixerDevice.h"
+#include "AudioDevice.h"
+#include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
+#include "TimerManager.h"
+
+// Surveillance du son : après une mise en veille du Mac (ou un changement de sortie audio), la sortie son d'Unreal peut rester
+// bloquée et le jeu devenait muet jusqu'à sa fermeture. Si le fil audio ne produit plus rien pendant 3 s, on relance le flux.
+namespace GPMSoundWatch
+{
+	uint32 LastTicks = 0;
+	double LastAlive = 0.0, LastRevive = 0.0;
+	bool bDead = false;
+
+	Audio::IAudioMixerPlatformInterface* Platform(UWorld* World)
+	{
+		FAudioDeviceHandle Dev = World ? World->GetAudioDevice() : FAudioDeviceHandle();
+		Audio::FMixerDevice* Mixer = Dev.IsValid() ? static_cast<Audio::FMixerDevice*>(Dev.GetAudioDevice()) : nullptr;
+		return Mixer ? Mixer->GetAudioMixerPlatform() : nullptr;
+	}
+
+	void Watch(UWorld* World, UGPMEngineSound* Snd)
+	{
+		const double Now = FPlatformTime::Seconds();
+		const uint32 T = Snd->AudioTicks();
+		if (T != LastTicks || LastAlive == 0.0)
+		{
+			if (bDead) UE_LOG(LogGPM, Log, TEXT("Son : le son est revenu"));
+			bDead = false; LastTicks = T; LastAlive = Now;
+			return;
+		}
+		if (Now - LastAlive < 3.0 || Now - LastRevive < 6.0) return;
+		LastRevive = Now; bDead = true;
+		UE_LOG(LogGPM, Warning, TEXT("Son : plus de son depuis %.0f s, relance du flux audio"), Now - LastAlive);
+		if (Audio::IAudioMixerPlatformInterface* P = Platform(World)) { P->StopAudioStream(); P->StartAudioStream(); }
+		if (!Snd->IsPlaying()) Snd->Start();
+	}
+}
+
+// test : coupe la sortie son comme le fait une mise en veille (la surveillance doit la relancer toute seule)
+static FAutoConsoleCommandWithWorldAndArgs GTestSonCmd(TEXT("GPM.TestSon"), TEXT("Bloque la sortie son pour vérifier qu'elle est relancée automatiquement."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		TWeakObjectPtr<UWorld> W = World;
+		FTimerHandle H;
+		if (World) World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W]()
+		{
+			if (Audio::IAudioMixerPlatformInterface* P = GPMSoundWatch::Platform(W.Get())) { P->StopAudioStream(); UE_LOG(LogGPM, Display, TEXT("TestSon : sortie son bloquée")); }
+		}), 12.f, false);
+	}));
 
 void AGPMGameMode::UiClick()
 {
@@ -14,6 +65,7 @@ void AGPMGameMode::UiClick()
 void AGPMGameMode::UpdateAudio(float Dt)
 {
 	if (!EngineSound || !Car) return;
+	GPMSoundWatch::Watch(GetWorld(), EngineSound);
 	// les sons de course se taisent derrière les menus ; plus discrets sous les écrans de résultats
 	const bool bRacing = Phase == EPhase::Quali || Phase == EPhase::Lights || Phase == EPhase::Race || Phase == EPhase::Intro || Phase == EPhase::Outro;
 	const float RaceK = bRacing ? 1.f : (Phase == EPhase::Done || Phase == EPhase::QualiDone) ? 0.35f : 0.f;

@@ -225,6 +225,7 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 		}
 	}
 
+	T.BuildRunoff();
 	Files.Remove(FString::Printf(TEXT("tracks/%s.json"), *Id));   // le JSON brut n'est plus utile
 	UE_LOG(LogGPM, Log, TEXT("Circuit %s : %d points, %.0f m"), *T.Name, T.Num(), T.Length);
 	TrackCache.Add(Id, Ptr);
@@ -283,4 +284,47 @@ TSharedPtr<FJsonValue> UGPMDataSubsystem::GetRaw(const FString& File, const FStr
 {
 	TSharedPtr<FJsonObject> O = LoadFile(File + TEXT(".json"));
 	return O.IsValid() ? O->TryGetField(Key) : nullptr;
+}
+
+// Dégagements : à l'extérieur de chaque virage, depuis 50 m avant l'entrée (là où l'on tire tout droit en ratant son freinage).
+// Gros freinage au bout d'une ligne droite rapide : voie de dégagement en asphalte (on ne perd pas de vitesse, mais gare aux
+// limites de piste). Virage moyen : bac à gravier, qui freine fort. Rien en ville (murs au bord), le long des stands, ni là où
+// le mur est à moins de 6 m de la piste.
+void FGPMTrackData::BuildRunoff()
+{
+	const int32 N = WX.Num();
+	Run[0].Init(0, N); Run[1].Init(0, N);
+	if (N < 200 || Curvature.Num() != N || AISpeed.Num() != N || Theme.Surface == TEXT("concrete")) return;
+	auto W = [N](int32 i) { return ((i % N) + N) % N; };
+	auto InCorner = [&](int32 i) { return FMath::Abs(Curvature[W(i)]) > 1.f / 150.f; };
+	int32 Start = 0;
+	while (Start < N && (InCorner(Start) || InCorner(Start + 1) || InCorner(Start + 2))) ++Start;
+	int32 NGravel = 0, NTarmac = 0;
+	for (int32 k = 0; k < N; )
+	{
+		if (!InCorner(Start + k)) { ++k; continue; }
+		// le virage : jusqu'à 4 points consécutifs hors courbure (les trous de 6 m ne coupent pas un virage)
+		int32 a = k, b = k, Gap = 0;
+		for (int32 m = k; m < N && Gap < 4; ++m) { if (InCorner(Start + m)) { b = m; Gap = 0; } else ++Gap; }
+		k = b + 1;
+		if (b - a < 4) continue;
+		const int32 A = Start + a, B = Start + b;
+		float VMin = 1e9f;
+		for (int32 m = A; m <= B; ++m) VMin = FMath::Min(VMin, AISpeed[W(m)]);
+		const float VIn = AISpeed[W(A - 30)], Drop = VIn - VMin;
+		const uint8 Kind = VIn > 68.f && Drop > 26.f ? 2 : Drop > 9.f ? 1 : 0;
+		if (!Kind) continue;
+		const int32 Side = TurnAt((A + B) / 2) > 0 ? 0 : 1;   // l'extérieur : à gauche d'un virage à droite
+		const TArray<float>& Wall = Side ? WallRight : WallLeft;
+		int32 Done = 0;
+		for (int32 m = A - 25; m <= B + 8; ++m)
+		{
+			const int32 j = W(m), Pk = PitK(j);
+			if (Side == 1 && Pk > PitE0 - 15 && Pk < PitX1 + 15) continue;
+			if ((Wall.IsValidIndex(j) ? Wall[j] : Width * 0.5f + 9.f) - Width * 0.5f < 6.f) continue;
+			Run[Side][j] = Kind; ++Done;
+		}
+		if (Done) (Kind == 2 ? NTarmac : NGravel)++;
+	}
+	UE_LOG(LogGPM, Log, TEXT("Dégagements de %s : %d bacs à gravier, %d voies de dégagement"), *Name, NGravel, NTarmac);
 }

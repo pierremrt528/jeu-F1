@@ -635,6 +635,33 @@ void AGPMShowroom::Camera(int32 Shot, float T, FVector& Eye, FVector& Look, floa
 		Fov = 55.f;
 		break;
 	}
+	case 6:
+	{
+		// sacre : travelling bas vers l'avant de la voiture, tour au ras du plateau, puis grue qui s'élève sous les projecteurs
+		if (T < 3.f)
+		{
+			const float U = FMath::SmoothStep(0.f, 1.f, T / 3.f);
+			Eye = O + FMath::Lerp(FVector(980.f, -360.f, 55.f), FVector(640.f, -230.f, 70.f), U);
+			Look = CarC - FVector(0, 0, 20.f);
+			Fov = 42.f;
+		}
+		else if (T < 6.f)
+		{
+			const float A = -0.9f + (T - 3.f) * 0.55f;
+			Eye = O + FVector(FMath::Cos(A) * 760.f, FMath::Sin(A) * 760.f, 190.f);
+			Look = CarC;
+			Fov = 54.f;
+		}
+		else
+		{
+			const float U = FMath::SmoothStep(0.f, 1.f, FMath::Clamp((T - 6.f) / 3.f, 0.f, 1.f));
+			const float A = 0.75f + U * 0.35f, R = FMath::Lerp(780.f, 1250.f, U);
+			Eye = O + FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, FMath::Lerp(210.f, 720.f, U));
+			Look = CarC + FVector(0, 0, 40.f * U);
+			Fov = 62.f;
+		}
+		break;
+	}
 	case 5:
 	{
 		// accueil : plan bas de trois quarts, la voiture dans la moitié droite (le menu occupe la gauche), lent balancement
@@ -655,6 +682,16 @@ void AGPMShowroom::Camera(int32 Shot, float T, FVector& Eye, FVector& Look, floa
 		break;
 	}
 	}
+}
+
+void AGPMShowroom::SetGala(bool bOn)
+{
+	if (bOn == bGala || !KeyLight) return;
+	bGala = bOn;
+	KeyLight->SetIntensity(bOn ? 1500.f : 850.f);
+	KeyLight->SetLightColor(bOn ? FLinearColor(1.f, 0.84f, 0.52f) : FLinearColor(1.f, 0.95f, 0.88f));
+	KeyLight->SetOuterConeAngle(bOn ? 38.f : 48.f);
+	FillLight->SetLightColor(bOn ? FLinearColor(1.f, 0.86f, 0.62f) : FLinearColor(1.f, 0.97f, 0.92f));
 }
 
 void AGPMShowroom::Tick(float DeltaSeconds)

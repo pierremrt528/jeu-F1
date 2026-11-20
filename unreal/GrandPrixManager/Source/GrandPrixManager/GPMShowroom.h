@@ -44,6 +44,8 @@ public:
 	void SetTeam(const FLinearColor& Main, const FLinearColor& Accent, const FString& Name);
 	/** Centre du plateau (monde, cm). */
 	FVector Spot() const { return GetActorLocation(); }
+	/** Soirée du sacre : projecteur doré plus fort, lumière de remplissage chaude. */
+	void SetGala(bool bOn);
 	/** Scènes : 0 aucune, 1 rendez-vous, 2 signature ; T = temps écoulé (s). Place les personnages. */
 	void PlayScene(int32 Kind, float T);
 	/** Tenues des deux personnages (reconstruits si elles changent). */
@@ -54,7 +56,7 @@ public:
 	FVector CastFocus() const;
 	/**
 	 * Caméra de l'atelier. Plan 0 : écran à panneau à gauche (voiture dans le tiers droit), 1 : écran plein (voiture au centre),
-	 * 2 : bienvenue (tour de la voiture), 3 : rendez-vous, 4 : signature.
+	 * 2 : bienvenue (tour de la voiture), 3 : rendez-vous, 4 : signature, 5 : accueil, 6 : sacre (trois plans).
 	 */
 	void Camera(int32 Shot, float T, FVector& Eye, FVector& Look, float& Fov) const;
 
@@ -76,7 +78,7 @@ private:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> GlowMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> AccentMID;
 	UPROPERTY() TObjectPtr<UMaterialInterface> VertexMat;
-	bool bShown = true, bBuilt = false;
+	bool bShown = true, bBuilt = false, bGala = false;
 	float Yaw = 0.f;
 	FLinearColor TeamMain = FLinearColor::Red, TeamAccent = FLinearColor::White;
 	FString TeamLabel;

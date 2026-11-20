@@ -11,6 +11,9 @@ for B in $(find "/Users/Shared/Epic Games" -maxdepth 9 -path "*/Engine/Build/Bat
 done
 if [ -z "$UE" ]; then echo "Unreal Engine introuvable dans /Users/Shared/Epic Games. Installe-le depuis le Launcher Epic."; read -p "Entrée pour fermer"; exit 1; fi
 echo "Unreal : $UE"
+# ménage : vieux journaux (plus de 3 jours) et copies de secours des journaux, pour ne pas remplir le disque
+find Saved -maxdepth 1 -name "*.log" -mtime +3 -delete 2>/dev/null
+find Saved -maxdepth 1 -name "*-backup-*.log" -mtime +1 -delete 2>/dev/null
 echo "Compilation du jeu (2 à 10 minutes la première fois, quelques secondes ensuite)…"
 "$UE/Engine/Build/BatchFiles/Mac/Build.sh" GrandPrixManagerEditor Mac Development -Project="$P" -WaitMutex 2>&1 | tee Saved/compilation.log
 if [ ${PIPESTATUS[0]} -ne 0 ]; then

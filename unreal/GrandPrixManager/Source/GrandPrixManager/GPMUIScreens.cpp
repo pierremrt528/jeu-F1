@@ -121,12 +121,23 @@ TSharedRef<SWidget> FGPMUI::SeasonScreen(AGPMGameMode* GM)
 
 	// en-tête : sigle de l'écurie, saison et manche, nom de l'écurie, navigation
 	TSharedRef<SHorizontalBox> Nav = SNew(SHorizontalBox);
-	Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("ACCUEIL"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->GoHome(); }, true, 0.f, 44.f, 15) ];
+	Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("ACCUEIL"), CNeutral, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->GoHome(); }, true, 0.f, 44.f, 15) ];
+	// recommencer la carrière au tout début (création de l'écurie) : deux clics, le second confirme ; la carrière en cours
+	// n'est effacée qu'à la fin de la création (Échap pendant la création : retour à l'accueil, rien n'est perdu)
+	if (bTeam && bConfirmNew)
+	{
+		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("OUI, TOUT EFFACER"), FLinearColor(0.62f, 0.08f, 0.08f, 1.f), [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->NewCareer(); }, true, 0.f, 44.f, 15) ];
+		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("ANNULER"), CNeutral, [this]() { bConfirmNew = false; }, true, 0.f, 44.f, 15) ];
+	}
+	else if (bTeam)
+		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("RECOMMENCER LA CARRIÈRE"), CNeutral, [this]() { bConfirmNew = true; }, true, 0.f, 44.f, 15) ];
 	if (bTeam)
-		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("MERCATO"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->OpenMercato(); }, true, 0.f, 44.f, 15) ];
-	Nav->AddSlot().AutoWidth()[ Button(TEXT("QG · USINE"), Acc2, [WGM]() { if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 44.f, 15) ];
+		Nav->AddSlot().AutoWidth().Padding(FMargin(0.f, 0.f, 6.f, 0.f))[ Button(TEXT("MERCATO"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->OpenMercato(); }, true, 0.f, 44.f, 15) ];
+	Nav->AddSlot().AutoWidth()[ Button(TEXT("QG · USINE"), Acc2, [this, WGM]() { bConfirmNew = false; if (WGM.IsValid()) WGM->Phase = AGPMGameMode::EPhase::Factory; }, true, 0.f, 44.f, 15) ];
 	const FString TeamName = bTeam ? C->Save()->TeamName : FString(TEXT("Championnat"));
+	const bool bPreHdr = bTeam && !S->IsOver() && S->Round() == 0 && GM->PreStage() < 3;
 	const FString Kick = S->IsOver() ? FString::Printf(TEXT("SAISON %d  ·  TERMINÉE"), S->Year())
+		: bPreHdr ? FString::Printf(TEXT("SAISON %d  ·  PRÉ-SAISON"), S->Year())
 		: FString::Printf(TEXT("SAISON %d  ·  GRAND PRIX %d / %d"), S->Year(), S->Round() + 1, S->NumRounds());
 	TSharedRef<SWidget> Header = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 16.f, 0.f))
@@ -247,8 +258,24 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Vitesse"), FString::Printf(TEXT("%.0f"), G->MateSpd), CText) ]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Salaire"), FString::Printf(TEXT("%.1f M€"), G->MateSal), CText) ]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Contrat"), FString::Printf(TEXT("jusqu'en %d"), G->MateSince + G->MateYears - 1), CText) ]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Chip(TEXT("Statut"), GPMUIScreensText::RoleName(G->MateRole), CText) ],
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Contrat"), FString::Printf(TEXT("jusqu'en %d"), G->Year + G->MateYears - 1),
+			G->MateYears <= 1 ? FLinearColor(1.f, 0.75f, 0.4f) : CText) ]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))[ Chip(TEXT("Statut"), GPMUIScreensText::RoleName(G->MateRole), CText) ]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 8.f, 0.f))
+		[ Chip(TEXT("Clause"), G->MateClause > 0.f ? FString::Printf(TEXT("%.1f M€"), G->MateClause) : FString(TEXT("aucune")), CText) ]
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+		[
+			C->CanExtend()
+			? Button(TEXT("PROLONGER"), Acc2, [this, WGM]()
+				{
+					UGPMCareerSubsystem* CS = CareerSys();
+					if (!CS || !WGM.IsValid()) return;
+					CS->OpenExtend();
+					WGM->bNegoFromMercato = true;
+					WGM->Phase = AGPMGameMode::EPhase::Press;
+				}, true, 150.f, 44.f, 15)
+			: SNullWidget::NullWidget
+		],
 		FLinearColor(Acc.R * 0.3f, Acc.G * 0.3f, Acc.B * 0.3f, 0.75f), 16.f);
 
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
@@ -270,7 +297,9 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()[ Txt(D.Name, 18, CText, true) ]
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("%s · %d ans"), D.Seat >= 0 ? *D.Team : *D.From, D.Age), 13, CDim) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(D.Seat < 0 ? FString::Printf(TEXT("%s · %d ans · libre"), *D.From, D.Age)
+					: C->UntilOf(D.Name) <= G->Year ? FString::Printf(TEXT("%s · %d ans · fin de contrat"), *D.Team, D.Age)
+					: FString::Printf(TEXT("%s · %d ans · contrat jusqu'en %d"), *D.Team, D.Age, C->UntilOf(D.Name)), 13, D.Seat >= 0 && C->UntilOf(D.Name) <= G->Year ? FLinearColor(1.f, 0.75f, 0.4f) : CDim) ]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f))
 			[ Txt(FString::Printf(TEXT("vit. %.0f · strat. %.0f · pneus %.0f · pot. %.0f"), D.Spd, D.Strat, D.Tyre, D.Pot), 14, CDim) ]
@@ -301,7 +330,7 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Title(TEXT("MERCATO"), TEXT("Marché des pilotes"), Right) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Mate ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
-		[ Txt(TEXT("Touche un pilote pour négocier avec son agent. Pendant la saison, les indemnités de transfert sont multipliées par 2,5."), 14, CDim, false, true) ]
+		[ Txt(TEXT("Touche un pilote pour négocier avec son agent. L'indemnité dépend des années de contrat restantes (un pilote en fin de contrat coûte bien moins cher) et elle est multipliée par 2,5 pendant la saison. Une clause libératoire rend un pilote plus facile à signer, mais un rival pourra le racheter à ce prix."), 14, CDim, false, true) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ];
 	return Page(Body, CRoomBg);
 }
@@ -323,14 +352,16 @@ TSharedRef<SWidget> FGPMUI::SetupScreen(AGPMGameMode* GM)
 		TEXT("Le moteur coûte chaque saison : puissance, fiabilité et consommation."),
 		TEXT("Ton coéquipier marque des points pour l'écurie. Les jeunes progressent, les vétérans coûtent cher."),
 		TEXT("Le sponsor principal paie chaque saison, plus un bonus quand son objectif de course est rempli.") };
-	const int32 St = FMath::Clamp(GM->SetupStep, 0, 5);
+	const bool bJoin = P.Join >= 0;   // rejoindre une écurie existante : une seule étape
+	const int32 St = bJoin ? 0 : FMath::Clamp(GM->SetupStep, 0, 5);
+	const int32 NSteps = bJoin ? 1 : 6;
 
 	// fil des étapes
 	TSharedRef<SHorizontalBox> Trail = SNew(SHorizontalBox);
-	for (int32 k = 0; k < 6; ++k)
+	for (int32 k = 0; k < NSteps; ++k)
 	{
 		const FLinearColor Col = k == St ? Acc : k < St ? FLinearColor(0.2f, 0.5f, 0.3f, 1.f) : FLinearColor(1.f, 1.f, 1.f, 0.08f);
-		Trail->AddSlot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, k < 5 ? 6.f : 0.f, 0.f))
+		Trail->AddSlot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, k < NSteps - 1 ? 6.f : 0.f, 0.f))
 		[
 			SNew(SBorder).BorderImage(GPMUIStyle::Rounded(40.f)).BorderBackgroundColor(FSlateColor(Col)).HAlign(HAlign_Center).Padding(FMargin(6.f, 6.f))
 			[ Txt(FString::Printf(TEXT("%d. %s"), k + 1, Steps[k]), 13, k == St ? InkOn(Acc) : (k < St ? CText : CDim), true) ]
@@ -339,7 +370,45 @@ TSharedRef<SWidget> FGPMUI::SetupScreen(AGPMGameMode* GM)
 
 	auto Grid = [](int32) { return SNew(SUniformGridPanel).SlotPadding(FMargin(5.f)); };
 	TSharedRef<SWidget> Content = SNullWidget::NullWidget;
-	if (St == 0)
+	// choix de départ : rejoindre l'une des 10 écuries du championnat, ou créer la 11e
+	TSharedRef<SWidget> Mode = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(5.f, 0.f, 8.f, 14.f))
+		[ Button(TEXT("REJOINDRE UNE ÉCURIE"), bJoin ? Acc : CNeutral, [this]() { if (UGPMCareerSubsystem* CS = CareerSys()) { if (CS->Pick.Join < 0) CS->Pick.Join = 0; } }, true, 290.f, 46.f, 16) ]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
+		[ Button(TEXT("CRÉER MA PROPRE ÉCURIE"), !bJoin ? Acc : CNeutral, [this]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Pick.Join = -1; }, true, 290.f, 46.f, 16) ];
+	if (St == 0 && bJoin)
+	{
+		TSharedRef<SUniformGridPanel> Teams = Grid(2), Pilots = Grid(3);
+		const TArray<FGPMTeam>& Orig = C->Originals();
+		for (int32 k = 0; k < Orig.Num(); ++k)
+		{
+			const FGPMTeam& Tm = Orig[k];
+			int32 T = 1, E = 1, S = 0;
+			FGPMMarketDriver Mate;
+			C->JoinPlan(k, T, E, S, Mate);
+			const FString Drv = Tm.Drivers.Num() > 1 ? FString::Printf(TEXT("avec %s"), *Tm.Drivers[1].Name) : FString();
+			TSharedRef<SWidget> W = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 10.f, 0.f))
+					[ SNew(SBox).WidthOverride(14.f).HeightOverride(26.f)[ SNew(SBorder).BorderImage(GPMUIStyle::Rounded(2.f)).BorderBackgroundColor(FSlateColor(FLinearColor(Tm.Color.R, Tm.Color.G, Tm.Color.B, 1.f))) ] ]
+					+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(Tm.Name, 19, CGold, true, true) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 4.f))[ Txt(FString::Printf(TEXT("%s · voiture %.1f %% · %s"), C->Tiers.IsValidIndex(T) ? *C->Tiers[T].Name : TEXT(""), Tm.Perf * 100.f, *Drv), 13, CDim, false, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(FString::Printf(TEXT("Budget de départ %.0f M€ · moteur %s"), C->JoinBudget(k), C->Engines.IsValidIndex(E) ? *C->Engines[E].Name : TEXT("")), 14, CGood, true) ];
+			Teams->AddSlot(k % 2, k / 2)[ Pick(W, P.Join == k, [this, k]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Pick.Join = k; }) ];
+		}
+		for (int32 k = 0; k < C->PilotNames.Num(); ++k)
+			Pilots->AddSlot(k % 3, k / 3)[ Pick(Txt(C->PilotNames[k], 17, CText, P.Pilot == k), P.Pilot == k, [this, k]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Pick.Pilot = k; }) ];
+		Content = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ Mode ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(5.f, 0.f, 0.f, 4.f))[ Txt(TEXT("ÉCURIE À REJOINDRE (TU PRENDS LE VOLANT DE SON PREMIER PILOTE)"), 13, CDim, true) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Teams ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(5.f, 0.f, 0.f, 4.f))[ Txt(TEXT("TON NOM DE PILOTE"), 13, CDim, true) ]
+			+ SVerticalBox::Slot().AutoHeight()[ Pilots ];
+	}
+	else if (St == 0)
 	{
 		TSharedRef<SUniformGridPanel> Names = Grid(3), Pilots = Grid(3);
 		for (int32 k = 0; k < C->TeamNames.Num(); ++k)
@@ -347,6 +416,7 @@ TSharedRef<SWidget> FGPMUI::SetupScreen(AGPMGameMode* GM)
 		for (int32 k = 0; k < C->PilotNames.Num(); ++k)
 			Pilots->AddSlot(k % 3, k / 3)[ Pick(Txt(C->PilotNames[k], 17, CText, P.Pilot == k), P.Pilot == k, [this, k]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Pick.Pilot = k; }) ];
 		Content = SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()[ Mode ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(5.f, 0.f, 0.f, 4.f))[ Txt(TEXT("NOM DE L'ÉCURIE"), 13, CDim, true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Names ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(5.f, 0.f, 0.f, 4.f))[ Txt(TEXT("TON NOM DE PILOTE"), 13, CDim, true) ]
@@ -467,7 +537,7 @@ TSharedRef<SWidget> FGPMUI::SetupScreen(AGPMGameMode* GM)
 	}
 
 	FString Why;
-	const bool bValid = St == 2 ? P.Col1 != P.Col2 : St < 5 ? true : C->PickValid(Why);
+	const bool bValid = bJoin ? true : St == 2 ? P.Col1 != P.Col2 : St < 5 ? true : C->PickValid(Why);
 	const float Budget = C->PickBudget();
 	TSharedRef<SWidget> Nav = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth()
@@ -481,21 +551,21 @@ TSharedRef<SWidget> FGPMUI::SetupScreen(AGPMGameMode* GM)
 		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(FMargin(16.f, 0.f))[ Txt(Why, 14, CBad, true, true) ]
 		+ SHorizontalBox::Slot().AutoWidth()
 		[
-			Button(St < 5 ? TEXT("SUIVANT") : TEXT("C'EST PARTI !"), Acc, [WGM, St]()
+			Button(St < 5 && !bJoin ? TEXT("SUIVANT") : TEXT("C'EST PARTI !"), Acc, [WGM, St, bJoin]()
 			{
 				if (!WGM.IsValid()) return;
-				if (St < 5) ++WGM->SetupStep; else WGM->FinishSetup();
+				if (St < 5 && !bJoin) ++WGM->SetupStep; else WGM->FinishSetup();
 			}, bValid, 220.f, 56.f, 19)
 		];
 
 	TSharedRef<SWidget> Left = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
 		[
-			Title(FString::Printf(TEXT("CRÉE TON ÉCURIE · ÉTAPE %d / 6"), St + 1), Steps[St],
+			Title(bJoin ? FString(TEXT("NOUVELLE CARRIÈRE · REJOINS UNE ÉCURIE")) : FString::Printf(TEXT("CRÉE TON ÉCURIE · ÉTAPE %d / 6"), St + 1), bJoin ? TEXT("Choisis ton écurie") : Steps[St],
 				Chip(TEXT("Budget de départ"), FString::Printf(TEXT("%.1f M€"), Budget), Budget >= 0.f ? CGood : CBad))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Trail ]
-		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Txt(Hints[St], 15, CDim, false, true) ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Txt(bJoin ? TEXT("Dix écuries sont sur la grille : de la plus modeste à la plus titrée. Tu gardes son équipe, son moteur et son sponsor ; son niveau fixe ton budget et les attentes de la direction.") : Hints[St], 15, CDim, false, true) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ Content ] ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 14.f, 0.f, 0.f))[ Nav ];
 
@@ -572,9 +642,9 @@ TSharedRef<SWidget> FGPMUI::ResultsScreen(AGPMGameMode* GM)
 		Cells.Emplace(FString::FromInt(k + 1), 34.f);
 		Cells.Emplace(Nm(Cr->DriverName), 0.f);
 		Cells.Emplace(Cr->TeamName, 220.f);
-		Cells.Emplace(k == 0 ? Clock(Tm) : FString::Printf(TEXT("+%.3f%s"), Tm - Lead, Cr->bFinished ? TEXT("") : TEXT(" (est.)")), 140.f);
+		Cells.Emplace(k == 0 && !Cr->bOut ? Clock(Tm) : GM->ResultGap(Cr), 150.f);
 		Cells.Emplace(Clock(Cr->BestLap), 110.f);
-		Cells.Emplace(k < 10 ? FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]) : FString(), 70.f);
+		Cells.Emplace(k < 10 && !Cr->bOut ? FString::Printf(TEXT("%d pts"), AGPMGameMode::Points[k]) : FString(), 70.f);
 		const bool bBest = Cr->BestLap > 0.f && FMath::IsNearlyEqual(Cr->BestLap, Fastest);
 		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 3.f))[ Row(Cr->TeamColor, Cr == Me, Cells, { CText, CText, CDim, CText, bBest ? CPurple : CDim, CGood }) ];
 	}
@@ -596,7 +666,7 @@ TSharedRef<SWidget> FGPMUI::ResultsScreen(AGPMGameMode* GM)
 	}
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))
-		[ Title(TEXT("ARRIVÉE"), MyPos > 0 ? FString::Printf(TEXT("Tu termines P%d"), MyPos) : FString(TEXT("Résultats")), Buttons) ]
+		[ Title(TEXT("ARRIVÉE"), Me && Me->bOut ? FString(TEXT("Abandon")) : MyPos > 0 ? FString::Printf(TEXT("Tu termines P%d"), MyPos) : FString(TEXT("Résultats")), Buttons) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SNew(SHorizontalBox)

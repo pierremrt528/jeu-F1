@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "GPMTypes.h"
+#include "GPMSetup.h"
 #include "GPMGameMode.generated.h"
 
 class AGPMTrack;
@@ -45,6 +46,10 @@ public:
 	const TArray<AGPMCar*>& Standings() const { return Order; }
 	/** Temps (ou estimation) à l'arrivée : arrivés au temps réel, les autres d'après leur retard. */
 	float ResultTime(const AGPMCar* C) const;
+	/** Écart à l'arrivée en clair : « +1.234 », « +1 tour », « Abandon (moteur) ». */
+	FString ResultGap(const AGPMCar* C) const;
+	/** Abandon d'une voiture (casse moteur, accident) : elle s'arrête, puis est évacuée ; classée derrière les autres, sans points. */
+	void Retire(AGPMCar* C, const TCHAR* Why);
 	/** Recommencer la séance en cours (même grille, même stratégie). */
 	void Restart();
 	/** Après les résultats : écran de saison (carrière) ou nouvelle course ; depuis l'écran de saison : GP suivant. */
@@ -75,6 +80,20 @@ public:
 	void GoHome();
 	void NewCareer();
 	void FinishSetup();
+	// --- Pré-saison de janvier (GPMPreseason.cpp) : révélation de la monoplace, événements, trois journées d'essais jouables à missions ---
+	bool bTesting = false, bTestAuto = false, bReveal = false, bRevealDialog = false;
+	int32 PreStage() const;
+	void StartReveal();
+	void StartPreEvents();
+	void StartTest();
+	void SkipPreseason();
+	void FinishPreseason();
+	/** Textes du panneau de mission affiché pendant les essais : titre, objectif, état. */
+	void TestLines(TArray<FString>& Out) const;
+	static FString TestName(int32 Day);
+	static FString TestGoal(int32 Day);
+	/** Détruit les monoplaces et les recrée au prochain chargement de circuit (le plateau a changé : écurie rejointe, 11e écurie). */
+	void RespawnCars();
 	void ContinueCareer();
 	void StartSolo();
 	void OpenMercato();
@@ -95,11 +114,14 @@ public:
 	/** Clic d'un bouton des menus (son généré). */
 	void UiClick();
 	// --- Week-end comme le jeu web : réglages → qualifs (jouées ou simulées) → stratégie → course (ou simulée) ---
-	struct FSetup { const TCHAR* Name; const TCHAR* Desc; float Kd, VTop; };
+	/** Réglages de base (boutons rapides de l'écran de réglages) : ailerons et rapports de boîte. */
+	struct FSetup { const TCHAR* Name; const TCHAR* Desc; int32 FW, RW, Gears; };
 	static const FSetup Setups[5];
 	/** Une stratégie : gomme et nombre de tours de chaque relais, temps estimé. */
 	struct FPlan { TArray<TPair<TCHAR, int32>> Stints; float Time = 0.f; float MaxWear = 0.f; FString Name, Desc; };
-	int32 SetupK = -1;                       // réglage choisi pour ce week-end (parc fermé) ; -1 = pas encore
+	int32 SetupK = -1;                       // réglages faits pour ce week-end (parc fermé) ; -1 = pas encore (conseil de l'ingénieur)
+	FGPMCarSetup Setup;                      // réglages de la voiture du joueur pour ce week-end
+	int32 SetupRow = 0;                      // ligne choisie au clavier sur l'écran de réglages
 	bool bGridReady = false;                 // qualifications faites pour ce Grand Prix
 	bool bLongRace = false;                  // format Long (~22 min) au lieu de Sprint (~11 min)
 	TArray<TPair<TCHAR, int32>> Stints;      // stratégie du joueur pour la course
@@ -115,14 +137,25 @@ public:
 	/** Tours à couvrir jusqu'au prochain arrêt prévu (ravitaillement) ou jusqu'à l'arrivée. */
 	float LapsToRefuel(const AGPMCar* C) const;
 	void OpenTuning();
-	void PlayQuali(int32 K);
-	void SimQuali(int32 K);
+	void PlayQuali();
+	void SimQuali();
 	void OpenPrerace();
 	void Go(bool bSim);
 	void SimGrandPrix();
 	int32 LapsFor() const;
-	float SetupLap(int32 K) const;
-	int32 BestSetup() const;
+	/** Tour simulé avec ces réglages (lapSim de tuning.js, étendu à tous les réglages). */
+	float SetupLap(const FGPMCarSetup& S) const;
+	/** Tour avec les réglages du joueur / tour avec la voiture de base. */
+	float SetupRatio() const;
+	/** Réglages conseillés par l'ingénieur pour ce circuit et cette voiture (calculés une fois). */
+	const FGPMCarSetup& Advice() const;
+	/** Réglages du week-end : ceux de l'ingénieur s'ils ne sont pas encore faits. */
+	void EnsureSetup();
+	/** Réglage de base correspondant aux ailerons et à la boîte (−1 : personnalisé). */
+	int32 PresetOf(const FGPMCarSetup& S) const;
+	void ApplyPreset(int32 K);
+	/** Équilibre de la voiture en virage rapide : < 0 sous-vireuse, > 0 survireuse (écart d'adhérence avant/arrière). */
+	float SetupBalance(const FGPMCarSetup& S) const;
 	float BaseLap() const;
 	float PlanTime(const TArray<TPair<TCHAR, int32>>& InStints, float LapTime, float* OutMaxWear = nullptr) const;
 	TArray<FPlan> MakePlans() const;
@@ -144,6 +177,8 @@ public:
 	/** Tour plus lent sur le mouillé (qualifications et courses simulées). */
 	float WetLapK() const { return 1.f + 0.1f * TrackWet; }
 	float RaceWetK() const;
+	/** Fiabilité (GPMReliability.cpp) : risque d'ennui moteur sur une course, selon le motoriste et les pièces de fiabilité. */
+	float EngineRisk(const AGPMCar* C) const;
 	/** Radio du muret (3 boutons, touches 1 2 3 ou I M N) : 0 point complet, 1 rythme, 2 pneus du prochain arrêt. */
 	void RadioCall(int32 K);
 	TCHAR NextStopTyre(const AGPMCar* C) const;
@@ -160,11 +195,12 @@ public:
 	/** Images par seconde (moyenne glissante) et résolution adaptative en %. */
 	float Fps = 60.f;
 	int32 ScreenPct = 100;
+	bool bPerfTest = false;                  // GPM.TestPerf : pas de résolution adaptative pendant la mesure
 
 	// --- Cinématiques (étape 16, cine.js) : seule la caméra bouge ---
-	enum class ECine : uint8 { None, Menu, Intro, Podium, Welcome, Meet, Sign };
-	/** Cinématiques jouées dans l'atelier 3D (bienvenue, rendez-vous avec l'agent, signature). */
-	bool RoomCine() const { return Cine == ECine::Welcome || Cine == ECine::Meet || Cine == ECine::Sign; }
+	enum class ECine : uint8 { None, Menu, Intro, Podium, Welcome, Meet, Sign, Crown };
+	/** Cinématiques jouées dans l'atelier 3D (bienvenue, rendez-vous avec l'agent, signature, sacre). */
+	bool RoomCine() const { return Cine == ECine::Welcome || Cine == ECine::Meet || Cine == ECine::Sign || Cine == ECine::Crown; }
 	/** Rendez-vous au QG avec un pilote et son agent (première rencontre de la partie). FromTeam : écurie actuelle, vide si libre. */
 	void StartMeet(const FString& Who, const FString& FromTeam);
 	/** Signature d'un pilote : poignée de main avec le joueur, puis photo devant la voiture. */
@@ -174,8 +210,10 @@ public:
 	FString CineTitle, CineSub;
 	void StartCine(ECine Mode);
 	void EndCine();
-	/** Plan en cours de la cinématique (0, 1, 2) et part écoulée de la cinématique. */
+	/** Plan en cours de la cinématique (survol : 0 à 3, tour d'honneur et sacre : 0 à 2). */
 	int32 CineShot() const;
+	/** Fondu au noir entre deux plans (0 : image, 1 : noir), dessiné par le HUD. */
+	float CineCut() const;
 
 private:
 	UPROPERTY() TObjectPtr<AGPMTrack> Track;
@@ -223,9 +261,32 @@ private:
 	void ApplySettings();
 	void UpdateCine(float Dt);
 	void UpdatePerf(float Dt);
-	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f;
+	float FrameAvg = 1.f / 60.f, PerfT = 0.f, PerfLogT = 0.f, PerfWorst = 0.f;
+	int32 PerfHitch = 0;   // images de plus de 25 ms depuis la dernière ligne du journal (à-coups)
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
+	FVector CineFwd = FVector::ForwardVector;   // cap lissé de la voiture pendant le tour d'honneur
+	int32 CrownYear = -1;                        // saison dont le sacre a déjà été joué
+	void CineLens(float Focus, float Fstop);    // flou de profondeur de la caméra des cinématiques (Focus 0 : net partout)
 	bool bTyreWarn = false;
+	// fiabilité : part de la course où le moteur de la voiture faiblit, voitures déjà annoncées à la radio ; crevaison du joueur
+	void RollReliability();
+	bool EngineTrouble(const AGPMCar* C);
+	TMap<const AGPMCar*, float> EngineFailAt;
+	TSet<const AGPMCar*> EngineTold;
+	TSet<const AGPMCar*> EngineBlown;        // moteurs qui casseront (abandon) au lieu de seulement faiblir
+	bool bHadFlat = false;
+	void TestTick(float Dt);
+	void EndTest(const TCHAR* Why);
+	void ReturnToSeason();
+	TArray<float> TestLaps;
+	TArray<bool> TestClean;
+	int32 TestLapSeen = 0, TestWanted = 3;
+	bool TestDirty = false, TestEnded = false;
+	float TestRef = 0.f, TestHurt = 0.f, TestEngineAt = -1.f;
+	// commissaires (GPMPenalty.cpp) : limites de piste du joueur, accrochages ; tour de qualification annulé
+	void TrackLimits(float Dt);
+	void ContactPenalty(AGPMCar* Guilty, AGPMCar* Victim, float Close);
+	bool bQInvalid = false;
 	int32 FuelWarn = 0;   // 1 : essence juste annoncée, 2 : panne sèche
 	// captures d'écran automatiques (Saved/Captures, une par écran et par partie) pour régler l'interface et les graphismes
 	void AutoCapture(float Dt);
@@ -235,6 +296,8 @@ private:
 	bool bShadersBusy = false;   // matériaux en cours de compilation (damier gris) : pas de capture d'écran
 	void BaseUps();
 	void ApplySetup();
+	mutable FGPMCarSetup AdviceCache;
+	mutable uint32 AdviceKey = 0;
 	void SimRace();
 	bool bNoIntro = false;
 	// météo, dégâts, radio, secteurs
@@ -254,6 +317,7 @@ private:
 	FLinearColor FogTint = FLinearColor(0.36f, 0.42f, 0.48f);
 	UPROPERTY() TObjectPtr<class AGPMSky> SkyDome;
 	UPROPERTY() TObjectPtr<class AGPMDebris> Debris;
+	UPROPERTY() TObjectPtr<class AGPMRain> Rain3D;   // gerbes d'eau et gouttes en 3D (GPMRain)
 	// atelier 3D derrière les écrans de gestion (GPMShowroom), sous le circuit
 	UPROPERTY() TObjectPtr<class AGPMShowroom> Showroom;
 	bool bRoomOn = false;

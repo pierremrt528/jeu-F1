@@ -219,7 +219,48 @@ TSharedRef<SWidget> FGPMUI::HeroNext(AGPMGameMode* GM)
 	{
 		return SNew(STextBlock).Text(FText::FromString(Label)).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(Col));
 	};
-	if (S && !S->IsOver())
+	const UGPMSaveGame* PreSv = S ? S->State() : nullptr;
+	const int32 PreStage = GM->PreStage();
+	if (S && !S->IsOver() && S->Round() == 0 && PreSv && PreSv->bCreated && PreStage < 3)
+	{
+		// pré-saison de janvier : révélation de la monoplace, événements, trois journées d'essais à missions
+		const FDateTime First = GPMUISeasonCal::FirstRace(S->Year());
+		const int32 DaysTo = int32((First - FDateTime(S->Year(), 1, 1)).GetTotalDays());
+		Box->AddSlot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Tag(TEXT("PRÉ-SAISON")) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.f, 0.f, 0.f, 0.f))
+			[ Kicker(FString::Printf(TEXT("1ER JANVIER  ·  PREMIER GP LE %s (%d JOURS)"), *GPMUp(GPMUISeasonCal::FmtDate(First)), DaysTo), CDim) ]
+		];
+		const int32 Day = FMath::Clamp(PreSv->TestDay, 0, 2);
+		const TCHAR* Titles[3] = { TEXT("LA NOUVELLE MONOPLACE"), TEXT("LES ÉVÉNEMENTS DE L'HIVER"), TEXT("ESSAIS HIVERNAUX") };
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 8.f))[ Ital(Titles[FMath::Clamp(PreStage, 0, 2)], 28, CText) ];
+		// les trois étapes
+		const TCHAR* Steps[3] = { TEXT("Révélation de la monoplace"), TEXT("Événements de l'intersaison"), TEXT("Essais hivernaux : 3 journées, 3 missions") };
+		for (int32 k = 0; k < 3; ++k)
+		{
+			const bool bDone = k < PreStage, bNow = k == PreStage;
+			FString Lbl = FString::Printf(TEXT("%s  %s"), bDone ? TEXT("✓") : bNow ? TEXT("▶") : TEXT("·"), Steps[k]);
+			if (k == 2 && PreStage >= 2) Lbl += FString::Printf(TEXT("  (%d / 3)"), FMath::Min(3, PreSv->TestDay));
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 1.f))[ Txt(Lbl, 14, bNow ? CText : bDone ? CGood : CFaint, bNow) ];
+		}
+		if (PreStage == 2)
+		{
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))
+			[ Txt(FString::Printf(TEXT("JOUR %d · %s"), Day + 1, *AGPMGameMode::TestName(Day).ToUpper()), 13, CGold, true) ];
+			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 4.f))
+			[ Txt(FString::Printf(TEXT("Objectif : %s. Réussi : recherches en avance de quelques jours et moral en hausse. Casse moteur ou accident : argent et jours perdus."), *AGPMGameMode::TestGoal(Day)), 13, CDim, false, true) ];
+		}
+		for (const FString& L : PreSv->TestReport) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 1.f))[ Txt(L, 12, CFaint, false, true) ];
+		const TCHAR* Go[3] = { TEXT("RÉVÉLER LA MONOPLACE"), TEXT("LANCER LES ÉVÉNEMENTS"), TEXT("ROULER") };
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 12.f, 0.f, 0.f))
+		[ Button(Go[FMath::Clamp(PreStage, 0, 2)], Acc, [WGM, PreStage]() { if (!WGM.IsValid()) return; if (PreStage == 0) WGM->StartReveal(); else if (PreStage == 1) WGM->StartPreEvents(); else WGM->StartTest(); }, true, 0.f, 60.f, 20) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 8.f, 0.f, 0.f))
+		[ Button(TEXT("PASSER LA PRÉ-SAISON"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->SkipPreseason(); }, true, 0.f, 40.f, 14) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("Les 60 jours d'hiver font avancer les recherches dans tous les cas ; les essais ajoutent un bonus."), 12, CFaint, false, true) ];
+	}
+	else if (S && !S->IsOver())
 	{
 		const FString Id = S->CurrentCircuit();
 		const FGPMTrackData* T = Db ? Db->GetTrack(Id) : nullptr;

@@ -19,6 +19,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SScaleBox.h"
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
@@ -329,12 +330,13 @@ void FGPMUI::Shutdown()
 uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 {
 	uint32 H = HashCombine(GetTypeHash(int32(GM->Phase)), GetTypeHash(Version));
-	H = HashCombine(H, GetTypeHash(GM->SetupStep * 100 + GM->MercatoPage));
+	H = HashCombine(H, GetTypeHash(GM->SetupStep * 100 + GM->MercatoPage + (bConfirmNew ? 100000 : 0)));
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
 	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
+	H = HashCombine(H, HashCombine(GM->Setup.Hash(), GetTypeHash(GM->SetupRow)));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
 	for (const TPair<TCHAR, int32>& St : GM->Stints) H = HashCombine(H, GetTypeHash(int32(St.Key) * 1000 + St.Value));
 	if (const UGPMCareerSubsystem* C = CareerSys())
@@ -357,10 +359,15 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 	if (bFresh) return;
 	if (GM->Phase == EP::Tuning && PC)
 	{
-		const int32 Sel = GM->SetupK >= 0 ? GM->SetupK : GM->BestSetup();
-		if (PC->WasInputKeyJustPressed(EKeys::Up)) GM->SetupK = FMath::Max(0, Sel - 1);
-		else if (PC->WasInputKeyJustPressed(EKeys::Down)) GM->SetupK = FMath::Min(4, Sel + 1);
-		else if (PC->WasInputKeyJustPressed(EKeys::Enter)) GM->PlayQuali(Sel);
+		GM->EnsureSetup();
+		int32& Row = GM->SetupRow;
+		int32& Val = GM->Setup.V[FMath::Clamp(Row, 0, FGPMCarSetup::Num - 1)];
+		if (PC->WasInputKeyJustPressed(EKeys::Up)) Row = FMath::Max(0, Row - 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::Down)) Row = FMath::Min(FGPMCarSetup::Num - 1, Row + 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::Left)) Val = FMath::Max(0, Val - 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::Right)) Val = FMath::Min(10, Val + 1);
+		else if (PC->WasInputKeyJustPressed(EKeys::I)) GM->Setup = GM->Advice();
+		else if (PC->WasInputKeyJustPressed(EKeys::Enter)) GM->PlayQuali();
 		return;
 	}
 	if (GM->Phase == EP::Prerace && PC)
@@ -378,7 +385,7 @@ void FGPMUI::HandleKeys(AGPMGameMode* GM)
 		if (Dl->Chosen < 0)
 		{
 			for (int32 k = 0; k < Dl->Choices.Num() && k < 6; ++k)
-				if (AGPMGameMode::DigitPressed(PC, k + 1) && !Dl->Choices[k].bOff) { C->Choose(k); return; }
+				if (AGPMGameMode::DigitPressed(PC, k + 1) && !Dl->Choices[k].bOff) { C->Choose(k); Touch(); return; }
 		}
 		else if (PC->WasInputKeyJustPressed(EKeys::Enter))
 		{
@@ -673,7 +680,11 @@ TSharedRef<SWidget> FGPMUI::Title(const FString& Kicker, const FString& Main, co
 			[
 				SNew(STextBlock).Text(FText::FromString(GPMUp(Kicker))).Font(GPMUIStyle::Face(2, 13)).ColorAndOpacity(FSlateColor(Bright()))
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -4.f, 0.f, 0.f))[ Ital(Main, 36, CText) ]
+			// un titre long (nom de circuit) rétrécit pour ne jamais passer sous les étiquettes de droite
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, -4.f, 12.f, 0.f))
+			[
+				SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly).HAlign(HAlign_Left)[ Ital(Main, 36, CText) ]
+			]
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 		[
@@ -1144,6 +1155,45 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Levels ],
 			CCardBg, 14.f)
 	];
+	// comportement des IA en course : agressivité (dépassements, défense, distance de sécurité) et erreurs de pilotage
+	TSharedRef<SHorizontalBox> Aggro = SNew(SHorizontalBox);
+	static const TCHAR* const AggroName[3] = { TEXT("Prudent"), TEXT("Normal"), TEXT("Agressif") };
+	for (int32 k = 0; k < 3; ++k)
+		Aggro->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
+		[
+			Button(AggroName[k], AGPMCar::AIAggro == k ? Acc : CNeutral, [k]() { AGPMCar::SetAIOptions(k, AGPMCar::bAIErrors); }, true, 100.f, 44.f, 14)
+		];
+	static const TCHAR* const AggroHelp[3] = {
+		TEXT("Les IA attaquent peu, défendent rarement et gardent leurs distances."),
+		TEXT("Les IA attaquent quand elles sont plus rapides et défendent la corde."),
+		TEXT("Les IA freinent tard pour dépasser, collent et défendent souvent.") };
+	List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+	[
+		Card(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 12.f, 0.f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Agressivité des pilotes IA"), 20, CText, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(AggroHelp[FMath::Clamp(AGPMCar::AIAggro, 0, 2)], 14, CDim, false, true) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Aggro ],
+			CCardBg, 14.f)
+	];
+	List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))
+	[
+		Card(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Erreurs des pilotes IA"), 20, CText, true) ]
+				+ SVerticalBox::Slot().AutoHeight()[ Txt(TEXT("Freinages trop tardifs et sorties larges, plus souvent sous la pluie et pour les pilotes moins forts."), 14, CDim, false, true) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				Button(AGPMCar::bAIErrors ? TEXT("OUI") : TEXT("NON"), AGPMCar::bAIErrors ? FLinearColor(0.15f, 0.55f, 0.3f) : CNeutral, []() { AGPMCar::SetAIOptions(AGPMCar::AIAggro, !AGPMCar::bAIErrors); }, true, 110.f, 44.f, 16)
+			],
+			CCardBg, 14.f)
+	];
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 24.f))[ Title(TEXT("PILOTAGE ET AFFICHAGE"), TEXT("Réglages"), SNullWidget::NullWidget) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ]
@@ -1251,7 +1301,14 @@ TSharedRef<SWidget> FGPMUI::FiredScreen(AGPMGameMode* GM)
 	for (const FString& L : GM->LastLines) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))[ Txt(L, 16, CDim, false, true, true) ];
 	Box->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.f, 24.f, 0.f, 0.f))
 	[
-		Button(TEXT("NOUVELLE CARRIÈRE"), Acc, [WGM]() { if (WGM.IsValid()) WGM->NewCareer(); }, true, 300.f, 58.f, 20)
+		Button(TEXT("NOUVELLE CARRIÈRE"), CNeutral, [WGM]() { if (WGM.IsValid()) WGM->NewCareer(); }, true, 300.f, 58.f, 20)
+	];
+	// seconde chance : un repreneur rachète l'écurie et garde le joueur, au prix d'un budget divisé par deux
+	Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 18.f, 0.f, 0.f))
+	[ Txt(TEXT("Un repreneur est prêt à racheter l'écurie et à te garder : budget divisé par deux, réputation en baisse, ambitions modestes."), 16, CDim, false, true, true) ];
+	Box->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.f, 10.f, 0.f, 0.f))
+	[
+		Button(TEXT("CONTINUER AVEC LE REPRENEUR"), Acc, [this, WGM]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->SecondChance(); if (WGM.IsValid()) { WGM->LastLines.Reset(); WGM->ContinueCareer(); } }, true, 380.f, 58.f, 20)
 	];
 	return SNew(SBorder)
 		.BorderImage(GPMUIStyle::Rounded(0.f))

@@ -304,6 +304,7 @@ float AGPMHUD::DrawTower(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
 				Row.Gap = Laps >= 1 ? FString::Printf(TEXT("+%d T"), Laps) : FString::Printf(TEXT("+%.3f"), TimeGap(Ref, C, PerLap, GM->LapEstimate));
 			}
 			if (C->PitPhase) { Row.Gap = TEXT("STAND"); Row.GapKind = 2; Row.GapCol = RaceYellow; }
+			if (C->bOut) { Row.Gap = TEXT("ABANDON"); Row.GapKind = 2; Row.GapCol = RaceRed; }
 			Rows.Add(Row);
 		}
 	}
@@ -328,7 +329,7 @@ float AGPMHUD::DrawTower(AGPMGameMode* GM, AGPMCar* Car, float X, float Y)
 	DrawRect(HudAcc, X, Y, 2.5f * S, HH);
 	if (bQuali)
 	{
-		Ink(TEXT("QUALIFICATIONS"), X + 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim);
+		Ink(GM->bTesting ? TEXT("ESSAIS HIVERNAUX") : TEXT("QUALIFICATIONS"), X + 8.f * S, Y + 3.f * S, 2, 5.5f, RaceDim);
 		Ink(Car->Lap >= 1 ? TEXT("TOUR LANCÉ") : TEXT("TOUR DE LANCEMENT"), X + 8.f * S, Y + 10.f * S, 1, 7.f, RaceYellow);
 	}
 	else
@@ -620,6 +621,21 @@ void AGPMHUD::DrawRain(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 }
 
 // Message du muret en haut au centre : pastille haut-parleur, « RADIO · MURET », texte sur plusieurs lignes ; renvoie le bas
+// essais hivernaux : la mission du jour, son objectif et où l'on en est
+float AGPMHUD::DrawTestPanel(AGPMGameMode* GM, float W, float Y)
+{
+	TArray<FString> L;
+	GM->TestLines(L);
+	if (L.Num() < 3) return Y;
+	const float S = Scale, BW = 360.f * S, BH = 42.f * S, X = (W - BW) * 0.5f;
+	Panel(X, Y, BW, BH, RacePanel);
+	DrawRect(RaceYellow, X, Y, BW - 6.f * S, 2.f * S);
+	Ink(L[0], X + 9.f * S, Y + 4.f * S, 2, 5.5f, RaceDim);
+	Ink(L[1], X + 9.f * S, Y + 11.f * S, 3, 7.5f, RaceText);
+	Ink(L[2], X + 9.f * S, Y + 25.f * S, 1, 6.5f, RaceYellow);
+	return Y + BH;
+}
+
 float AGPMHUD::DrawRadioMsg(const FString& Msg, float W, float Y)
 {
 	const float S = Scale, MaxW = 280.f * S, Sz = 8.f;
@@ -791,6 +807,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		// en haut au centre, les uns sous les autres : radio, alerte (secteur, meilleur tour), voiture de sécurité
 		float TopY = M;
 		if (GM->RadioT > 0.f && !GM->Radio.IsEmpty()) TopY = DrawRadioMsg(GM->Radio, W, TopY) + 4.f * S;
+		if (GM->bTesting) TopY = DrawTestPanel(GM, W, TopY) + 4.f * S;
 		if (AlertT > 0.f && !AlertTxt.IsEmpty())
 		{
 			const float A = FMath::Clamp(AlertT / 0.4f, 0.f, 1.f), AH = 14.f * S;
@@ -815,7 +832,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			}
 			Banner(Msg, H * 0.4f, RacePanel, RaceYellow, 13.f);
 		}
-		if (GM->Phase == AGPMGameMode::EPhase::Race && !Car->bFinished) DrawRadioPad(GM, Car);
+		if (GM->Phase == AGPMGameMode::EPhase::Race && !Car->bFinished && !Car->bOut) DrawRadioPad(GM, Car);
 		if (GM->Phase == AGPMGameMode::EPhase::Lights) DrawLights(GM->LightsOn(), W);
 		else if (GM->Phase == AGPMGameMode::EPhase::Race && GM->Clock < 1.5f)
 		{
@@ -824,7 +841,15 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			Paint(3, W * 0.5f - 150.f * S, GY - 50.f * S, 300.f * S, 170.f * S, RaceA(RaceGreen, 0.35f * A));
 			Ink(TEXT("GO !"), W * 0.5f, GY, 0, 46.f, RaceA(RaceGreen, A), 0.5f);
 		}
-		if (Car->bFinished)
+		if (Car->bOut)
+		{
+			const float FY = H * 0.24f, FW = 200.f * S, FH = 72.f * S, FX = (W - FW) * 0.5f;
+			Panel(FX, FY, FW, FH, RacePanel);
+			DrawRect(RaceRed, FX, FY, FW - 6.f * S, 2.f * S);
+			Ink(Car->OutWhy == TEXT("moteur") ? TEXT("CASSE MOTEUR") : TEXT("ACCIDENT"), W * 0.5f, FY + 8.f * S, 2, 6.f, RaceDim, 0.5f);
+			Ink(TEXT("ABANDON"), W * 0.5f, FY + 22.f * S, 4, 24.f, RaceRed, 0.5f);
+		}
+		else if (Car->bFinished)
 		{
 			const int32 Pos = GM->PositionOf(Car);
 			const FLinearColor PosCol = Pos == 1 ? RaceYellow : RaceText;

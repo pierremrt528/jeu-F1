@@ -265,3 +265,78 @@ static FAutoConsoleCommandWithWorldAndArgs GHudCmd(TEXT("GPM.TestHud"), TEXT("Co
 			}
 		}), 0.25f, true);
 	}));
+
+static FAutoConsoleCommandWithWorldAndArgs GMercatoCmd(TEXT("GPM.TestMercato"), TEXT("Parcours du mercato avec captures (Saved/Captures/M_*.png) : négociation, clause, prolongation, offre d'un rival, intersaison."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		if (!World) return;
+		TWeakObjectPtr<UWorld> W = World;
+		auto CS = [](UWorld* Wd) { return Wd->GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>(); };
+		auto Pick = [](UGPMCareerSubsystem* C, int32 Act) { if (FGPMDialog* Dl = C->Current()) for (int32 k = 0; k < Dl->Choices.Num(); ++k) if (Dl->Choices[k].Action == Act) { C->Choose(k); return; } };
+		auto Log = [](UGPMCareerSubsystem* C, const TCHAR* Tag)
+		{
+			if (FGPMDialog* Dl = C->Current()) UE_LOG(LogGPM, Display, TEXT("TestMercato %s : %s | %s | %s"), Tag, *Dl->Kicker, *Dl->Text, *Dl->Result);
+			if (const UGPMSaveGame* G = C->Save()) UE_LOG(LogGPM, Display, TEXT("TestMercato %s : équipier %s, %d saison(s), %.1f M€, clause %.1f, budget %.1f"), Tag, *G->MateName, G->MateYears, G->MateSal, G->MateClause, G->Budget);
+		};
+		struct FStep { float At; TFunction<void(UWorld*, AGPMGameMode*)> Do; };
+		TArray<FStep> Steps = {
+			{ 8.f, [CS](UWorld* Wd, AGPMGameMode* GM) { if (CS(Wd)->IsCreated()) GM->ContinueCareer(); else GM->FinishSetup(); } },
+			{ 14.f, [](UWorld*, AGPMGameMode* GM) { GM->OpenMercato(); } },
+			{ 18.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M01_Mercato")); } },
+			{ 19.f, [CS, Log](UWorld* Wd, AGPMGameMode* GM)
+				{
+					UGPMCareerSubsystem* C = CS(Wd);
+					if (C->Save()) C->Save()->Budget = FMath::Max(C->Save()->Budget, 80.f);
+					for (const FGPMMarketDriver& D : C->MarketList()) if (D.Seat >= 0 && D.Rating() < 85.f) { C->OpenNego(D); break; }
+					GM->bNegoFromMercato = true; GM->Phase = AGPMGameMode::EPhase::Press;
+					Log(C, TEXT("nego"));
+				} },
+			{ 23.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M02_Negociation")); } },
+			{ 24.f, [CS, Pick, Log](UWorld* Wd, AGPMGameMode*) { Pick(CS(Wd), 6); Log(CS(Wd), TEXT("clause")); } },
+			{ 27.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M03_Clause")); } },
+			{ 28.f, [CS, Log](UWorld* Wd, AGPMGameMode* GM)
+				{
+					UGPMCareerSubsystem* C = CS(Wd);
+					C->Queue.Reset(); GM->EndCine();
+					if (UGPMSaveGame* G = C->Save()) G->MateYears = FMath::Min(G->MateYears, 1);
+					C->OpenExtend(); GM->bNegoFromMercato = true; GM->Phase = AGPMGameMode::EPhase::Press;
+					Log(C, TEXT("prolongation"));
+				} },
+			{ 32.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M04_Prolongation")); } },
+			{ 33.f, [CS, Log](UWorld* Wd, AGPMGameMode* GM)
+				{
+					UGPMCareerSubsystem* C = CS(Wd);
+					if (UGPMSaveGame* G = C->Save()) G->MateClause = 0.f;
+					C->DebugRivalOffer(); GM->bNegoFromMercato = false; GM->Phase = AGPMGameMode::EPhase::Press;
+					Log(C, TEXT("offre"));
+				} },
+			{ 37.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M05_OffreRival")); } },
+			{ 38.f, [CS, Pick, Log](UWorld* Wd, AGPMGameMode*) { Pick(CS(Wd), 10); Log(CS(Wd), TEXT("vente")); } },
+			{ 41.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M06_Vente")); } },
+			{ 42.f, [CS, Log](UWorld* Wd, AGPMGameMode* GM)
+				{
+					UGPMCareerSubsystem* C = CS(Wd);
+					C->Queue.Reset(); GM->EndCine();
+					C->Intersaison();
+					GPMTest::NextSeason(Wd);
+					GM->OpenMercato();
+					Log(C, TEXT("intersaison"));
+					if (const UGPMSaveGame* G = C->Save())
+						for (int32 k = 0; k < G->Mail.Num() && k < 8; ++k) if (G->Mail[k].Tag == TEXT("mercato")) UE_LOG(LogGPM, Display, TEXT("TestMercato mail : %s\n%s"), *G->Mail[k].Subject, *G->Mail[k].Body);
+				} },
+			{ 47.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M07_Mercato_Intersaison")); } },
+			{ 48.f, [](UWorld*, AGPMGameMode* GM) { GM->Phase = AGPMGameMode::EPhase::Season; GM->UiRequest = 3; } },
+			{ 52.f, [](UWorld*, AGPMGameMode*) { GPMTest::Capture(TEXT("M08_BoiteMail")); } },
+		};
+		for (const FStep& St : Steps)
+		{
+			FTimerHandle H;
+			TFunction<void(UWorld*, AGPMGameMode*)> Do = St.Do;
+			World->GetTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([W, Do]()
+			{
+				if (!W.IsValid()) return;
+				if (AGPMGameMode* GM = W->GetAuthGameMode<AGPMGameMode>()) Do(W.Get(), GM);
+			}), St.At, false);
+		}
+		UE_LOG(LogGPM, Display, TEXT("GPM.TestMercato : parcours lancé"));
+	}));

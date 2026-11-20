@@ -2,19 +2,12 @@
 // tour simulé, conseil de l'ingénieur, parc fermé), qualifications jouées ou simulées, stratégie de course
 // (3 propositions, relais modifiables), départ ou course simulée, Grand Prix entièrement simulé.
 #include "GPMGameMode.h"
+#include "GrandPrixManager.h"
 #include "GPMCar.h"
 #include "GPMSeason.h"
 #include "GPMTrack.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameInstance.h"
-
-const AGPMGameMode::FSetup AGPMGameMode::Setups[5] = {
-	{ TEXT("Appui maxi"), TEXT("Rapide dans les virages, lent en ligne droite."), 0.0375f, -0.04f },
-	{ TEXT("Appui élevé"), TEXT("Plus d'adhérence en courbe, un peu moins de vitesse de pointe."), 0.025f, -0.02f },
-	{ TEXT("Équilibré"), TEXT("Le compromis de base."), 0.f, 0.f },
-	{ TEXT("Vitesse élevée"), TEXT("Moins d'appui, plus rapide en ligne droite."), -0.025f, 0.02f },
-	{ TEXT("Vitesse maxi"), TEXT("Très rapide en ligne droite, délicat dans les virages."), -0.05f, 0.03f },
-};
 
 // nombre de tours selon le format (Sprint ~11 min, Long ~22 min), comme lapsFor de strategy.js
 int32 AGPMGameMode::LapsFor() const
@@ -35,73 +28,20 @@ float AGPMGameMode::BaseLap() const
 {
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return 90.f;
-	return LapTimeFor(T, 0.95f, Car->Perf * Car->UpVTop);
-}
-
-// tour simulé avec un réglage (lapSim de tuning.js) : vitesse limite en virage, freinages, accélérations
-float AGPMGameMode::SetupLap(int32 K) const
-{
-	const FGPMTrackData* T = CurTrack();
-	if (!T || !Car) return 90.f;
-	const int32 N = T->Curvature.Num();
-	if (N < 10) return 90.f;
-	const FSetup& St = Setups[FMath::Clamp(K, 0, 4)];
-	const float GravA = 9.81f, Mu = AGPMCar::Mu * 0.94f * Car->UpMu, Kd = AGPMCar::Kd * Car->UpKd * (1.f + St.Kd);
-	const float Vt = AGPMCar::VTop * Car->Perf * Car->UpVTop * (1.f + St.VTop);
-	TArray<float> V;
-	V.SetNumUninitialized(N);
-	for (int32 i = 0; i < N; ++i)
-	{
-		float Cv = 0.f;
-		for (int32 j = -3; j <= 3; ++j) Cv = FMath::Max(Cv, FMath::Abs(T->Curvature[(i + j + N) % N]));
-		const float Den = Cv - Mu * Kd;
-		V[i] = Den > 0.f ? FMath::Min(Vt, FMath::Sqrt(Mu * GravA / Den)) : Vt;
-	}
-	for (int32 Pass = 0; Pass < 2; ++Pass)
-		for (int32 i = N - 1; i >= 0; --i)
-		{
-			const float Vn = V[(i + 1) % N];
-			V[i] = FMath::Min(V[i], FMath::Sqrt(Vn * Vn + 2.f * 0.8f * (AGPMCar::Brake0 + AGPMCar::BrakeK * Vn * Vn) * Car->UpBrake * 2.f));
-		}
-	float Vc = V[0], Tm = 0.f;
-	for (int32 Pass = 0; Pass < 2; ++Pass)
-		for (int32 i = 0; i < N; ++i)
-		{
-			const float A = AGPMCar::Acc * Car->Perf * Car->UpAcc * FMath::Max(0.f, 1.f - FMath::Pow(Vc / Vt, 2.2f));
-			Vc = FMath::Min(V[(i + 1) % N], FMath::Sqrt(Vc * Vc + 2.f * A * 2.f));
-			if (Pass == 1) Tm += 2.f / FMath::Max(Vc, 5.f);
-		}
-	return Tm;
-}
-
-int32 AGPMGameMode::BestSetup() const
-{
-	int32 Best = 2;
-	float BestT = 1e9f;
-	for (int32 k = 0; k < 5; ++k)
-	{
-		const float Tk = SetupLap(k);
-		if (Tk < BestT) { BestT = Tk; Best = k; }
-	}
-	return Best;
+	// toutes les pièces comptent (même pondération que la courbe de performance de l'usine), pas seulement la vitesse de pointe
+	const float Ups = 1.f + 0.6f * (Car->UpVTop - 1.f) + 0.15f * (Car->UpAcc - 1.f) + 0.08f * (Car->UpKd - 1.f) + 0.25f * (Car->UpMu - 1.f)
+		+ 0.04f * (Car->UpBrake - 1.f) + 0.04f * (Car->UpSteer - 1.f);
+	return LapTimeFor(T, 0.95f, Car->Perf * Ups);
 }
 
 // voiture sans réglage : pièces de l'usine et bonus en carrière, voiture de base en course solo
 void AGPMGameMode::BaseUps()
 {
 	if (!Car) return;
+	Car->SetupFx = FGPMSetupFx();
 	if (bCareer) { ApplyCareer(); return; }
 	Car->UpVTop = Car->UpAcc = Car->UpMu = Car->UpBrake = Car->UpKd = Car->UpSteer = Car->UpFuel = 1.f;
-}
-
-// réglage du week-end (parc fermé) : appui et vitesse de pointe
-void AGPMGameMode::ApplySetup()
-{
-	if (!Car) return;
-	if (SetupK < 0) SetupK = BestSetup();
-	SetupK = FMath::Clamp(SetupK, 0, 4);
-	Car->UpKd *= 1.f + Setups[SetupK].Kd;
-	Car->UpVTop *= 1.f + Setups[SetupK].VTop;
+	Car->UpTyre = 1.f; Car->UpPit = 0.f;   // course solo : pas les pièces de la carrière (pneus, stands)
 }
 
 void AGPMGameMode::Restart()
@@ -115,24 +55,25 @@ void AGPMGameMode::OpenTuning()
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
 	if (bCareer && Season && Track && Track->CircuitId != Season->CurrentCircuit()) { Pending = 4; LoadCircuit(Season->CurrentCircuit()); return; }
 	BaseUps();
+	EnsureSetup();
 	Phase = EPhase::Tuning;
 }
 
-void AGPMGameMode::PlayQuali(int32 K)
+void AGPMGameMode::PlayQuali()
 {
-	SetupK = FMath::Clamp(K, 0, 4);
+	EnsureSetup();
 	EndCine();
 	StartQuali();
 }
 
 // qualifications simulées : temps du joueur selon le réglage choisi (simLap de main.js), mêmes temps des IA
-void AGPMGameMode::SimQuali(int32 K)
+void AGPMGameMode::SimQuali()
 {
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
-	SetupK = FMath::Clamp(K, 0, 4);
+	EnsureSetup();
 	BaseUps();
-	const float Ratio = SetupLap(SetupK) / FMath::Max(1.f, SetupLap(2));
+	const float Ratio = SetupRatio();
 	ResetWeather();   // qualifications : météo du départ
 	const float Mine = BaseLap() * (1.f + 0.006f * FMath::FRand()) * 0.985f * Ratio * WetLapK();
 	for (AGPMCar* C : Cars)
@@ -174,7 +115,7 @@ void AGPMGameMode::Go(bool bSim)
 // Grand Prix simulé d'un coup (bouton de l'écran de saison) : qualifications puis course avec la stratégie conseillée
 void AGPMGameMode::SimGrandPrix()
 {
-	if (!bGridReady) { BaseUps(); SimQuali(SetupK >= 0 ? SetupK : BestSetup()); }
+	if (!bGridReady) { BaseUps(); SimQuali(); }
 	BaseUps();
 	ApplySetup();
 	Plans = MakePlans();
@@ -189,8 +130,8 @@ void AGPMGameMode::SimRace()
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
 	BaseUps();
-	const int32 K = SetupK >= 0 ? SetupK : BestSetup();
-	const float MyLap = BaseLap() * SetupLap(K) / FMath::Max(1.f, SetupLap(2)) * RaceWetK();
+	EnsureSetup();
+	const float MyLap = BaseLap() * SetupRatio() * RaceWetK();
 	const TArray<FPlan> AIPlans = MakePlans();
 	bNoIntro = true;
 	StartRace();
@@ -203,16 +144,33 @@ void AGPMGameMode::SimRace()
 		if (C == Car && Stints.Num()) St = Stints;
 		else if (AIPlans.Num()) St = AIPlans[FMath::RandRange(0, AIPlans.Num() - 1)].Stints;
 		else St.Emplace(TCHAR('M'), TotalLaps);
-		const float Tot = PlanTime(St, Lap) * (1.f + 0.004f * (FMath::FRand() * 2.f - 1.f)) + k * 0.35f + FMath::FRand() * 1.2f;
+		float Tot = PlanTime(St, Lap) * (1.f + 0.004f * (FMath::FRand() * 2.f - 1.f)) + k * 0.35f + FMath::FRand() * 1.2f;
+		if (const float* FailAt = EngineFailAt.Find(C)) Tot *= 1.f + 0.03f * (1.f - *FailAt);   // ennui moteur : puissance perdue jusqu'à l'arrivée
 		C->bFinished = true;
 		C->FinishTime = Tot;
 		C->Lap = TotalLaps + 1;
+		C->FinProgress = float(TotalLaps + 1) * T->WX.Num();
+		// abandon : casse moteur tirée au départ, ou accident (1,5 % par voiture)
+		const bool bBlown = EngineBlown.Contains(C);
+		if (bBlown || FMath::FRand() < 0.015f)
+		{
+			const float At = bBlown ? EngineFailAt.FindRef(C) : 0.05f + 0.9f * FMath::FRand();
+			C->bFinished = false; C->bOut = true; C->OutWhy = bBlown ? TEXT("moteur") : TEXT("accident");
+			C->Lap = 1 + FMath::FloorToInt(At * TotalLaps);
+			C->FinProgress = (1.f + At * TotalLaps) * T->WX.Num();
+			UE_LOG(LogGPM, Log, TEXT("Abandon : %s (%s), %s, course simulée"), *C->DriverName, *C->TeamName, *C->OutWhy);
+		}
 		C->Stops = FMath::Max(0, St.Num() - 1);
 		C->Tyre = St.Last().Key;
 		C->BestLap = Lap * (1.002f + 0.01f * FMath::FRand());
 	}
-	Order.Sort([](const AGPMCar& A, const AGPMCar& B) { return A.FinishTime < B.FinishTime; });
-	Clock = Order.Num() ? Order.Last()->FinishTime : 0.f;
+	Order.Sort([](const AGPMCar& A, const AGPMCar& B)
+	{
+		if (A.bOut != B.bOut) return B.bOut;
+		return A.bOut ? A.FinProgress > B.FinProgress : A.FinishTime < B.FinishTime;
+	});
+	Clock = 0.f;
+	for (const AGPMCar* C : Order) if (!C->bOut) Clock = FMath::Max(Clock, C->FinishTime);
 	Phase = EPhase::Done;
 	RecordResult();
 }
