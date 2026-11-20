@@ -78,7 +78,7 @@ void AGPMCar::PitManual(float Dt)
 		V = 0.f;
 		PitHd *= 0.9f;
 		PitStopT -= Dt;
-		if (PitStopT <= 0.f) { PitService(); PitPhase = 3; PitMsg = 2; }
+		if (PitStopT <= 0.f) { if (!bPenVisit) PitService(); else bBox = false; PitPhase = 3; PitMsg = 2; }
 	}
 	else
 	{
@@ -86,12 +86,15 @@ void AGPMCar::PitManual(float Dt)
 		if (Throttle > 0.1f) Vn += (Vn < 0.f ? 12.f : 9.f) * Dt;
 		else Vn -= FMath::Sign(Vn) * FMath::Min(FMath::Abs(Vn), 2.f * Dt);
 		if (Brake > 0.1f) Vn = Vn > 0.05f ? FMath::Max(0.f, Vn - 28.f * Dt) : FMath::Max(-4.f, Vn - 5.f * Dt);   // à l'arrêt, le frein fait reculer
-		if (PitKf < T.PitE1) Vn = FMath::Min(Vn, FMath::Max(PitSpeed, V - 30.f * Dt));   // entrée : freinage jusqu'au limiteur
+		// entrée : le limiteur s'enclenche à la ligne ; avant, l'aide ne freine qu'à moitié (au pilote de ralentir à temps)
+		if (PitKf < T.PitE1) Vn = FMath::Min(Vn, FMath::Max(PitSpeed, V - 18.f * Dt));
 		else if (PitKf <= T.PitX0) Vn = FMath::Min(Vn, PitSpeed);                         // limiteur
 		else Vn = FMath::Min(Vn, 55.f);
 		if (PitKf <= T.PitE1 + 1 && Vn < 0.f) Vn = 0.f;
 		V = Vn;
+		const bool bBefore = PitKf < T.PitE1;
 		PitKf += Vn * Dt / PitDS;
+		if (bBefore && PitKf >= T.PitE1 && Vn > PitSpeed + 4.f && !PitMsg) PitMsg = 5;   // ligne du limiteur franchie trop vite
 		// écart au centre de la voie (±2,5 m) : le volant le fait varier
 		PitO = FMath::Clamp(PitO + Steer * 4.5f * FMath::Min(1.f, FMath::Abs(Vn) / 5.f) * Dt, -2.5f, 2.5f);
 		const float L0 = Lat;
@@ -102,7 +105,7 @@ void AGPMCar::PitManual(float Dt)
 		if (PitPhase == 1 && !bPitMissed && FMath::Abs(Vn) < 0.6f && InSlot()) { V = 0.f; PitPhase = 2; PitStopT = 1e6f; PitMsg = 1; }   // durée fixée par le muret
 		if (PitPhase == 1 && !bPitWarned && PitKf > K1 + 3.f) { bPitWarned = true; PitMsg = 3; }
 		if (PitPhase == 1 && PitKf > T.PitX0) { PitPhase = 3; bPitMissed = true; bBox = false; PitMsg = 4; }
-		if (PitKf >= T.PitX1) { PitPhase = 0; bPitManual = false; Lane = Lat; PlaceInLane(0.f); return; }
+		if (PitKf >= T.PitX1) { PitPhase = 0; bPitManual = false; bPenVisit = bDriveThru = false; Lane = Lat; PlaceInLane(0.f); return; }
 	}
 	PlaceInLane(PitHd);
 }
@@ -116,7 +119,7 @@ void AGPMCar::PitStep(float Dt)
 	{
 		V = 0.f;
 		PitStopT -= Dt;
-		if (PitStopT <= 0.f) { PitService(); PitPhase = 3; }
+		if (PitStopT <= 0.f) { if (!bPenVisit) PitService(); else bBox = false; PitPhase = 3; }
 	}
 	else
 	{
@@ -126,10 +129,10 @@ void AGPMCar::PitStep(float Dt)
 		else V = V > PitSpeed ? FMath::Max(PitSpeed, V - 30.f * Dt) : FMath::Min(PitSpeed, V + 10.f * Dt);
 		PitKf += V * Dt / PitDS;
 		if (PitPhase == 1 && PitKf >= BoxK) { PitKf = BoxK; PitPhase = 2; V = 0.f; }
-		if (PitPhase == 3 && PitKf >= T.PitX1) { PitPhase = 0; Lane = Lat; }
+		if (PitPhase == 3 && PitKf >= T.PitX1) { PitPhase = 0; bPenVisit = bDriveThru = false; Lane = Lat; }
 	}
 	// vers le carré de l'écurie (côté garages), puis retour au centre de la voie
-	const float Near = FMath::Max(0.f, 1.f - FMath::Abs(PitKf - BoxK) / 14.f), Sm = Near * Near * (3.f - 2.f * Near);
+	const float Near = bDriveThru ? 0.f : FMath::Max(0.f, 1.f - FMath::Abs(PitKf - BoxK) / 14.f), Sm = Near * Near * (3.f - 2.f * Near);
 	Lat += (T.PitLatAt(PitKf) + (T.SlotLc() - T.PitLat) * Sm - Lat) * FMath::Min(1.f, Dt * 4.f);
 	PlaceInLane(0.f);
 	Throttle = Brake = 0.f;

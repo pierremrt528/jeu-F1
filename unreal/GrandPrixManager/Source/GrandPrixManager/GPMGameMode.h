@@ -67,8 +67,16 @@ public:
 	/** Stand : demander / annuler l'arrêt du joueur (touche B ou bouton STAND). */
 	void ToggleBox();
 	/** Voiture de sécurité (safety.js) : après un gros accident (ou GPM.SC / ?sc), file indienne, pénalité de 5 s si le joueur dépasse. */
-	void RequestSafety(bool bForce);
-	bool SafetyOut() const { return SC != nullptr && SCEnding <= 0.f; }
+	void RequestSafety(bool bForce, bool bVirtual = false);
+	/** 0 piste verte, 1 voiture de sécurité, 2 elle rentre ce tour, 3 relance (le leader mène jusqu'à la ligne), 4 VSC, 5 fin de VSC. */
+	uint8 SCState = 0;
+	bool SafetyOut() const { return SCState >= 1 && SCState <= 3; }
+	float GreenT = 0.f;   // bandeau « drapeau vert » après une neutralisation
+	/** Commissaires : dernier communiqué (HUD), pilote concerné, durée d'affichage ; enquête en cours. */
+	FString StewardHead, StewardWhy;
+	TWeakObjectPtr<AGPMCar> StewardCar;
+	float StewardT = 0.f;
+	bool bStewardInquiry = false;
 	/** Message radio du muret affiché quelques secondes. */
 	FString Radio; float RadioT = 0.f;
 	void Say(const FString& Msg) { Radio = Msg; RadioT = 5.f; }
@@ -249,6 +257,8 @@ private:
 	UPROPERTY() TObjectPtr<AGPMCar> SC;
 	float SCT = 0.f, SCEnding = 0.f;
 	bool bSCUsed = false;
+	int32 SCCount = 0, SCLeadLap = 0, SCPassed = 0;   // neutralisations de la course ; tour du leader au début de la relance
+	TWeakObjectPtr<AGPMCar> SCLeader;
 	TSet<AGPMCar*> SCAhead;
 	TCHAR PickTyre(int32 LapsLeft) const;
 	int32 GridSlot = 9;
@@ -286,6 +296,14 @@ private:
 	// commissaires (GPMPenalty.cpp) : limites de piste du joueur, accrochages ; tour de qualification annulé
 	void TrackLimits(float Dt);
 	void ContactPenalty(AGPMCar* Guilty, AGPMCar* Victim, float Close);
+	/** Sanction : Kind 0 = secondes de pénalité, 1 = drive-through, 2 = stop-and-go ; Delay > 0 : enquête annoncée d'abord. */
+	void Penalize(AGPMCar* C, uint8 Kind, float Sec, const FString& Why, float Delay = 0.f);
+	void Decide(AGPMCar* C, uint8 Kind, float Sec, const FString& Why);
+	void Stewards(float Dt);
+	/** Arrêt dans le carré : secondes de pénalité à purger avant le travail des mécaniciens (stop-and-go : arrêt de 10 s). */
+	float ServeAtStop(AGPMCar* C);
+	struct FInquiry { TWeakObjectPtr<AGPMCar> C; uint8 Kind = 0; float Sec = 0.f, At = 0.f; FString Why; };
+	TArray<FInquiry> Inquiries;
 	bool bQInvalid = false;
 	int32 FuelWarn = 0;   // 1 : essence juste annoncée, 2 : panne sèche
 	// captures d'écran automatiques (Saved/Captures, une par écran et par partie) pour régler l'interface et les graphismes

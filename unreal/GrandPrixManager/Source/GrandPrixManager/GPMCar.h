@@ -132,6 +132,17 @@ public:
 	bool bParked = false;                  // garée hors de la séance (qualifications)
 	bool bSCMode = false;                  // voiture de sécurité en piste : file indienne
 	float Penalty = 0.f;                   // secondes ajoutées au temps de course
+	// pénalités à purger (GPMPenalty.cpp) : secondes à faire au prochain arrêt (sinon ajoutées au temps), drive-through (1)
+	// ou stop-and-go de 10 s (2) à purger avant la fin du tour PenDue (sinon drapeau noir) ; PenSum : total infligé
+	float PenHold = 0.f, PenSum = 0.f;
+	uint8 PenKind = 0;
+	int32 PenDue = 0;
+	bool bPenVisit = false, bDriveThru = false;   // passage au stand pour la pénalité : pas de travail des mécaniciens
+	float SlowMul = 1.f;                   // voiture de sécurité virtuelle : vitesse plafonnée (part du profil)
+	/** Voiture de sécurité (GPMSafety.cpp) : coupé argent à gyrophares au lieu de la monoplace. */
+	void MakeSafetyBody();
+	void SetBeacons(bool bOn) { bBeacons = bOn; }
+	bool bSafetyBody = false;
 
 	/** Pneus et carburant (strategy.js) : gomme S/M/H, usure 0 (neuf) → 1 (à plat), masse du carburant. */
 	TCHAR Tyre = 'M';
@@ -151,7 +162,7 @@ public:
 	bool bTestDrive = false;               // tests (GPM.TestStand) : conduite automatique jusqu'au carré
 	void TestDrive();
 	float PitO = 0.f, PitHd = 0.f;
-	int32 PitMsg = 0;                      // message du muret à dire : 1 arrêt dans le carré, 2 repartir, 3 carré dépassé, 4 ressorti sans arrêt
+	int32 PitMsg = 0;                      // message du muret à dire : 1 arrêt dans le carré, 2 repartir, 3 carré dépassé, 4 ressorti sans arrêt, 5 excès de vitesse à l'entrée
 	static float TyreGrip(TCHAR T);
 	static float TyreWpl(TCHAR T);
 	static float LifeGrip(float R);
@@ -225,6 +236,9 @@ private:
 	int32 CamMode = 0;
 	bool bRainLightOn = false, bNearCam = true;
 	float ShakeT = 0.f;
+	bool bBeacons = false;
+	float BeaconT = 0.f;
+	void TickBeacons(float Dt);
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> RainLight;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;

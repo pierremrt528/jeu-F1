@@ -84,13 +84,13 @@ void AGPMGameMode::Retire(AGPMCar* C, const TCHAR* Why)
 	if (C == Car.Get()) Say(bEngine ? TEXT("Muret : le moteur a cassé… C'est l'abandon. Gare la voiture, désolé.") : TEXT("Muret : la voiture est trop abîmée, c'est l'abandon. Tu vas bien ?"));
 	else Say(FString::Printf(TEXT("Muret : abandon de %s (%s)."), *C->DriverName, bEngine ? TEXT("casse moteur") : TEXT("accident")));
 	UE_LOG(LogGPM, Log, TEXT("Abandon : %s (%s), %s, tour %d"), *C->DriverName, *C->TeamName, Why, C->Lap);
-	RequestSafety(false);
+	RequestSafety(false, bEngine ? FMath::FRand() < 0.7f : FMath::FRand() < 0.35f);
 }
 
 FString AGPMGameMode::ResultGap(const AGPMCar* C) const
 {
 	if (!C || Order.Num() == 0) return FString();
-	if (C->bOut) return C->OutWhy == TEXT("moteur") ? TEXT("Casse moteur") : TEXT("Accident");
+	if (C->bOut) return C->OutWhy == TEXT("moteur") ? TEXT("Casse moteur") : C->OutWhy == TEXT("drapeau noir") ? TEXT("Disqualifié") : TEXT("Accident");
 	const AGPMCar* Win = Order[0];
 	const FGPMTrackData* T = C->GetTrack();
 	const float N = T ? FMath::Max(1, T->WX.Num()) : 1.f;

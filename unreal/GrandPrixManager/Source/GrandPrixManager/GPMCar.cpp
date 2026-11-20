@@ -157,6 +157,7 @@ void AGPMCar::SyncModel(const FString& Era)
 
 void AGPMCar::SetLivery(FLinearColor Main, FLinearColor Accent)
 {
+	if (bSafetyBody) return;   // coupé de la voiture de sécurité : pas de livrée
 	auto Paint = [](const TArray<TObjectPtr<UStaticMeshComponent>>& Parts, FLinearColor Col)
 	{
 		for (UStaticMeshComponent* P : Parts)
@@ -244,6 +245,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	Lap = 0; RaceTime = LapStart = LastLap = 0.f;   // le meilleur tour est gardé
 	Ground = 0; OffIdx = -1; OffSide = Strikes = 0; OffT = PenCd = 0.f; bOffGravel = false;
 	bFinished = false; FinishTime = 0.f; Penalty = 0.f; bSCMode = false;
+	PenHold = PenSum = 0.f; PenKind = 0; PenDue = 0; bPenVisit = bDriveThru = false; SlowMul = 1.f;
 	bOut = false; OutT = FinProgress = 0.f; FlagLap = -1; OutWhy.Reset();
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	// nouvelle séance : voiture réparée, mode normal
@@ -320,7 +322,7 @@ void AGPMCar::ReadKeyboard(float Dt)
 void AGPMCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (HelmetOf != DriverName) SetLivery(LiveryMain, LiveryAccent);   // nouveau pilote dans la voiture : son casque
+	if (HelmetOf != DriverName && !bSafetyBody) SetLivery(LiveryMain, LiveryAccent);   // nouveau pilote dans la voiture : son casque
 	if (!Track) return;
 	if (bTestDrive) TestDrive();
 	else if (bPlayerControlled && Cast<APlayerController>(GetController())) ReadKeyboard(DeltaSeconds);
@@ -329,7 +331,8 @@ void AGPMCar::Tick(float DeltaSeconds)
 	if (bFinished && V > 20.f) Throttle = 0.f;   // tour de décélération
 	if (bOut) { Throttle = 0.f; if (V < 3.f) Brake = 1.f; }   // abandon : la voiture s'arrête en roue libre
 	// voiture de sécurité : limiteur doux pour le joueur
-	if (bSCMode && bPlayerControlled && Track && Track->AISpeed.IsValidIndex(Idx) && V > Track->AISpeed[Idx] * 0.72f) Throttle = 0.f;
+	if ((bSCMode || SlowMul < 1.f) && bPlayerControlled && Track && Track->AISpeed.IsValidIndex(Idx) && V > Track->AISpeed[Idx] * (bSCMode ? 0.72f : SlowMul)) Throttle = 0.f;
+	if (bSafetyBody) TickBeacons(DeltaSeconds);
 	Accum = FMath::Min(Accum + DeltaSeconds, 0.1f);
 	const int32 N = Track->WX.Num();
 	while (Accum >= PhysDt)

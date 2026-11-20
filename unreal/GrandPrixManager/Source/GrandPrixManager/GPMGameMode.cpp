@@ -538,7 +538,8 @@ void AGPMGameMode::StartRace()
 	for (AGPMCar* C : Grid) C->BestLap = 0.f;
 	Phase = EPhase::Lights; LightsT = -1.f; Clock = DoneT = 0.f; bRecorded = false;
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
-	bSCUsed = false; SCAhead.Reset();
+	bSCUsed = false; SCAhead.Reset(); SCState = 0; SCCount = 0; SCPassed = 0; GreenT = StewardT = 0.f; Inquiries.Reset(); bStewardInquiry = false;
+	for (AGPMCar* C : Cars) C->SlowMul = 1.f;
 	GoAt = 4.2f + 0.4f + FMath::FRand() * 0.8f;
 	// Nombre de tours : format Sprint (~11 min, lapsFor de strategy.js), ou ?tours=N
 	LapEstimate = 0.f;
@@ -701,7 +702,9 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		Strategy(DeltaSeconds);
 		if (!bSCUsed && UGameplayStatics::HasOption(OptionsString, TEXT("sc")) && Clock > 20.f) RequestSafety(true);
 		UpdateSafety(DeltaSeconds);
+		Stewards(DeltaSeconds);
 	}
+	GreenT -= DeltaSeconds; StewardT -= DeltaSeconds;
 	RadioT -= DeltaSeconds;
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
@@ -833,60 +836,93 @@ void AGPMGameMode::AutoCapture(float Dt)
 	FScreenshotRequest::RequestScreenshot(File, true, false);
 }
 
-void AGPMGameMode::RequestSafety(bool bForce)
+void AGPMGameMode::RequestSafety(bool bForce, bool bVirtual)
 {
-	if (SC || bSCUsed || Phase != EPhase::Race || Order.Num() == 0) return;
+	if (SCState || SCCount >= 2 || Phase != EPhase::Race || Order.Num() == 0) return;
 	const AGPMCar* Lead = Order[0];
 	const FGPMTrackData* T = Lead->GetTrack();
 	if (!T) return;
-	if (!bForce && (Lead->Progress() / float(T->WX.Num()) - 1.f) / TotalLaps > 0.8f) return;   // pas dans le dernier cinquième
-	if (!bForce && FMath::FRand() > 0.35f) return;
-	bSCUsed = true;
+	if (!bForce && (Lead->Progress() / float(T->WX.Num()) - 1.f) / TotalLaps > 0.85f) return;   // pas dans les derniers tours
+	if (!bForce && FMath::FRand() > (bVirtual ? 0.6f : 0.45f)) return;
+	bSCUsed = true; ++SCCount; SCT = 0.f; SCEnding = 0.f;
+	SCAhead.Reset();
+	for (AGPMCar* C : Order) { if (C == Car) break; if (!C->bOut) SCAhead.Add(C); }
+	if (bVirtual)
+	{
+		// voiture de sécurité virtuelle : tout le monde à 40 % de moins, les écarts restent, pas de dépassement
+		SCState = 4;
+		for (AGPMCar* C : Cars) C->SlowMul = 0.6f;
+		Say(TEXT("Muret : VSC ! Voiture de sécurité virtuelle : ralentis, garde ton écart, pas de dépassement."));
+		return;
+	}
 	SC = GetWorld()->SpawnActor<AGPMCar>();
 	if (!SC) return;
-	SC->SetLivery(FLinearColor(0.8f, 0.82f, 0.85f), FLinearColor(0.1f, 0.75f, 0.25f));
-	SC->Perf = 0.5f;
 	SC->DriverName = TEXT("Sécurité");
-	SC->MakeAI(0.56f);
+	SC->TeamIdx = 12;   // garage au bout de la voie des stands, après ceux des écuries
+	SC->MakeSafetyBody();
+	SC->Perf = 0.5f;
+	SC->MakeAI(0.6f);
 	SC->PlaceOnTrack(T, 0);
-	// 220 m devant le premier, au milieu de la piste, déjà lancée
-	const int32 N = T->WX.Num(), I = (Lead->Idx + 110) % N;
+	// elle sort de la voie des stands si le leader est encore loin, sinon elle s'insère 220 m devant lui
+	const int32 N = T->WX.Num(), Exit = (T->PitX1 + N) % N;
+	const int32 Ahead = ((Exit - Lead->Idx) % N + N) % N;
+	const int32 I = Ahead > 150 && Ahead < N / 2 ? Exit : (Lead->Idx + 110) % N;
 	SC->Idx = I; SC->X = T->WX[I]; SC->Z = T->WZ[I]; SC->Y = T->WY[I]; SC->Heading = T->H[I];
 	SC->Lat = SC->Lane = 0.f; SC->V = 40.f; SC->Lap = 1000;   // jamais comptée à l'arrivée
-	SCT = 0.f; SCEnding = 0.f;
-	SCAhead.Reset();
-	for (AGPMCar* C : Order) { if (C == Car) break; SCAhead.Add(C); }
+	SC->SetBeacons(true);
+	SCState = 1;
 	for (AGPMCar* C : Cars) C->Field.Add(SC);   // le peloton se cale derrière elle
-	Say(TEXT("Muret : voiture de sécurité ! Ralentis, interdiction de dépasser."));
+	Say(TEXT("Muret : voiture de sécurité ! Ralentis, file indienne, interdiction de dépasser."));
+	UE_LOG(LogGPM, Log, TEXT("Voiture de sécurité : sortie (indice %d, leader %d)"), I, Lead->Idx);
 }
 
 void AGPMGameMode::UpdateSafety(float Dt)
 {
-	for (AGPMCar* C : Cars) C->bSCMode = SafetyOut();
-	if (!SC) return;
+	for (AGPMCar* C : Cars) C->bSCMode = SafetyOut() && !(SCState == 3 && Order.Num() && C == Order[0]);
+	if (!SCState) return;
 	SCT += Dt;
-	// fin : peloton regroupé (moins de 22 m par voiture), ou au bout de 75 s
-	const AGPMCar* LastRun = nullptr;   // dernière voiture encore en course (les abandons ne comptent pas)
-	for (int32 k = Order.Num() - 1; k >= 0 && !LastRun; --k) if (!Order[k]->bOut) LastRun = Order[k];
-	const float Spread = LastRun && Order.Num() > 1 ? (Order[0]->Progress() - LastRun->Progress()) * 2.f : 0.f;
-	if (SCEnding <= 0.f && ((SCT > 25.f && Spread < Order.Num() * 22.f) || SCT > 75.f))
+	auto Green = [this]()
 	{
-		SCEnding = 4.f;
-		Say(TEXT("Muret : la voiture de sécurité rentre. Prépare la relance !"));
+		SCState = 0; GreenT = 3.f; SCAhead.Reset();
+		for (AGPMCar* C : Cars) { C->SlowMul = 1.f; C->bSCMode = false; }
+		Say(TEXT("Muret : drapeau vert, c'est reparti, attaque !"));
+	};
+	if (SCState >= 4)
+	{
+		// VSC : 20 à 30 s, puis « fin de VSC » et piste verte 4 s plus tard
+		if (SCState == 4 && SCT > 20.f + 10.f * FMath::Frac(SCCount * 0.37f)) { SCState = 5; SCEnding = 4.f; Say(TEXT("Muret : fin de la VSC, prépare-toi à relancer !")); }
+		if (SCState == 5 && (SCEnding -= Dt) <= 0.f) { Green(); return; }
 	}
-	if (SCEnding > 0.f)
+	else
 	{
-		SCEnding -= Dt;
-		if (SCEnding <= 0.f)
+		const FGPMTrackData* T = SC ? SC->GetTrack() : nullptr;
+		// fin : peloton regroupé (moins de 22 m par voiture) au bout de 30 s, ou au bout de 80 s ; gyrophares éteints
+		const AGPMCar* LastRun = nullptr;
+		for (int32 k = Order.Num() - 1; k >= 0 && !LastRun; --k) if (!Order[k]->bOut) LastRun = Order[k];
+		const float Spread = LastRun && Order.Num() > 1 ? (Order[0]->Progress() - LastRun->Progress()) * 2.f : 0.f;
+		if (SCState == 1 && ((SCT > 30.f && Spread < Order.Num() * 22.f) || SCT > 80.f))
 		{
-			for (AGPMCar* C : Cars) C->Field.Remove(SC);
-			SC->Destroy(); SC = nullptr; SCAhead.Reset();
-			Say(TEXT("Muret : fin de la voiture de sécurité, c'est reparti !"));
+			SCState = 2;
+			if (SC) SC->SetBeacons(false);
+			Say(TEXT("Muret : la voiture de sécurité rentre à la fin de ce tour. Reste collé, pas de dépassement avant la ligne !"));
 		}
-		return;
+		// elle plonge dans la voie des stands et se gare au bout ; le leader mène alors le peloton jusqu'à la ligne
+		if (SCState == 2 && SC && T)
+		{
+			const int32 K = T->PitK(SC->Idx);
+			if (!SC->PitPhase && K > T->PitE0 - 30 && K < T->PitE0 - 10) SC->StartPit(1e6f);
+			if (SC->PitPhase >= 2 || SCT > 160.f)
+			{
+				for (AGPMCar* C : Cars) C->Field.Remove(SC);
+				SC->Destroy(); SC = nullptr;
+				SCState = 3; SCLeader = Order.Num() ? Order[0] : nullptr; SCLeadLap = Order.Num() ? Order[0]->Lap : 0;
+			}
+		}
+		// relance : drapeau vert quand le leader passe la ligne
+		if (SCState == 3 && (!SCLeader.IsValid() || SCLeader->Lap > SCLeadLap || SCLeader->bOut)) { Green(); return; }
 	}
-	// joueur : pénalité s'il passe une voiture qui était devant lui
-	if (!Car || Car->PitPhase) { SCAhead.Reset(); return; }
+	// dépassement d'une voiture qui était devant (voiture de sécurité, VSC, relance avant la ligne) : 5 s, puis drive-through
+	if (!Car || Car->PitPhase || SCState == 5) { if (!Car || Car->PitPhase) SCAhead.Reset(); return; }
 	for (auto It = SCAhead.CreateIterator(); It; ++It)
 	{
 		AGPMCar* C = *It;
@@ -894,7 +930,12 @@ void AGPMGameMode::UpdateSafety(float Dt)
 		if (Car->Progress() - C->Progress() > 4.f)
 		{
 			It.RemoveCurrent();
-			if (Car->bPlayerControlled) { Car->Penalty += 5.f; Say(TEXT("Muret : dépassement sous voiture de sécurité, pénalité de 5 s !")); }
+			if (Car->bPlayerControlled)
+			{
+				const bool bAgain = SCPassed > 0;
+				++SCPassed;
+				Penalize(Car, bAgain ? 1 : 0, 5.f, FString::Printf(TEXT("Dépassement de %s sous %s"), *C->DriverName, SCState >= 4 ? TEXT("VSC") : TEXT("voiture de sécurité")), 3.f);
+			}
 		}
 	}
 }
@@ -1009,6 +1050,9 @@ void AGPMGameMode::Strategy(float Dt)
 				C->Fuel = FMath::Max(C->Fuel, FMath::Min(Tank, FuelFor(C, FMath::Max(1, Upto - C->Lap) + 0.3f) * 1.04f));
 				FuelWarn = 0; bTyreWarn = false; ManualTyre = 0; bTyrePicked = false;
 				C->PitStopT = FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + C->UpPit) + Fix;
+				const float Served = ServeAtStop(C);
+				if (C->bPenVisit) { C->PitStopT = Served; continue; }   // stop-and-go ou drive-through : pas de pneus
+				C->PitStopT += Served;
 				// l'équipier est encore dans le carré : les mécaniciens finissent sa voiture d'abord
 				float Wait = 0.f;
 				for (const AGPMCar* O : Cars) if (O != C && O->TeamIdx == C->TeamIdx && O->PitPhase == 2) Wait = FMath::Max(Wait, FMath::Min(O->PitStopT, 8.f) + 1.f);
@@ -1019,7 +1063,12 @@ void AGPMGameMode::Strategy(float Dt)
 			}
 			else if (Msg == 2) Say(TEXT("Muret : go, go, go ! Garde le limiteur jusqu'à la sortie."));
 			else if (Msg == 3) Say(TEXT("Muret : tu as dépassé ton carré ! Arrête-toi et recule (frein à l'arrêt), ou ressors sans changer."));
-			else if (Msg == 4) Say(TEXT("Muret : pas d'arrêt cette fois, on reste sur ces pneus."));
+			else if (Msg == 4)
+			{
+				if (C->PenKind == 1) { C->PenKind = 0; Say(TEXT("Muret : drive-through purgé, c'est bon !")); }
+				else Say(TEXT("Muret : pas d'arrêt cette fois, on reste sur ces pneus."));
+			}
+			else if (Msg == 5) Penalize(C, 0, 5.f, TEXT("Excès de vitesse dans la voie des stands"), 4.f);
 		}
 		// décision d'arrêt avant l'entrée des stands
 		const int32 K0 = T->PitK(C->Idx);
@@ -1060,6 +1109,12 @@ void AGPMGameMode::Strategy(float Dt)
 		}
 		// un seul carré par écurie : si l'équipier y est déjà (ou s'y rend, ou si le joueur a demandé son arrêt), on attend le tour
 		// suivant ; sur crevaison on rentre quand même et les mécaniciens font attendre la voiture
+		if (C->bBox && bAuto && C->PenKind == 1)
+		{
+			// drive-through : on traverse la voie au limiteur sans s'arrêter
+			C->StartPit(0.f); C->PitPhase = 3; C->bPenVisit = C->bDriveThru = true; C->PenKind = 0;
+			continue;
+		}
 		float Queue = 0.f;
 		if (C->bBox && bAuto)
 			for (const AGPMCar* O : Cars)
@@ -1071,7 +1126,9 @@ void AGPMGameMode::Strategy(float Dt)
 			const float Fix = Queue + (C->Dmg > 0.15f ? 3.f : 0.f) + (C->DmgR > 0.15f ? 4.f : 0.f) + (C->bFwOff || C->bRwOff ? 2.f : 0.f);
 			// pièces Stands et Centre des mécaniciens : l'équipe du joueur gagne du temps à chaque arrêt
 			const float Crew = Car && C->TeamIdx == Car->TeamIdx ? Car->UpPit : 0.f;
-			C->StartPit(FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + Crew) + Fix);
+			const float Served = ServeAtStop(C);
+			C->StartPit(C->bPenVisit ? Served : FMath::Max(1.4f, 2.3f + FMath::FRand() * 0.6f + Crew) + Fix + Served);
+			if (C->bPenVisit) continue;
 			// ravitaillement : de quoi aller jusqu'à l'arrêt suivant de la stratégie, ou jusqu'à l'arrivée
 			{
 				const TArray<TPair<TCHAR, int32>>& Next = C == Car ? Stints : C->Plan;
@@ -1163,7 +1220,7 @@ void AGPMGameMode::RecordResult()
 	{
 		Career->ClearBoost();
 		FGPMRaceCtx R;
-		R.Pos = Pos; R.Grid = GridSlot + 1; R.Stops = Car->Stops; R.Pen = Car->Penalty; R.bSC = bSCUsed;
+		R.Pos = Pos; R.Grid = GridSlot + 1; R.Stops = Car->Stops; R.Pen = Car->PenSum; R.bSC = bSCUsed;
 		R.bWet = bRainStart || WxChangeAt >= 0.f;   // il a plu pendant la course (questions de presse et flash info sur la pluie)
 		R.bFlat = bHadFlat;
 		R.bDnf = Car->bOut;
@@ -1192,12 +1249,12 @@ void AGPMGameMode::RecordResult()
 			const bool bSim = Car->RaceTime < 1.f;
 			FString Body = FString::Printf(TEXT("%s · %d tours · %s\n\nTa course : parti P%d, %s."), bSim ? TEXT("Course simulée") : TEXT("Course jouée"), TotalLaps,
 				bRainStart || WxChangeAt >= 0.f ? TEXT("pluie pendant la course") : TEXT("piste sèche"), GridSlot + 1,
-				Car->bOut ? (Car->OutWhy == TEXT("moteur") ? TEXT("abandon sur casse moteur") : TEXT("abandon sur accident")) : *FString::Printf(TEXT("arrivé P%d (%s)"), Pos, Pos == 1 ? TEXT("victoire") : *ResultGap(Car)));
+				Car->bOut ? (Car->OutWhy == TEXT("moteur") ? TEXT("abandon sur casse moteur") : Car->OutWhy == TEXT("drapeau noir") ? TEXT("disqualifié (drapeau noir)") : TEXT("abandon sur accident")) : *FString::Printf(TEXT("arrivé P%d (%s)"), Pos, Pos == 1 ? TEXT("victoire") : *ResultGap(Car)));
 			FString Plan;
 			for (const TPair<TCHAR, int32>& S : Stints) Plan += FString::Printf(TEXT("%s%s %d t."), Plan.IsEmpty() ? TEXT("") : TEXT(" → "), *TyreName(S.Key), S.Value);
 			if (!Plan.IsEmpty()) Body += FString::Printf(TEXT("\nStratégie prévue : %s · %d arrêt%s."), *Plan, Car->Stops, Car->Stops > 1 ? TEXT("s") : TEXT(""));
 			if (EngineFailAt.Contains(Car.Get()) && !Car->bOut) Body += TEXT("\nEnnui moteur : de la puissance perdue en fin de course.");
-			if (Car->Penalty > 0.f) Body += FString::Printf(TEXT("\nPénalité : %.0f s."), Car->Penalty);
+			if (Car->PenSum > 0.f) Body += FString::Printf(TEXT("\nPénalités : %.0f s%s."), Car->PenSum, Car->Penalty < Car->PenSum ? *FString::Printf(TEXT(" (dont %.0f s purgées au stand)"), Car->PenSum - Car->Penalty) : TEXT(""));
 			if (R.MatePos > 0 && Order.IsValidIndex(R.MatePos - 1))
 				Body += FString::Printf(TEXT("\nTon équipier %s : %s."), *Order[R.MatePos - 1]->DriverName, Order[R.MatePos - 1]->bOut ? TEXT("abandon") : *FString::Printf(TEXT("P%d"), R.MatePos));
 			Body += TEXT("\n\nPodium : ");
@@ -1206,7 +1263,7 @@ void AGPMGameMode::RecordResult()
 			for (const AGPMCar* C : Order) if (!C->bOut && C->BestLap > 0.f && (!FastC || C->BestLap < FastC->BestLap)) FastC = C;
 			if (FastC) Body += FString::Printf(TEXT("\nMeilleur tour : %s, %d:%06.3f."), FastC == Car ? TEXT("toi") : *FastC->DriverName, int32(FastC->BestLap) / 60, FMath::Fmod(FastC->BestLap, 60.f));
 			FString Outs;
-			for (const AGPMCar* C : Order) if (C->bOut && C != Car) Outs += FString::Printf(TEXT("%s%s (%s)"), Outs.IsEmpty() ? TEXT("") : TEXT(", "), *C->DriverName, C->OutWhy == TEXT("moteur") ? TEXT("moteur") : TEXT("accident"));
+			for (const AGPMCar* C : Order) if (C->bOut && C != Car) Outs += FString::Printf(TEXT("%s%s (%s)"), Outs.IsEmpty() ? TEXT("") : TEXT(", "), *C->DriverName, C->OutWhy == TEXT("moteur") ? TEXT("moteur") : C->OutWhy == TEXT("drapeau noir") ? TEXT("disqualifié") : TEXT("accident"));
 			if (!Outs.IsEmpty()) Body += TEXT("\nAbandons : ") + Outs + TEXT(".");
 			if (bSCUsed) Body += TEXT("\nLa voiture de sécurité est sortie.");
 			Career->SendMail(TEXT("equipe"), TEXT("Ingénieur de course"), FString::Printf(TEXT("Compte rendu : GP %s"), *R.Circuit), Body);
@@ -1458,7 +1515,7 @@ void AGPMGameMode::Collide()
 					const float K = Close * 0.55f;
 					A.V -= K * (FaX * Dx + FaZ * Dz);
 					B.V += K * (FbX * Dx + FbZ * Dz);
-					if (Close > 14) RequestSafety(false);
+					if (Close > 14) RequestSafety(false, FMath::FRand() < 0.3f);
 					if (Close > 5)
 					{
 						// dégâts sur l'aileron touché (avant ou arrière), seulement sur un nouveau contact franc
@@ -1499,4 +1556,13 @@ static FAutoConsoleCommandWithWorldAndArgs GSafetyCmd(
 	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
 	{
 		if (AGPMGameMode* GM = World ? World->GetAuthGameMode<AGPMGameMode>() : nullptr) GM->RequestSafety(true);
+	}));
+
+// Commande console : GPM.VSC (voiture de sécurité virtuelle tout de suite)
+static FAutoConsoleCommandWithWorldAndArgs GVscCmd(
+	TEXT("GPM.VSC"),
+	TEXT("Déclenche une voiture de sécurité virtuelle."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+	{
+		if (AGPMGameMode* GM = World ? World->GetAuthGameMode<AGPMGameMode>() : nullptr) GM->RequestSafety(true, true);
 	}));

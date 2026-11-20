@@ -553,9 +553,11 @@ void AGPMHUD::DrawCluster(AGPMCar* Car, float W, float H)
 {
 	const float S = Scale, CW = 216.f * S, CH = 58.f * S, X = (W - CW) * 0.5f, Y = H - CH - (bShowTouch ? 4.f : 8.f) * S;
 	Paint(7, X, Y, CW, CH, RacePanel);
-	if (Car->Penalty > 0.f)
+	if (Car->Penalty > 0.f || Car->PenKind)
 	{
-		const FString Pen = FString::Printf(TEXT("PÉNALITÉ +%.0f S"), Car->Penalty);
+		// secondes à purger au prochain arrêt, et drive-through / stop-and-go à faire avant la fin du tour indiqué
+		FString Pen = Car->Penalty > 0.f ? FString::Printf(TEXT("PÉNALITÉ +%.0f S"), Car->Penalty) : FString();
+		if (Car->PenKind) Pen += FString::Printf(TEXT("%s%s · AVANT LA FIN DU TOUR %d"), Pen.IsEmpty() ? TEXT("") : TEXT(" · "), Car->PenKind == 1 ? TEXT("DRIVE-THROUGH") : TEXT("STOP-AND-GO 10 S"), Car->PenDue + 1);
 		const float PW = InkSize(Pen, 1, 7.f).X + 20.f * S, PH = 14.f * S;
 		DrawRect(RaceRed, (W - PW) * 0.5f, Y - PH - 4.f * S, PW, PH);
 		InkV(Pen, W * 0.5f, Y - PH - 4.f * S, PH, 1, 7.f, FLinearColor::White, 0.5f);
@@ -816,7 +818,28 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			InkV(AlertTxt, W * 0.5f, TopY, AH, 1, 6.5f, RaceA(FLinearColor::White, A), 0.5f);
 			TopY += AH + 4.f * S;
 		}
-		if (GM->SafetyOut()) Banner(TEXT("VOITURE DE SÉCURITÉ"), TopY, RaceYellow, RaceInk, 11.f);
+		// neutralisation : voiture de sécurité (sortie, rentre ce tour, relance), VSC ; puis drapeau vert
+		if (GM->SCState)
+		{
+			static const TCHAR* SCTxt[6] = { TEXT(""), TEXT("VOITURE DE SÉCURITÉ"), TEXT("LA VOITURE DE SÉCURITÉ RENTRE CE TOUR"), TEXT("RELANCE · PAS DE DÉPASSEMENT AVANT LA LIGNE"),
+				TEXT("VOITURE DE SÉCURITÉ VIRTUELLE"), TEXT("FIN DE LA VSC") };
+			const bool bBlinkSC = GM->SCState == 5 && FMath::Fmod(GetWorld()->GetRealTimeSeconds(), 0.8f) < 0.4f;
+			TopY = Banner(SCTxt[FMath::Min<int32>(GM->SCState, 5)], TopY, bBlinkSC ? RaceGreen : RaceYellow, RaceInk, 11.f) + 4.f * S;
+		}
+		else if (GM->GreenT > 0.f) TopY = Banner(TEXT("DRAPEAU VERT"), TopY, RaceGreen, FLinearColor::White, 11.f) + 4.f * S;
+		// communiqué des commissaires : enquête (jaune) puis décision (rouge), avec le code du pilote
+		if (GM->StewardT > 0.f && !GM->StewardHead.IsEmpty())
+		{
+			const float A = FMath::Clamp(GM->StewardT / 0.4f, 0.f, 1.f), BW = 250.f * S, BX = (W - BW) * 0.5f;
+			const FString Who = GM->StewardCar.IsValid() ? Code3(GM->StewardCar->DriverName) : FString();
+			const FLinearColor Tag = GM->bStewardInquiry ? RaceYellow : RaceRed;
+			DrawRect(RaceA(RacePanel, 0.95f * A), BX, TopY, BW, 30.f * S);
+			DrawRect(RaceA(Tag, A), BX, TopY, 4.f * S, 30.f * S);
+			Ink(TEXT("COMMISSAIRES"), BX + 10.f * S, TopY + 3.f * S, 2, 5.5f, RaceA(RaceDim, A), 0.f);
+			Ink(FString::Printf(TEXT("%s%s"), *Who, Who.IsEmpty() ? TEXT("") : TEXT("  ")) + GM->StewardHead, BX + 10.f * S, TopY + 10.f * S, 1, 7.f, RaceA(GM->bStewardInquiry ? RaceYellow : FLinearColor::White, A), 0.f);
+			Ink(GM->StewardWhy, BX + 10.f * S, TopY + 20.f * S, 2, 5.5f, RaceA(FLinearColor::White, 0.8f * A), 0.f);
+			TopY += 34.f * S;
+		}
 
 		if (Car->PitPhase)
 		{
@@ -846,7 +869,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 			const float FY = H * 0.24f, FW = 200.f * S, FH = 72.f * S, FX = (W - FW) * 0.5f;
 			Panel(FX, FY, FW, FH, RacePanel);
 			DrawRect(RaceRed, FX, FY, FW - 6.f * S, 2.f * S);
-			Ink(Car->OutWhy == TEXT("moteur") ? TEXT("CASSE MOTEUR") : TEXT("ACCIDENT"), W * 0.5f, FY + 8.f * S, 2, 6.f, RaceDim, 0.5f);
+			Ink(Car->OutWhy == TEXT("moteur") ? TEXT("CASSE MOTEUR") : Car->OutWhy == TEXT("drapeau noir") ? TEXT("DRAPEAU NOIR") : TEXT("ACCIDENT"), W * 0.5f, FY + 8.f * S, 2, 6.f, RaceDim, 0.5f);
 			Ink(TEXT("ABANDON"), W * 0.5f, FY + 22.f * S, 4, 24.f, RaceRed, 0.5f);
 		}
 		else if (Car->bFinished)
