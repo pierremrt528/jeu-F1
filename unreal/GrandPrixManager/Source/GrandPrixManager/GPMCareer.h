@@ -171,7 +171,7 @@ public:
 	/** Ambitions de la direction (0 petite écurie, 1 milieu de grille, 2 écurie de pointe) : le niveau de départ, puis le classement de la saison précédente. */
 	int32 Ambition() const;
 	/** Place que la direction attend à chaque course selon ses ambitions (14, 9 ou 4). */
-	int32 Expected() const { const int32 A = Ambition(); return A == 0 ? 14 : A == 2 ? 4 : 9; }
+	int32 Expected() const { const int32 A = Ambition(); return A == 0 ? 14 : A == 3 ? 2 : A == 2 ? 4 : 9; }
 	static FString ConfText(int32 C) { return C >= 75 ? TEXT("excellente") : C >= 55 ? TEXT("bonne") : C >= 35 ? TEXT("fragile") : C >= 20 ? TEXT("en crise") : TEXT("rompue"); }
 	bool IsFired() const;
 	/** Après un licenciement : un repreneur rachète l'écurie et garde le joueur (budget divisé par deux, ambitions au plus bas). */

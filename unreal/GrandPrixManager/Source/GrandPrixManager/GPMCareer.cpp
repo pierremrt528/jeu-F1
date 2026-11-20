@@ -360,6 +360,13 @@ TArray<TPair<FString, bool>> UGPMCareerSubsystem::Objectives() const
 		Out.Emplace(FString::Printf(TEXT("Top 8 des écuries (P%d)"), CPos), bAny && CPos <= 8);
 		Out.Emplace(FString::Printf(TEXT("25 points pour l'écurie (%d/25)"), Pts), Pts >= 25);
 	}
+	else if (Ambition() == 3)
+	{
+		// dynastie : après un titre des écuries, la direction exige de le conserver en dominant
+		const int32 NeedW = FMath::Max(3, Season->NumRounds() / 3);
+		Out.Emplace(FString::Printf(TEXT("Conserver le titre des écuries (P%d)"), CPos), bAny && CPos <= 1);
+		Out.Emplace(FString::Printf(TEXT("%d victoires (%d/%d)"), NeedW, Win, NeedW), Win >= NeedW);
+	}
 	else if (Ambition() == 2)
 	{
 		Out.Emplace(FString::Printf(TEXT("Top 2 des écuries (P%d)"), CPos), bAny && CPos <= 2);
@@ -377,7 +384,7 @@ int32 UGPMCareerSubsystem::Ambition() const
 {
 	const UGPMSaveGame* G = Save();
 	if (!G) return 1;
-	if (G->Ambition >= 0) return FMath::Clamp(G->Ambition, 0, 2);
+	if (G->Ambition >= 0) return FMath::Clamp(G->Ambition, 0, 3);
 	return G->Tier == TEXT("new") ? 0 : G->Tier == TEXT("top") ? 2 : 1;
 }
 
@@ -602,6 +609,17 @@ TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 	{
 		// mercato des IA à la mi-saison
 		if (Season->Round() == Season->NumRounds() / 2) AIMercato(1 + FMath::RandRange(0, 1));
+		// mi-saison : une écurie qui écrase le championnat voit la direction relever ses exigences tout de suite
+		if (Season->Round() == Season->NumRounds() / 2 && Ambition() < 3 && TeamPos() == 1)
+		{
+			const TArray<FGPMStanding> Tms = Season->Teams();
+			if (Tms.Num() > 1 && Tms[0].bPlayer && Tms[0].Pts >= Tms[1].Pts * 3 / 2)
+			{
+				G->Ambition = 3;
+				SendMail(TEXT("direction"), TEXT("Président de l'écurie"), TEXT("Nous voulons le titre, et rien d'autre"),
+					FString::Printf(TEXT("Nous dominons le championnat des écuries (%d points contre %d). La direction relève ses objectifs dès maintenant : le titre des écuries et une victoire au moins une course sur trois. Chaque Grand Prix sera jugé sur un podium attendu."), Tms[0].Pts, Tms[1].Pts));
+			}
+		}
 		// rappel : le contrat de l'équipier se termine en fin de saison
 		if (G->MateYears <= 1 && Season->Round() == FMath::Max(1, Season->NumRounds() - 4))
 			SendMail(TEXT("mercato"), TEXT("Cellule recrutement"), FString::Printf(TEXT("Contrat de %s : fin de saison en vue"), *G->MateName),
@@ -644,14 +662,16 @@ void UGPMCareerSubsystem::Intersaison()
 	if (!G || !G->bCreated) return;
 	// ambitions de la direction pour la saison qui vient : elles suivent le classement des écuries de la saison écoulée
 	{
-		const int32 Was = Ambition(), CPos = TeamPos(), Now = CPos <= 2 ? 2 : CPos <= 6 ? 1 : 0;
+		// champion des écuries : la direction passe en mode « dynastie » (titre à conserver, une victoire tous les 3 GP)
+		const int32 Was = Ambition(), CPos = TeamPos(), Now = CPos == 1 ? 3 : CPos <= 2 ? 2 : CPos <= 6 ? 1 : 0;
 		G->Ambition = Now;
 		if (Now != Was)
 		{
-			static const TCHAR* Goal[3] = { TEXT("le top 8 des écuries et 25 points"), TEXT("le top 5 des écuries et un podium"), TEXT("le top 2 des écuries et 3 victoires") };
+			static const TCHAR* Goal[4] = { TEXT("le top 8 des écuries et 25 points"), TEXT("le top 5 des écuries et un podium"), TEXT("le top 2 des écuries et 3 victoires"),
+				TEXT("conserver le titre des écuries et gagner au moins une course sur trois") };
 			SendMail(TEXT("direction"), TEXT("Président de l'écurie"), Now > Was ? TEXT("Nos ambitions montent d'un cran") : TEXT("Des objectifs revus à la baisse"),
 				FString::Printf(TEXT("Après notre %s place au championnat des écuries, la direction %s ses ambitions. Objectifs de la nouvelle saison : %s. Chaque course sera jugée sur une %de place attendue."),
-					CPos == 1 ? TEXT("1re") : *FString::Printf(TEXT("%de"), CPos), Now > Was ? TEXT("relève") : TEXT("abaisse"), Goal[Now], Now == 0 ? 14 : Now == 2 ? 4 : 9));
+					CPos == 1 ? TEXT("1re") : *FString::Printf(TEXT("%de"), CPos), Now > Was ? TEXT("relève") : TEXT("abaisse"), Goal[Now], Now == 0 ? 14 : Now == 3 ? 2 : Now == 2 ? 4 : 9));
 		}
 	}
 	// bilan du mercato d'intersaison, envoyé par la presse (les nouvelles sont effacées par la nouvelle saison)
