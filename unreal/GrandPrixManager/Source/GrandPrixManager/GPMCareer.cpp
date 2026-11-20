@@ -591,6 +591,29 @@ void UGPMCareerSubsystem::Intersaison()
 	}
 	// bilan du mercato d'intersaison, envoyé par la presse (les nouvelles sont effacées par la nouvelle saison)
 	TArray<FString> Mk;
+	// prime d'objectif de l'équipier (négociée au contrat) : place au championnat des pilotes de la saison écoulée
+	if (G->MateObj > 0 && G->MateObjPrize > 0.f)
+		if (UGPMSeasonSubsystem* Ssn = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>())
+		{
+			const TArray<FGPMStanding> Drv = Ssn->Drivers();
+			const int32 Pos = Drv.IndexOfByPredicate([G](const FGPMStanding& St) { return St.Name == G->MateName; }) + 1;
+			const int32 Need = G->MateObj == 1 ? 10 : G->MateObj == 2 ? 6 : 3;
+			const bool bMet = Pos > 0 && Pos <= Need;
+			if (bMet) G->Budget = R1(G->Budget - G->MateObjPrize);
+			SendMail(TEXT("mercato"), TEXT("Cellule recrutement"), FString::Printf(TEXT("Prime d'objectif de %s"), *G->MateName),
+				bMet ? FString::Printf(TEXT("%s termine P%d du championnat (objectif : top %d). Prime versée : %.1f M€."), *G->MateName, Pos, Need, G->MateObjPrize)
+					: FString::Printf(TEXT("%s termine P%d du championnat (objectif : top %d). Pas de prime à verser."), *G->MateName, FMath::Max(Pos, 1), Need));
+		}
+	// sponsor principal : versement de début de saison, chaque année (le reste arrive par parts après chaque GP)
+	for (const FGPMSponsorOpt& Sp : Sponsors)
+		if (Sp.Id == G->Sponsor)
+		{
+			G->Budget = R1(G->Budget + Sp.Sign);
+			SendMail(TEXT("sponsor"), Sp.Name, FString::Printf(TEXT("Saison %d : notre contrat continue"), G->Year + 1),
+				FString::Printf(TEXT("Nous restons à vos côtés pour la saison %d.\nVersement de début de saison : %.1f M€ (déjà sur votre compte).\nPuis %.1f M€ par saison, versés par parts après chaque Grand Prix, plus %.1f M€ de bonus à chaque objectif de course rempli."),
+					G->Year + 1, Sp.Sign, Sp.Year, Sp.Bonus));
+			News(FString::Printf(TEXT("%s verse %.1f M€ pour la nouvelle saison."), *Sp.Name, Sp.Sign));
+		}
 	// motoriste et salaire de l'équipier payés pour la nouvelle saison ; fin de contrat → pilote de réserve
 	for (const FGPMEngineOpt& E : Engines) if (E.Id == G->Engine) G->Budget = R1(G->Budget - E.Price);
 	if (--G->MateYears <= 0)
@@ -930,7 +953,7 @@ void UGPMCareerSubsystem::OpenNego(const FGPMMarketDriver& D, bool bExtend)
 	const TCHAR* Ys = Nego.Years > 1 ? TEXT("s") : TEXT("");
 	if (bExtend)
 	{
-		NegoDialog(FString::Printf(TEXT("Mon client est prêt à prolonger de %d saison%s pour %.1f M€ par saison%s."), Nego.Years, Ys, Nego.Demand,
+		OfferDialog(FString::Printf(TEXT("Mon client est prêt à prolonger de %d saison%s pour %.1f M€ par saison%s."), Nego.Years, Ys, Nego.Demand,
 			Nego.bWantN1 ? TEXT(", avec le statut de pilote N°1") : TEXT("")));
 		return;
 	}
@@ -943,7 +966,7 @@ void UGPMCareerSubsystem::OpenNego(const FGPMMarketDriver& D, bool bExtend)
 		Line += Nego.bSwap ? FString::Printf(TEXT(" %s demande %.1f M€ d'indemnité pour le libérer, et récupère %s."), *D.Team, Nego.Fee, *G->MateName)
 			: FString::Printf(TEXT(" %s demande %.1f M€ d'indemnité pour le libérer ; %s ne l'intéresse pas et redeviendra pilote libre."), *D.Team, Nego.Fee, *G->MateName);
 	}
-	NegoDialog(Line);
+	OfferDialog(Line);
 }
 
 void UGPMCareerSubsystem::NegoDialog(const FString& Line)
@@ -986,11 +1009,168 @@ void UGPMCareerSubsystem::NegoDialog(const FString& Line)
 	if (Queue.Num()) Queue[0] = Dl; else Queue.Add(Dl);
 }
 
+// ---------- offre à la carte (façon FIFA) ----------
+namespace GPMOfferK
+{
+	const float SignK[4] = { 0.f, 0.15f, 0.3f, 0.6f };   // prime à la signature, part de ce qu'il demande par saison
+	const TCHAR* RoleCycle[3] = { TEXT("eq"), TEXT("n1"), TEXT("n2") };
+	float R1o(float V) { return FMath::RoundToFloat(V * 10.f) / 10.f; }
+}
+
+// chance que l'équipier atteigne l'objectif (top 10 / top 6 / podium du championnat) selon la place de l'écurie
+float UGPMCareerSubsystem::ObjChance(int32 Lvl) const
+{
+	const int32 P = TeamPos();
+	if (Lvl == 1) return P <= 6 ? 0.85f : P <= 8 ? 0.5f : 0.2f;
+	if (Lvl == 2) return P <= 3 ? 0.75f : P <= 6 ? 0.4f : 0.1f;
+	if (Lvl == 3) return P <= 2 ? 0.5f : P <= 4 ? 0.2f : 0.04f;
+	return 0.f;
+}
+
+float UGPMCareerSubsystem::OfferValue(float& OutCost) const
+{
+	using namespace GPMOfferK;
+	const UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	const bool bPayNow = !Nego.bExtend && !(Season && Season->IsOver());
+	const float Ask = FMath::Max(0.3f, Nego.Ask);
+	const float SignAmt = R1o(Ask * SignK[FMath::Clamp(Nego.OSignL, 0, 3)]);
+	const float Pod = PodBonus(Ask) * Nego.OBonusL, Win = WinBonus(Ask) * Nego.OBonusL;
+	OutCost = R1o((bPayNow ? Nego.OSal : 0.f) + SignAmt + Nego.Fee);
+	// podiums et victoires espérés par saison selon la place de l'écurie ; un ambitieux y croit plus qu'un mercenaire
+	const int32 P = TeamPos();
+	const float Pods = P <= 2 ? 6.f : P <= 4 ? 3.f : P <= 6 ? 1.f : 0.3f, Wins = P <= 2 ? 2.f : P <= 4 ? 0.7f : P <= 6 ? 0.2f : 0.05f;
+	const FString& Ps = Nego.Pers;
+	const float BonusW = Ps == TEXT("ambitieux") ? 0.9f : Ps == TEXT("jeune") ? 0.8f : Ps == TEXT("fidele") ? 0.6f : 0.4f;
+	const float V = Nego.OSal + SignAmt / FMath::Max(1, Nego.OYears) + (Pod * Pods + Win * Wins) * BonusW + ObjPrizeOf(Nego.OObj, Ask) * ObjChance(Nego.OObj) * 0.9f;
+	const FString& Ro = Nego.ORole;
+	const float RoleT = Nego.bWantN1 ? (Ro == TEXT("n1") ? 0.12f : Ro == TEXT("n2") ? -0.3f : -0.12f) : (Ro == TEXT("n1") ? 0.05f : Ro == TEXT("n2") ? -0.08f : 0.f);
+	// durée : un fidèle ou un vétéran veut de la sécurité, un mercenaire garde sa liberté
+	const float Yx = float(Nego.OYears - 1);
+	const float YearsT = Nego.D.Age >= 32 ? 0.04f * Yx : Ps == TEXT("fidele") ? 0.03f * Yx : Ps == TEXT("mercenaire") ? -0.04f * Yx : Ps == TEXT("jeune") ? 0.02f * Yx : 0.f;
+	// clause libératoire basse : une porte de sortie, appréciée des mercenaires et des ambitieux
+	const float ClauseW = Ps == TEXT("mercenaire") ? 0.12f : Ps == TEXT("ambitieux") ? 0.1f : Ps == TEXT("jeune") ? 0.06f : 0.03f;
+	const float ClauseT = Nego.OClauseL == 2 ? ClauseW : Nego.OClauseL == 1 ? ClauseW * 0.4f : 0.f;
+	return V / Ask + RoleT + YearsT + ClauseT;
+}
+
+void UGPMCareerSubsystem::OfferDialog(const FString& Line)
+{
+	using namespace GPMOfferK;
+	const UGPMSaveGame* G = Save();
+	if (!Nego.bBuilder)
+	{
+		Nego.bBuilder = true;
+		Nego.OSal = R1o(FMath::Max(0.3f, Nego.Ask)); Nego.OYears = Nego.Years; Nego.ORole = Nego.Role;
+		Nego.OSignL = Nego.OBonusL = Nego.OObj = Nego.OClauseL = 0;
+	}
+	Nego.OLine = Line;
+	FGPMDialog Dl;
+	Dl.Kind = FGPMDialog::EKind::Nego;
+	Dl.Color = FLinearColor(0.2f, 0.6f, 1.f);
+	const FPers& P = PersOf(Nego.Pers);
+	Dl.Kicker = FString::Printf(TEXT("%s · %s · %s · intérêt %d · patience %d"), Nego.bExtend ? TEXT("PROLONGATION") : TEXT("NÉGOCIATION"), *Nego.D.Name, P.Name, Nego.Interest, Nego.Patience);
+	Dl.Title = FString::Printf(TEXT("%s, %d ans · note %.0f (vitesse %.0f, stratégie %.0f, pneus %.0f, potentiel %.0f)"), *Nego.D.From, Nego.D.Age, Nego.D.Rating(),
+		Nego.D.Spd, Nego.D.Strat, Nego.D.Tyre, Nego.D.Pot);
+	float Cost = 0.f;
+	const float Score = OfferValue(Cost);
+	const float Thr = 1.f - (Nego.Interest - 50) / 500.f;
+	const TCHAR* Mood = Score >= Thr + 0.02f ? TEXT("il devrait accepter") : Score >= Thr - 0.14f ? TEXT("il hésite, encore un effort") : TEXT("offre trop basse, il risque de se fâcher");
+	const float Budget = G ? G->Budget : 0.f;
+	Dl.Text = FString::Printf(TEXT("« %s »\n\nCoût immédiat de ton offre : %.1f M€ (budget %.1f M€)%s · Avis de l'agent : %s."), *Line, Cost, Budget,
+		Nego.Fee > 0.f ? *FString::Printf(TEXT(", dont %.1f M€ d'indemnité"), Nego.Fee) : TEXT(""), Mood);
+	const float Ask = FMath::Max(0.3f, Nego.Ask);
+	auto Add = [&Dl](const FString& Txt, int32 Act, bool bOff = false) { FGPMChoice C; C.Text = Txt; C.Action = Act; C.bOff = bOff; Dl.Choices.Add(C); };
+	const FString& Ro = Nego.ORole;
+	Add(TEXT("−"), 20, Nego.OSal <= 0.31f);
+	Add(FString::Printf(TEXT("Salaire|%.1f M€ par saison"), Nego.OSal), 21);
+	Add(FString::Printf(TEXT("Durée|%d saison%s"), Nego.OYears, Nego.OYears > 1 ? TEXT("s") : TEXT("")), 22);
+	Add(FString::Printf(TEXT("Statut|%s"), Ro == TEXT("n1") ? TEXT("Pilote N°1") : Ro == TEXT("n2") ? TEXT("Pilote N°2 (il te laisse passer)") : TEXT("Égalité")), 24);
+	const float SignAmt = R1o(Ask * SignK[FMath::Clamp(Nego.OSignL, 0, 3)]);
+	Add(FString::Printf(TEXT("Prime à la signature|%s"), SignAmt > 0.f ? *FString::Printf(TEXT("%.1f M€"), SignAmt) : TEXT("Aucune")), 25);
+	Add(FString::Printf(TEXT("Primes de résultats|%s"), Nego.OBonusL ? *FString::Printf(TEXT("%.1f M€ par podium · %.1f M€ par victoire"), PodBonus(Ask) * Nego.OBonusL, WinBonus(Ask) * Nego.OBonusL) : TEXT("Aucune")), 26);
+	Add(FString::Printf(TEXT("Prime d'objectif|%s"), Nego.OObj ? *FString::Printf(TEXT("%.1f M€ s'il finit %s du championnat"), ObjPrizeOf(Nego.OObj, Ask),
+		Nego.OObj == 1 ? TEXT("dans le top 10") : Nego.OObj == 2 ? TEXT("dans le top 6") : TEXT("sur le podium")) : TEXT("Aucune")), 27);
+	Add(FString::Printf(TEXT("Clause libératoire|%s"), Nego.OClauseL == 1 ? *FString::Printf(TEXT("Élevée : %.1f M€"), R1o(Ask * 6.f)) : Nego.OClauseL == 2 ? *FString::Printf(TEXT("Basse : %.1f M€ (un rival pourra le racheter)"), R1o(Ask * 3.f)) : TEXT("Aucune")), 28);
+	Add(TEXT("ENVOYER L'OFFRE"), 30, Cost > Budget + 1e-3f);
+	const UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	const bool bPayNow = !Nego.bExtend && !(Season && Season->IsOver());
+	const float DemCost = R1o((bPayNow ? Nego.Demand : 0.f) + Nego.Fee);
+	Add(FString::Printf(TEXT("ACCEPTER SA DEMANDE (%.1f M€, %d saison%s)"), Nego.Demand, Nego.Years, Nego.Years > 1 ? TEXT("s") : TEXT("")), 31, DemCost > Budget + 1e-3f);
+	Add(TEXT("QUITTER"), 4);
+	if (Queue.Num()) Queue[0] = Dl; else Queue.Add(Dl);
+}
+
+void UGPMCareerSubsystem::BuildAct(int32 Action)
+{
+	using namespace GPMOfferK;
+	UGPMSaveGame* G = Save();
+	FGPMDialog* Dl = Current();
+	if (!G || !Dl) return;
+	const float Ask = FMath::Max(0.3f, Nego.Ask), Step = R1o(FMath::Max(0.1f, Ask * 0.05f));
+	switch (Action)
+	{
+	case 20: Nego.OSal = R1o(FMath::Max(0.3f, Nego.OSal - Step)); break;
+	case 21: Nego.OSal = R1o(FMath::Min(Ask * 2.f, Nego.OSal + Step)); break;
+	case 22: Nego.OYears = Nego.OYears % 3 + 1; break;
+	case 24:
+	{
+		int32 k = 0;
+		while (k < 3 && Nego.ORole != RoleCycle[k]) ++k;
+		Nego.ORole = RoleCycle[(k + 1) % 3];
+		break;
+	}
+	case 25: Nego.OSignL = (Nego.OSignL + 1) % 4; break;
+	case 26: Nego.OBonusL = (Nego.OBonusL + 1) % 3; break;
+	case 27: Nego.OObj = (Nego.OObj + 1) % 4; break;
+	case 28: Nego.OClauseL = (Nego.OClauseL + 1) % 3; break;
+	default: break;
+	}
+	auto Close = [&]()
+	{
+		Nego.Demand = Nego.OSal; Nego.Role = Nego.ORole; Nego.Years = Nego.OYears;
+		Nego.Pod = PodBonus(Ask) * Nego.OBonusL; Nego.Win = WinBonus(Ask) * Nego.OBonusL;
+		Nego.Clause = Nego.OClauseL == 1 ? R1o(Ask * 6.f) : Nego.OClauseL == 2 ? R1o(Ask * 3.f) : 0.f;
+		Nego.SignB = R1o(Ask * SignK[FMath::Clamp(Nego.OSignL, 0, 3)]);
+		Nego.Obj = Nego.OObj; Nego.ObjPrize = ObjPrizeOf(Nego.OObj, Ask);
+		Sign();
+	};
+	if (Action == 31) { Nego.OSal = FMath::Max(Nego.OSal, Nego.Demand); Nego.OYears = Nego.Years; if (Nego.bWantN1) Nego.ORole = TEXT("n1"); Close(); return; }
+	if (Action != 30) { OfferDialog(Nego.OLine); return; }
+	float Cost = 0.f;
+	const float Score = OfferValue(Cost);
+	const float Thr = 1.f - (Nego.Interest - 50) / 500.f + (FMath::FRand() - 0.5f) * 0.04f;
+	if (Score >= Thr) { Close(); return; }
+	FString Line;
+	if (Score >= Thr - 0.14f)
+	{
+		Nego.Patience -= 1;
+		const float Missing = (Thr - Score) * Ask;
+		Nego.Demand = FMath::CeilToFloat((Nego.OSal + Missing * 1.05f + 0.05f) * 10.f) / 10.f;
+		Line = Nego.bWantN1 && Nego.ORole != TEXT("n1") ? FString::Printf(TEXT("On s'en approche, mais mon client veut le statut de N°1. Sinon, il faudra %.1f M€ par saison."), Nego.Demand)
+			: Nego.OYears == 1 && Nego.D.Age >= 32 ? FString::Printf(TEXT("Il veut de la sécurité : une saison de plus, ou %.1f M€ par saison."), Nego.Demand)
+			: FString::Printf(TEXT("On s'en approche. Il manque %.1f M€ par saison : en salaire, en primes ou à la signature, à vous de voir."), R1o(Missing + 0.05f));
+	}
+	else
+	{
+		Nego.Patience -= 2;
+		Nego.Interest = FMath::Max(5, Nego.Interest - 8);
+		Line = TEXT("C'est une plaisanterie ? Revenez avec une offre sérieuse.");
+	}
+	if (Nego.Patience > 0) { OfferDialog(Line); return; }
+	G->Broken.AddUnique(Nego.D.Name);
+	SendMail(TEXT("mercato"), FString::Printf(TEXT("Agent de %s"), *Nego.D.Name), FString::Printf(TEXT("Discussions rompues : %s"), *Nego.D.Name),
+		TEXT("Mon client ne donne pas suite. Nous pourrons reparler après le prochain Grand Prix, avec une offre sérieuse."));
+	Dl->Chosen = 0;
+	Dl->bBad = true;
+	Dl->Result = FString::Printf(TEXT("L'agent de %s claque la porte : discussions rompues jusqu'au prochain Grand Prix."), *Nego.D.Name);
+}
+
 void UGPMCareerSubsystem::NegoAct(int32 Action)
 {
 	UGPMSaveGame* G = Save();
 	FGPMDialog* Dl = Current();
 	if (!G || !Dl) return;
+	if (Action >= 20 && Action < 40) { BuildAct(Action); return; }
 	if (Action >= 10) { OfferAct(Action); return; }
 	if (Action == 4) { Dl->Chosen = 0; Dl->Result = TEXT("Tu quittes la table. L'agent garde ton numéro."); return; }
 	if (Action == 0) { Sign(); return; }
@@ -1043,20 +1223,22 @@ void UGPMCareerSubsystem::Sign()
 	const bool bOver = Season && Season->IsOver();
 	const bool bMid = Season && Season->Round() > 0 && !bOver;
 	const float Sal = Nego.D.Sponsor > 0.f ? 0.f : Nego.Demand;
-	const float Cost = R1((Nego.bExtend || bOver ? 0.f : Sal) + Nego.Fee - Nego.D.Sponsor);
+	const float Cost = R1((Nego.bExtend || bOver ? 0.f : Sal) + Nego.Fee + Nego.SignB - Nego.D.Sponsor);
 	if (Cost > G->Budget + 1e-3f) { Dl->Chosen = 0; Dl->bBad = true; Dl->Result = TEXT("Budget insuffisant pour signer ce contrat."); return; }
 	G->Budget = R1(G->Budget - Cost);
 	const TCHAR* Ys = Nego.Years > 1 ? TEXT("s") : TEXT("");
 	FString Extra;
 	if (Nego.Pod > 0.f || Nego.Win > 0.f) Extra += FString::Printf(TEXT(" · primes %.1f M€ par podium, %.1f M€ par victoire"), Nego.Pod, Nego.Win);
 	if (Nego.Clause > 0.f) Extra += FString::Printf(TEXT(" · clause libératoire %.1f M€"), Nego.Clause);
+	if (Nego.SignB > 0.f) Extra += FString::Printf(TEXT(" · prime à la signature %.1f M€"), Nego.SignB);
+	if (Nego.Obj > 0) Extra += FString::Printf(TEXT(" · prime d'objectif %.1f M€ s'il finit %s du championnat"), Nego.ObjPrize, Nego.Obj == 1 ? TEXT("dans le top 10") : Nego.Obj == 2 ? TEXT("dans le top 6") : TEXT("sur le podium"));
 	Dl->Chosen = 0;
 	Dl->bBad = false;
 	if (Nego.bExtend)
 	{
 		// prolongation : les saisons s'ajoutent au contrat en cours, le nouveau salaire compte dès la saison prochaine
 		G->MateYears += Nego.Years;
-		G->MateSal = Sal; G->MateRole = Nego.Role; G->MatePod = Nego.Pod; G->MateWin = Nego.Win; G->MateClause = Nego.Clause;
+		G->MateSal = Sal; G->MateRole = Nego.Role; G->MatePod = Nego.Pod; G->MateWin = Nego.Win; G->MateClause = Nego.Clause; G->MateObj = Nego.Obj; G->MateObjPrize = Nego.ObjPrize;
 		const int32 Until = G->Year + G->MateYears - 1;
 		ApplyIdentity();
 		News(FString::Printf(TEXT("%s prolonge chez %s jusqu'en %d."), *Nego.D.Name, *G->TeamName, Until));
@@ -1096,7 +1278,7 @@ void UGPMCareerSubsystem::Sign()
 		G->MateName = Nego.D.Name; G->MateSpd = Nego.D.Spd; G->MateStrat = Nego.D.Strat; G->MateTyre = Nego.D.Tyre; G->MatePot = Nego.D.Pot;
 		// signé en cours de saison : le contrat couvre la fin de la saison en plus des saisons négociées
 		G->MateSal = Sal; G->MateYears = Nego.Years + (bOver || bMid ? 1 : 0); G->MateRole = Nego.Role; G->MateSince = G->Year;
-		G->MatePod = Nego.Pod; G->MateWin = Nego.Win; G->MateClause = Nego.Clause;
+		G->MatePod = Nego.Pod; G->MateWin = Nego.Win; G->MateClause = Nego.Clause; G->MateObj = Nego.Obj; G->MateObjPrize = Nego.ObjPrize;
 		G->DriverTeam.Add(Nego.D.Name, G->TeamName);
 		G->DriverPts.FindOrAdd(Nego.D.Name);
 		G->DriverPts.FindOrAdd(Old);
@@ -1255,7 +1437,7 @@ FString UGPMCareerSubsystem::PromoteReserve(bool bPayNow)
 	G->Free.Remove(B.Name);
 	G->MateName = B.Name; G->MateSpd = B.Spd; G->MateStrat = B.Strat; G->MateTyre = B.Tyre; G->MatePot = B.Pot;
 	G->MateSal = FMath::Max(0.3f, Salary(B)); G->MateYears = 1; G->MateRole = TEXT("eq"); G->MateSince = G->Year;
-	G->MatePod = 0.f; G->MateWin = 0.f; G->MateClause = 0.f;
+	G->MatePod = 0.f; G->MateWin = 0.f; G->MateClause = 0.f; G->MateObj = 0; G->MateObjPrize = 0.f;
 	if (bPayNow) G->Budget = R1(G->Budget - G->MateSal);
 	if (B.Sponsor > 0.f) G->Budget = R1(G->Budget + B.Sponsor);   // pilote payant : son sponsor verse sa part
 	G->DriverTeam.Add(B.Name, G->TeamName);

@@ -143,6 +143,8 @@ public:
 	FString NextEraName() const;
 	/** Règlement de la prochaine ère publié (au 1er janvier de l'année qui précède la refonte) : voiture suivante à développer. */
 	bool FutureOpen() const;
+	/** Voiture de la saison prochaine : pôle touché par le règlement annoncé pour l'an prochain (pièces développées pour la voiture N+1). */
+	bool ForNextYear(const FGPMPart& P) const;
 	/** Pôle roi de l'ère en cours (ou de la prochaine) : chassis, moteur, aero, fiab, ou vide. */
 	FString KingDept(bool bFut = false) const;
 	/** Modèle 3D de l'ère en cours (car_<id>.json). */

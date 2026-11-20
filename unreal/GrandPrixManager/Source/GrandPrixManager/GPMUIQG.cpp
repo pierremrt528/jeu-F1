@@ -213,7 +213,7 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 		FLinearColor InfoCol = CDim, NameCol = CText;
 		switch (St)
 		{
-		case ES::Owned: InfoTxt = bFut ? TEXT("prête") : TEXT("installée"); InfoCol = CGood; break;
+		case ES::Owned: InfoTxt = bFut ? TEXT("prête") : F->ForNextYear(P) ? TEXT("prête pour l'an prochain") : TEXT("installée"); InfoCol = CGood; break;
 		case ES::Running: InfoTxt = FString::Printf(TEXT("en recherche · %.0f j"), F->DaysLeft(P)); InfoCol = CGold; break;
 		case ES::Available: InfoTxt = FString::Printf(TEXT("%.1f M€ · %d j"), F->PriceOf(P), F->DelayOf(P)); InfoCol = CInfo; break;
 		case ES::TooExpensive: InfoTxt = FString::Printf(TEXT("%.1f M€ · trop cher"), F->PriceOf(P)); InfoCol = CBad; NameCol = CDim; break;
@@ -279,9 +279,9 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 	FString StateTxt;
 	switch (St)
 	{
-	case ES::Owned: StateTxt = bFut ? FString::Printf(TEXT("Prête : elle sera sur la voiture %d."), At) : FString(TEXT("Déjà installée sur la voiture.")); break;
+	case ES::Owned: StateTxt = bFut ? FString::Printf(TEXT("Prête : elle sera sur la voiture %d."), At) : F->ForNextYear(P) ? FString::Printf(TEXT("Prête pour la voiture %d (nouvelles règles) : montée au 1er janvier."), F->Year() + 1) : FString(TEXT("Déjà installée sur la voiture.")); break;
 	case ES::Running: StateTxt = FString::Printf(TEXT("En cours de recherche : %.0f jours restants."), F->DaysLeft(P)); break;
-	case ES::Available: StateTxt = TEXT("Prête à être lancée."); break;
+	case ES::Available: StateTxt = F->ForNextYear(P) ? FString::Printf(TEXT("Nouvelles règles en %d : cette recherche est pour la voiture %d, pas pour celle de cette saison."), F->Year() + 1, F->Year() + 1) : FString(TEXT("Prête à être lancée.")); break;
 	case ES::TooExpensive: StateTxt = TEXT("Budget insuffisant."); break;
 	case ES::Busy: StateTxt = F->PerDept() > 1 ? TEXT("Ce pôle a déjà deux pièces en cours, ou tous les ateliers sont pris.") : TEXT("Ce pôle travaille déjà sur une pièce, ou tous les ateliers sont pris."); break;
 	default: StateTxt = P.ReqAny.Num() ? TEXT("Il faut d'abord une des pièces juste au-dessus (une seule branche suffit).") : TEXT("Il faut d'abord les pièces juste au-dessus dans l'arbre."); break;

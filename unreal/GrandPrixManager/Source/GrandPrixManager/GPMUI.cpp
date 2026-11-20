@@ -342,7 +342,12 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	if (const UGPMCareerSubsystem* C = CareerSys())
 	{
 		H = HashCombine(H, GetTypeHash(C->Queue.Num()));
-		if (C->Queue.Num()) H = HashCombine(H, GetTypeHash(C->Queue[0].Chosen * 31 + C->Queue[0].Choices.Num()));
+		if (C->Queue.Num())
+		{
+			H = HashCombine(H, GetTypeHash(C->Queue[0].Chosen * 31 + C->Queue[0].Choices.Num()));
+			H = HashCombine(H, GetTypeHash(C->Queue[0].Text));   // offre à la carte : chaque terme modifié redessine la fenêtre
+			for (const FGPMChoice& Ch : C->Queue[0].Choices) H = HashCombine(H, GetTypeHash(Ch.Text) ^ (Ch.bOff ? 1u : 0u));
+		}
 	}
 	return H | 1u;
 }
@@ -1228,7 +1233,34 @@ TSharedRef<SWidget> FGPMUI::DialogScreen(AGPMGameMode* GM)
 	if (!Dl->Title.IsEmpty()) Add(Txt(Dl->Title, 30, CText, true, true), 10.f);
 	Add(Txt(Dl->Text, 19, FLinearColor(0.86f, 0.88f, 0.92f, 1.f), false, true), 22.f);
 
-	if (Dl->Chosen < 0)
+	if (Dl->Chosen < 0 && Dl->Kind == FGPMDialog::EKind::Nego && Dl->Choices.Num() == 11 && Dl->Choices[0].Action == 20)
+	{
+		// offre à la carte (façon FIFA) : un terme par ligne, touche la ligne pour changer, − / + pour le salaire
+		auto Choose = [this](int32 k) { return [this, k]() { if (UGPMCareerSubsystem* CS = CareerSys()) CS->Choose(k); }; };
+		auto Term = [this, Dl](int32 k)
+		{
+			FString L, V;
+			if (!Dl->Choices[k].Text.Split(TEXT("|"), &L, &V)) L = Dl->Choices[k].Text;
+			const TSharedRef<SWidget> TermW = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(0.36f).VAlign(VAlign_Center)[ Txt(GPMUp(L), 14, CFaint, true) ]
+				+ SHorizontalBox::Slot().FillWidth(0.64f).VAlign(VAlign_Center)[ Txt(V, 17, CText, true, true) ];
+			return TermW;
+		};
+		Add(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[ Card(Term(1), FLinearColor(0.06f, 0.08f, 0.14f, 0.9f), 10.f) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(8.f, 0.f, 0.f, 0.f))[ Button(TEXT("−"), CNeutral, Choose(0), !Dl->Choices[0].bOff, 56.f, 44.f, 22) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(8.f, 0.f, 0.f, 0.f))[ Button(TEXT("+"), CNeutral, Choose(1), true, 56.f, 44.f, 22) ], 8.f);
+		for (int32 k = 2; k <= 7; ++k)
+			Add(Pick(SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[ Term(k) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(TEXT("CHANGER ›"), 12, Dl->Color, true) ], false, Choose(k), true), 6.f);
+		Add(SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()[ Button(Dl->Choices[8].Text, Dl->Color, Choose(8), !Dl->Choices[8].bOff, 220.f, 48.f, 17) ]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(10.f, 0.f, 0.f, 0.f))[ Button(Dl->Choices[9].Text, CGood, Choose(9), !Dl->Choices[9].bOff, 0.f, 48.f, 15) ]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(SSpacer) ]
+			+ SHorizontalBox::Slot().AutoWidth()[ Button(Dl->Choices[10].Text, CNeutral, Choose(10), true, 140.f, 48.f, 15) ], 0.f);
+	}
+	else if (Dl->Chosen < 0)
 	{
 		for (int32 k = 0; k < Dl->Choices.Num(); ++k)
 		{

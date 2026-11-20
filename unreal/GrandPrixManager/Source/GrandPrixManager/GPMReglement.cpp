@@ -236,6 +236,8 @@ void UGPMFactorySubsystem::EraAfterRace(int32 Round, int32 NumRounds, bool bOver
 		OutMails.Emplace(FString::Printf(TEXT("Nouveau règlement %d : %s"), G->Year + 1, *Names),
 			FString::Printf(TEXT("De nouvelles règles s'appliqueront en %d pour %s.\n\nToutes les écuries repartiront de zéro %s : tes pièces %s seront retirées à l'intersaison. Inutile d'y investir gros d'ici là !"),
 				G->Year + 1, *Names, bTwo ? TEXT("dans ces domaines") : TEXT("dans ce domaine"), bTwo ? TEXT("de ces pôles") : TEXT("de ce pôle")));
+		OutMails.Emplace(FString::Printf(TEXT("Voiture %d : prends de l'avance"), G->Year + 1),
+			FString::Printf(TEXT("Le bureau d'études peut déjà travailler sur la voiture %d : dans %s, chaque recherche lancée dès maintenant vise les nouvelles règles et sera montée au 1er janvier.\n\nAttention : ces pièces ne servent plus à la voiture de cette saison, et ateliers et budget sont partagés."), G->Year + 1, *Names));
 		OutLines.Add(FString::Printf(TEXT("Règlement %d : nouvelles règles pour %s (pièces retirées à l'intersaison)."), G->Year + 1, *Names));
 	}
 	Persist();
@@ -300,10 +302,16 @@ bool UGPMFactorySubsystem::Intersaison(int32 NextYear, FString& OutSubj, FString
 				Names += (k ? TEXT(" et ") : TEXT("")) + T->Name;
 				G->Owned.RemoveAll([T](const FString& O) { return T->Parts.ContainsByPredicate([&O](const FGPMPart& P) { return P.Id == O; }); });
 			}
-			for (const FString& K : { Id, Id + TEXT("+") }) { G->DevPart.Remove(K); G->DevLeft.Remove(K); G->DevTot.Remove(K); }
+			// les recherches en cours de ce pôle continuent : elles visent déjà les nouvelles règles
 		}
+		// pièces préparées pour la voiture de cette saison (voiture N+1 de l'an dernier)
+		const int32 Ready = G->NextOwned.Num();
+		for (const FString& Id : G->NextOwned) G->Owned.AddUnique(Id);
+		G->NextOwned.Reset();
 		OutSubj = FString::Printf(TEXT("Règlement %d en vigueur"), NextYear);
-		OutBody = FString::Printf(TEXT("Les nouvelles règles s'appliquent : tes pièces %s ont été retirées. Tout le plateau repart de zéro dans %s."), *Names, NReg > 1 ? TEXT("ces domaines") : TEXT("ce domaine"));
+		OutBody = FString::Printf(TEXT("Les nouvelles règles s'appliquent : tes anciennes pièces %s ont été retirées. Tout le plateau repart de zéro dans %s.%s"), *Names, NReg > 1 ? TEXT("ces domaines") : TEXT("ce domaine"),
+			Ready ? *FString::Printf(TEXT("\n\nBonne nouvelle : %d pièce%s préparée%s en avance pour la voiture %d %s montée%s dès maintenant."), Ready, Ready > 1 ? TEXT("s") : TEXT(""), Ready > 1 ? TEXT("s") : TEXT(""), NextYear, Ready > 1 ? TEXT("sont") : TEXT("est"), Ready > 1 ? TEXT("s") : TEXT(""))
+				: TEXT("\n\nAucune pièce préparée en avance : à la prochaine annonce, lance la voiture de l'an prochain dès que possible."));
 	}
 	// les rivaux gardent la moitié de leurs progrès ; un nouveau règlement les fait reculer et rebat un peu les cartes
 	for (const FString& T : Rivals) G->RivalDev.Add(T, G->RivalDev.FindRef(T) * 0.5f - NReg * 0.004f + (FMath::FRand() - 0.5f) * (0.02f + 0.008f * NReg));   // voiture d'hiver réussie ou ratée : la hiérarchie bouge chaque année

@@ -74,6 +74,15 @@ struct FGPMNego
 	bool bWantN1 = false, bOpen = false;
 	bool bExtend = false;         // prolongation du contrat de l'équipier actuel
 	bool bSwap = false;           // l'écurie du pilote récupère l'équipier actuel (sinon elle promeut un autre pilote)
+	// offre composée à la carte (façon FIFA) : salaire, durée, statut, prime à la signature, primes de résultats,
+	// prime d'objectif au championnat, clause libératoire ; l'agent répond terme par terme
+	bool bBuilder = false;
+	float OSal = 1.f;
+	int32 OYears = 2, OSignL = 0, OBonusL = 0, OObj = 0, OClauseL = 0;
+	FString ORole = TEXT("eq");
+	float SignB = 0.f, ObjPrize = 0.f;   // offre acceptée : prime à la signature payée tout de suite, prime d'objectif en fin de saison
+	int32 Obj = 0;                       // 1 top 10, 2 top 6, 3 top 3 au championnat des pilotes
+	FString OLine;                       // dernière réponse de l'agent
 };
 
 /** Offre d'une écurie rivale pour l'équipier. */
@@ -199,6 +208,13 @@ private:
 	bool StoryDialog(const FString& Id, const FString& Step, int32 Ep);
 	void EventDialog(const TSharedPtr<FJsonObject>& E);
 	void NegoDialog(const FString& Line);
+	void OfferDialog(const FString& Line);
+	void BuildAct(int32 Action);
+	float OfferValue(float& OutCost) const;   // valeur de l'offre pour le pilote, rapportée à ce qu'il attend (1 = juste)
+	float ObjChance(int32 Lvl) const;
+public:
+	static float ObjPrizeOf(int32 Lvl, float Sal) { return Lvl <= 0 ? 0.f : FMath::RoundToFloat(Sal * (Lvl == 1 ? 0.3f : Lvl == 2 ? 0.5f : 0.8f) * 10.f) / 10.f; }
+private:
 	void NegoAct(int32 Action);
 	void Sign();
 	// mercato : offres des rivaux pour l'équipier, pilote de réserve, carrières (âge, progression, retraites)

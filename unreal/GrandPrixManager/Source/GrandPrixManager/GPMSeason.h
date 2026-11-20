@@ -149,6 +149,8 @@ public:
 	UPROPERTY() float MateWin = 0.f;
 	// Mercato : clause libératoire de l'équipier (0 = aucune), dernière offre d'un rival, contrats et carrière de tous les pilotes
 	UPROPERTY() float MateClause = 0.f;
+	UPROPERTY() int32 MateObj = 0;          // prime d'objectif : 1 top 10, 2 top 6, 3 top 3 au championnat des pilotes
+	UPROPERTY() float MateObjPrize = 0.f;
 	UPROPERTY() int32 MateOfferAt = -99;          // manche de la dernière offre d'une écurie rivale pour l'équipier
 	UPROPERTY() TMap<FString, int32> DrvUntil;    // pilote → dernière saison de son contrat (écuries rivales)
 	UPROPERTY() TMap<FString, int32> DrvBorn;     // pilote → année de naissance (jeunes de Formule B arrivés en cours de carrière)
@@ -162,6 +164,7 @@ public:
 	UPROPERTY() int32 EraAt = 0;
 	UPROPERTY() int32 EraNi = 1;
 	UPROPERTY() TArray<FString> FutOwned;
+	UPROPERTY() TArray<FString> NextOwned;   // pièces des pôles touchés par le règlement de l'an prochain, prêtes pour la voiture N+1
 	UPROPERTY() TMap<FString, float> RivalFut;
 	UPROPERTY() TArray<FString> Reg;              // règlement annuel : pôles remis à zéro à l'intersaison
 	UPROPERTY() int32 ReformYear = 0;             // bandeau « nouvelle ère » de l'écran de saison

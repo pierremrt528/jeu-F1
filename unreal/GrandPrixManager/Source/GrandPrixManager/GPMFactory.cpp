@@ -137,7 +137,8 @@ UGPMFactorySubsystem::EState UGPMFactorySubsystem::StateOf(const FGPMPart& P) co
 {
 	const UGPMSaveGame* G = Save();
 	if (!G) return EState::Locked;
-	const TArray<FString>& Own = P.bFut ? G->FutOwned : G->Owned;
+	// pôle touché par le règlement de l'an prochain : on repart de zéro pour la voiture N+1 (pièces et prérequis)
+	const TArray<FString>& Own = P.bFut ? G->FutOwned : ForNextYear(P) ? G->NextOwned : G->Owned;
 	if (Own.Contains(P.Id)) return EState::Owned;
 	if (!DevKey(P).IsEmpty()) return EState::Running;
 	for (const FString& R : P.Req) if (!Own.Contains(R)) return EState::Locked;
@@ -192,6 +193,7 @@ void UGPMFactorySubsystem::Tick(int32 Days)
 			continue;
 		}
 		if (FMath::RandRange(0, 99) < FailOf(*P)) G->News.Add(FString::Printf(TEXT("Échec : %s a cassé au banc d'essai, la pièce est perdue."), *P->Name));
+		else if (!P->bFut && G->Reg.Contains(P->Tree)) { G->NextOwned.AddUnique(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est prête pour la voiture %d (nouvelles règles)."), *P->Name, G->Year + 1)); }
 		else if (P->bFut) { G->FutOwned.Add(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est prête pour la voiture %d."), *P->Name, G->EraAt)); }
 		else { G->Owned.Add(P->Id); G->News.Add(FString::Printf(TEXT("Livrée : %s est montée sur la voiture."), *P->Name)); }
 		G->Delayed.Remove(P->Id);
@@ -222,4 +224,10 @@ FGPMUpgrades UGPMFactorySubsystem::Upgrades(bool bFut) const
 			}
 	U.Pit += PitBonus();
 	return U;
+}
+
+bool UGPMFactorySubsystem::ForNextYear(const FGPMPart& P) const
+{
+	const UGPMSaveGame* G = Save();
+	return G && !P.bFut && G->Reg.Contains(P.Tree);
 }
