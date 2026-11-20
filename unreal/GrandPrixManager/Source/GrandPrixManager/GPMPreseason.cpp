@@ -210,7 +210,7 @@ void AGPMGameMode::EndTest(const TCHAR* Why)
 	FString Line = FString::Printf(TEXT("Jour %d · %s : "), Day + 1, *TestName(Day));
 	int32 Res = 0;
 	float Days = 0.f;
-	if (bOk) { Days = Gain[Day]; Res = 1; G->Moral = FMath::Clamp(G->Moral + 4, 0, 100); G->Rep = FMath::Clamp(G->Rep + 1, 0, 100); Career->ShiftDev(-Days); Line += FString::Printf(TEXT("mission réussie, recherches en avance de %.0f jours, moral en hausse"), Days); }
+	if (bOk) { Days = Gain[Day]; Res = 1; G->Moral = UGPMCareerSubsystem::Bump(G->Moral, 4.f); G->Rep = UGPMCareerSubsystem::Bump(G->Rep, 1.f); Career->ShiftDev(-Days); Line += FString::Printf(TEXT("mission réussie, recherches en avance de %.0f jours, moral en hausse"), Days); }
 	else if (bQuit) Line += TEXT("séance arrêtée, mission non remplie");
 	else { G->Moral = FMath::Clamp(G->Moral - 2, 0, 100); Line += TEXT("mission ratée, moral en baisse"); }
 	if (bEngine || bCrash)

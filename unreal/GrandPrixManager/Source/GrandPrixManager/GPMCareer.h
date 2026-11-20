@@ -171,6 +171,15 @@ public:
 	/** Ambitions de la direction (0 petite écurie, 1 milieu de grille, 2 écurie de pointe) : le niveau de départ, puis le classement de la saison précédente. */
 	int32 Ambition() const;
 	/** Place que la direction attend à chaque course selon ses ambitions (14, 9 ou 4). */
+	/** Moral et réputation : plus la jauge est haute, plus elle est dure à faire monter (100 → presque rien), et la chute
+	 *  est plus rude au sommet. Arrondi au hasard pour que les petits gains comptent quand même de temps en temps. */
+	static int32 Bump(int32 Cur, float V)
+	{
+		const float D = V > 0.f ? V * FMath::Clamp((100.f - Cur) / 50.f, 0.1f, 1.f) : V * (Cur > 70 ? 1.25f : 1.f);
+		int32 I = FMath::FloorToInt(D);
+		if (FMath::FRand() < D - float(I)) ++I;
+		return FMath::Clamp(Cur + I, 0, 100);
+	}
 	int32 Expected() const { const int32 A = Ambition(); return A == 0 ? 14 : A == 3 ? 2 : A == 2 ? 4 : 9; }
 	static FString ConfText(int32 C) { return C >= 75 ? TEXT("excellente") : C >= 55 ? TEXT("bonne") : C >= 35 ? TEXT("fragile") : C >= 20 ? TEXT("en crise") : TEXT("rompue"); }
 	bool IsFired() const;

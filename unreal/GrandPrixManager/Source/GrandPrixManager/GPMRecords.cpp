@@ -5,6 +5,7 @@
 #include "GPMCar.h"
 #include "GPMTypes.h"
 #include "GPMSeason.h"
+#include "GPMCareer.h"
 #include "Engine/GameInstance.h"
 
 FString AGPMGameMode::RecordHonours(int32 Pos)
@@ -70,9 +71,9 @@ FString AGPMGameMode::RecordHonours(int32 Pos)
 			if (Best == Car.Get())
 			{
 				Add(TEXT("dotd"));
-				G->Rep = FMath::Min(100, G->Rep + 2);
-				G->Moral = FMath::Min(100, G->Moral + 3);
-				Dotd = FString::Printf(TEXT("Les fans t'élisent pilote du jour (%d %% des votes, %s) : réputation +2, moral +3."), Votes, *Climb);
+				G->Rep = UGPMCareerSubsystem::Bump(G->Rep, 2.f);
+				G->Moral = UGPMCareerSubsystem::Bump(G->Moral, 3.f);
+				Dotd = FString::Printf(TEXT("Les fans t'élisent pilote du jour (%d %% des votes, %s) : réputation et moral en hausse."), Votes, *Climb);
 			}
 			else Dotd = FString::Printf(TEXT("Pilote du jour : %s (%d %% des votes, %s)."), *Best->DriverName, Votes, *Climb);
 		}

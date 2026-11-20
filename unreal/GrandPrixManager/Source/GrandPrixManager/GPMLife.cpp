@@ -207,8 +207,8 @@ void UGPMCareerSubsystem::ApplyFx(const TSharedPtr<FJsonObject>& Fx, float Jit)
 	// ampleur variable (±25 %) sur le moral, la réputation, la confiance et la performance
 	auto Jitter = [Jit](double V) { return V == 0.0 ? 0 : int32(FMath::Sign(V) * FMath::Max(1.0, FMath::RoundToDouble(FMath::Abs(V) * Jit))); };
 	double V = 0.0;
-	if (Fx->TryGetNumberField(TEXT("moral"), V)) { V = Jitter(V); Fx->SetNumberField(TEXT("moral"), V); G->Moral = FMath::Clamp(G->Moral + int32(V), 0, 100); }
-	if (Fx->TryGetNumberField(TEXT("rep"), V)) { V = Jitter(V); Fx->SetNumberField(TEXT("rep"), V); G->Rep = FMath::Clamp(G->Rep + int32(V), 0, 100); }
+	if (Fx->TryGetNumberField(TEXT("moral"), V)) { V = Jitter(V); Fx->SetNumberField(TEXT("moral"), V); G->Moral = Bump(G->Moral, float(V)); }
+	if (Fx->TryGetNumberField(TEXT("rep"), V)) { V = Jitter(V); Fx->SetNumberField(TEXT("rep"), V); G->Rep = Bump(G->Rep, float(V)); }
 	if (Fx->TryGetNumberField(TEXT("conf"), V)) { V = Jitter(V); Fx->SetNumberField(TEXT("conf"), V); G->Conf = FMath::Clamp(G->Conf + int32(V), 0, 100); }
 	if (Fx->TryGetNumberField(TEXT("budget"), V)) G->Budget = L1(G->Budget + float(V));
 	const TSharedPtr<FJsonObject>* Sub = nullptr;

@@ -1223,9 +1223,13 @@ void AGPMGameMode::RecordResult()
 		const UGPMCareerSubsystem* CareerM = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
 		const int32 Exp = CareerM ? CareerM->Expected() : 9;
 		const int32 Swing = FMath::Clamp(FMath::RoundToInt((Exp - Pos) * 0.8f), -4, 4) + (Pos == 1 ? 2 : Pos <= 3 ? 1 : 0);
-		G->Moral = FMath::Clamp(G->Moral + Swing - FMath::RoundToInt((G->Moral - 60) / 12.f), 0, 100);
+		// l'euphorie retombe plus vite (vers 55), et les gains sont plus durs près du sommet (Bump)
+		G->Moral = UGPMCareerSubsystem::Bump(G->Moral, float(Swing)) - FMath::RoundToInt((G->Moral - 55) / 8.f);
+		G->Moral = FMath::Clamp(G->Moral, 0, 100);
 	}
-	G->Rep = FMath::Clamp(G->Rep + (Pos <= 3 ? 2 : Pos <= 6 ? 1 : Pos <= 12 ? 0 : -1), 0, 100);
+	// réputation : une victoire compte plus qu'un podium ; au-dessus de 70 elle s'érode si on ne la nourrit pas
+	G->Rep = UGPMCareerSubsystem::Bump(G->Rep, Pos == 1 ? 2.f : Pos <= 3 ? 1.f : Pos <= 6 ? 0.4f : Pos <= 12 ? 0.f : -1.f);
+	if (G->Rep > 70) G->Rep = FMath::Max(70, G->Rep - FMath::RoundToInt((G->Rep - 70) / 15.f));
 	// Les écuries rivales développent leur voiture à chaque course, comme le joueur : vite au début d'un règlement, de moins en
 	// moins quand leur voiture approche de son plafond (+0,15), plus vite quand elles ont du retard sur la meilleure voiture du
 	// plateau (celle du joueur comprise), et selon leurs moyens (les grandes écuries investissent plus).

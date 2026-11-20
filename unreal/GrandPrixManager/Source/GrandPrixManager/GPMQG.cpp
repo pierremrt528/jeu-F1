@@ -123,7 +123,7 @@ FString UGPMFactorySubsystem::TickInfra(int32 Days)
 	G->InfraLv.Add(Id, Lv);
 	G->BuildId.Reset();
 	G->BuildLeft = G->BuildTot = 0;
-	if (Id == TEXT("media") || Id == TEXT("hosp")) G->Rep = FMath::Min(100, G->Rep + 4);
+	if (Id == TEXT("media") || Id == TEXT("hosp")) G->Rep = UGPMCareerSubsystem::Bump(G->Rep, 4.f);
 	FString Name = Id;
 	for (const FGPMBuilding& B : BuildingList) if (B.Id == Id) Name = B.Name;
 	const FString Msg = FString::Printf(TEXT("Chantier terminé : %s niveau %d%s"), *Name, Lv, Id == TEXT("media") || Id == TEXT("hosp") ? TEXT(" (réputation +4)") : TEXT(""));
