@@ -153,3 +153,6 @@ float AGPMGameMode::ServeAtStop(AGPMCar* C)
 	if (C == Car) Say(FString::Printf(TEXT("Muret : on purge tes %.0f s de pénalité, les mécaniciens attendent…"), H));
 	return H;
 }
+
+AGPMCar* AGPMGameMode::SafetyCar() const { return SC.Get(); }
+void AGPMGameMode::TestPenalty(uint8 Kind, float Sec) { Penalize(Car.Get(), Kind, Sec, TEXT("Test des commissaires"), 2.f); }

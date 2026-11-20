@@ -55,7 +55,7 @@ namespace GPMSafetyGeo
 
 	// sections de la carrosserie : x, demi-largeur, bas, ligne de caisse, demi-largeur du toit, haut
 	struct FStation { float X, W, Z0, Z1, W2, Z2; };
-	const FStation Body[9] = {
+	const FStation Stations[9] = {
 		{ 235, 78, 24, 52, 70, 56 }, { 205, 90, 18, 66, 82, 70 }, { 120, 94, 16, 76, 86, 80 }, { 60, 95, 16, 80, 80, 84 },
 		{ -10, 95, 16, 82, 64, 124 }, { -90, 95, 16, 82, 62, 121 }, { -170, 95, 18, 84, 78, 96 }, { -215, 92, 22, 84, 84, 88 }, { -238, 84, 30, 78, 78, 82 } };
 }
@@ -85,8 +85,8 @@ void AGPMCar::MakeSafetyBody()
 	for (int32 s = 0; s + 1 < 9; ++s)
 	{
 		FVector A[8], Bb[8];
-		Ring(Body[s], A); Ring(Body[s + 1], Bb);
-		const FVector Ref((Body[s].X + Body[s + 1].X) * 0.5f, 0, 55.f);
+		Ring(Stations[s], A); Ring(Stations[s + 1], Bb);
+		const FVector Ref((Stations[s].X + Stations[s + 1].X) * 0.5f, 0, 55.f);
 		const bool bGlassTop = s == 3 || s == 5, bGlassSide = s >= 3 && s <= 5;
 		for (int32 k = 0; k < 8; ++k)
 		{
@@ -99,8 +99,8 @@ void AGPMCar::MakeSafetyBody()
 	for (int32 e = 0; e < 2; ++e)
 	{
 		FVector R[8];
-		Ring(Body[e ? 8 : 0], R);
-		const FVector Ctr(Body[e ? 8 : 0].X, 0, 45.f), Out(e ? -1.f : 1.f, 0, 0);
+		Ring(Stations[e ? 8 : 0], R);
+		const FVector Ctr(Stations[e ? 8 : 0].X, 0, 45.f), Out(e ? -1.f : 1.f, 0, 0);
 		for (int32 k = 0; k < 8; ++k) B.Tri(Ctr, R[k], R[(k + 1) % 8], Out, k == 0 ? Black : Silver);
 	}
 	// calandre, feux arrière, becquet, rétroviseurs, rampe de gyrophares (socle)

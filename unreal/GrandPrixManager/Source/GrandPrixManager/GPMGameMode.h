@@ -72,8 +72,8 @@ public:
 	uint8 SCState = 0;
 	bool SafetyOut() const { return SCState >= 1 && SCState <= 3; }
 	float GreenT = 0.f;   // bandeau « drapeau vert » après une neutralisation
-	AGPMCar* SafetyCar() const { return SC.Get(); }
-	void TestPenalty(uint8 Kind, float Sec) { Penalize(Car.Get(), Kind, Sec, TEXT("Test des commissaires"), 2.f); }
+	AGPMCar* SafetyCar() const;
+	void TestPenalty(uint8 Kind, float Sec);   // tests (GPM.TestSC)
 	/** Commissaires : dernier communiqué (HUD), pilote concerné, durée d'affichage ; enquête en cours. */
 	FString StewardHead, StewardWhy;
 	TWeakObjectPtr<AGPMCar> StewardCar;
