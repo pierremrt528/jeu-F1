@@ -23,8 +23,9 @@
 
 namespace
 {
-	// fins des plans (s) : survol (drone, grille, gros plan, grue), tour d'honneur et sacre (trois plans chacun)
-	constexpr float IntroCuts[4] = { 3.4f, 6.8f, 9.6f, 12.6f };
+	// fins des plans (s) : survol (drone, grille, casque, aileron, portique des feux, grue), tour d'honneur et sacre (trois plans chacun)
+	constexpr int32 IntroN = 6;
+	constexpr float IntroCuts[IntroN] = { 3.4f, 6.8f, 9.2f, 11.4f, 14.f, 16.8f };
 	constexpr float PodiumCuts[3] = { 2.8f, 5.6f, 8.6f };
 	constexpr float CrownCuts[3] = { 3.f, 6.f, 9.f };
 	constexpr float WelcomeLen = 5.5f, MeetLen = 4.6f, SignLen = 3.9f, FlashAt = 2.65f;
@@ -49,6 +50,14 @@ void AGPMGameMode::CineLens(float Focus, float Fstop)
 	P.bOverride_DepthOfFieldFocalDistance = true; P.DepthOfFieldFocalDistance = Focus;
 	P.bOverride_DepthOfFieldFstop = true; P.DepthOfFieldFstop = Fstop;
 	P.bOverride_VignetteIntensity = true; P.VignetteIntensity = Focus > 0.f ? 0.45f : 0.32f;
+	// rendu « caméra de télé » : flou de mouvement, frange d'objectif, grain léger, contraste et couleurs un peu poussés
+	P.bOverride_MotionBlurAmount = true; P.MotionBlurAmount = 0.55f;
+	P.bOverride_MotionBlurMax = true; P.MotionBlurMax = 3.f;
+	P.bOverride_SceneFringeIntensity = true; P.SceneFringeIntensity = Focus > 0.f ? 0.9f : 0.4f;
+	P.bOverride_FilmGrainIntensity = true; P.FilmGrainIntensity = 0.1f;
+	P.bOverride_ColorContrast = true; P.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
+	P.bOverride_ColorSaturation = true; P.ColorSaturation = FVector4(1.08f, 1.06f, 1.02f, 1.f);
+	P.bOverride_BloomIntensity = true; P.BloomIntensity = 0.9f;
 }
 
 void AGPMGameMode::StartCine(ECine Mode)
@@ -85,7 +94,7 @@ int32 AGPMGameMode::CineShot() const
 {
 	const float* Cuts = Cine == ECine::Intro ? IntroCuts : Cine == ECine::Podium ? PodiumCuts : Cine == ECine::Crown ? CrownCuts : nullptr;
 	if (!Cuts) return 0;
-	const int32 N = Cine == ECine::Intro ? 4 : 3;
+	const int32 N = Cine == ECine::Intro ? IntroN : 3;
 	int32 Shot = 0;
 	while (Shot < N - 1 && CineT >= Cuts[Shot]) ++Shot;
 	return Shot;
@@ -95,7 +104,7 @@ float AGPMGameMode::CineCut() const
 {
 	const float* Cuts = Cine == ECine::Intro ? IntroCuts : Cine == ECine::Podium ? PodiumCuts : Cine == ECine::Crown ? CrownCuts : nullptr;
 	if (!Cuts) return 0.f;
-	const int32 N = Cine == ECine::Intro ? 4 : 3;
+	const int32 N = Cine == ECine::Intro ? IntroN : 3;
 	float D = 1e3f;
 	for (int32 k = 0; k < N - 1; ++k) D = FMath::Min(D, FMath::Abs(CineT - Cuts[k]));
 	return FMath::Clamp(1.f - D / CutFade, 0.f, 1.f);
@@ -239,12 +248,33 @@ void AGPMGameMode::UpdateCine(float Dt)
 		}
 		else if (Shot == 2)
 		{
+			// casque du pilote dans le cockpit, au téléobjectif : la mise au point passe du volant au casque
+			Eye = CarPos + CarSide * FMath::Lerp(190.f, 160.f, U) + Fwd * 140.f + FVector(0, 0, 135.f);
+			Look = CarPos + Fwd * 30.f + FVector(0, 0, 88.f);
+			Fov = FMath::Lerp(24.f, 21.f, U);
+			Focus = float((Look - Eye).Size()) * FMath::Lerp(0.8f, 1.f, Ease(U * 2.5f)); Fstop = 1.4f;
+			Shake = 0.22f;
+		}
+		else if (Shot == 3)
+		{
 			// gros plan au ras du sol sur l'aileron avant de ta voiture, la caméra glisse lentement vers le cockpit
 			Eye = CarPos + Fwd * FMath::Lerp(720.f, 520.f, U) + CarSide * FMath::Lerp(330.f, 250.f, U) + FVector(0, 0, FMath::Lerp(40.f, 85.f, U));
 			Look = CarPos + Fwd * FMath::Lerp(110.f, 0.f, U) + FVector(0, 0, 50.f);
 			Fov = FMath::Lerp(36.f, 31.f, U);
 			Focus = float((Look - Eye).Size()); Fstop = 1.8f;
 			Shake = 0.25f;
+		}
+		else if (Shot == 4 && Order.Num() > 0)
+		{
+			// plan de départ de la télé : depuis le portique des feux, au long foyer, toute la grille écrasée par la perspective
+			const AGPMCar* Pole = Order[0];
+			const FVector PF = Pole->GetActorForwardVector();
+			const FVector PS = FVector::CrossProduct(PF, FVector::UpVector).GetSafeNormal();
+			Eye = Pole->GetActorLocation() + PF * FMath::Lerp(2900.f, 2750.f, U) + PS * 260.f + FVector(0, 0, 560.f);
+			Look = Pole->GetActorLocation() - PF * 3000.f + FVector(0, 0, 60.f);
+			Fov = FMath::Lerp(15.f, 13.f, U);
+			Focus = float((Car ? CarPos - Eye : Look - Eye).Size()); Fstop = 5.6f;
+			Shake = 0.06f;
 		}
 		else
 		{
@@ -253,7 +283,7 @@ void AGPMGameMode::UpdateCine(float Dt)
 			Look = CarPos + Fwd * 1200.f;
 			Fov = FMath::Lerp(55.f, 62.f, U);
 		}
-		if (CineT >= IntroCuts[3]) { EndCine(); return; }
+		if (CineT >= IntroCuts[IntroN - 1]) { EndCine(); return; }
 		break;
 	}
 	case ECine::Podium:
@@ -300,6 +330,11 @@ void AGPMGameMode::UpdateCine(float Dt)
 	}
 	default: break;
 	}
+	// cadreur : le point visé suit avec un léger retard (remis à zéro à chaque changement de plan)
+	const int32 ShotNow = CineShot();
+	if (ShotNow != CineShotSeen || Dt <= 0.f || Cine == ECine::Menu) { CineShotSeen = ShotNow; CineAim = Look; }
+	else CineAim = FMath::VInterpTo(CineAim, Look, Dt, 5.f);
+	Look = CineAim;
 	CineCam->GetCameraComponent()->SetFieldOfView(Fov);
 	CineLens(Focus, Fstop);
 	const FRotator Rot = (Look - Eye).Rotation();

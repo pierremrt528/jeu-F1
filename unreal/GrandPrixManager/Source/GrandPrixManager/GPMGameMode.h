@@ -275,6 +275,8 @@ private:
 	int32 PerfHitch = 0;   // images de plus de 25 ms depuis la dernière ligne du journal (à-coups)
 	UPROPERTY() TObjectPtr<class ACameraActor> CineCam;
 	FVector CineFwd = FVector::ForwardVector;   // cap lissé de la voiture pendant le tour d'honneur
+	FVector CineAim = FVector::ZeroVector;      // point visé lissé (cadreur)
+	int32 CineShotSeen = -1;
 	int32 CrownYear = -1;                        // saison dont le sacre a déjà été joué
 	void CineLens(float Focus, float Fstop);    // flou de profondeur de la caméra des cinématiques (Focus 0 : net partout)
 	bool bTyreWarn = false;

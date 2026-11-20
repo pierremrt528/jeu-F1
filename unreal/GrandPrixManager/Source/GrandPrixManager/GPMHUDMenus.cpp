@@ -66,8 +66,8 @@ void AGPMHUD::DrawCine(AGPMGameMode* GM, float W, float H)
 	using EC = AGPMGameMode::ECine;
 	if (GM->Cine == EC::Intro)
 	{
-		static const TCHAR* Shots[] = { TEXT("VUE DU DRONE"), TEXT("LA GRILLE"), TEXT("PRÊT AU DÉPART"), TEXT("EN PISTE") };
-		DrawText(Shots[FMath::Clamp(GM->CineShot(), 0, 3)], FLinearColor(1, 1, 1, 0.6f * (1.f - Cut)), 16 * Scale, Bar + 10 * Scale, Mid, Scale * 0.9f);
+		static const TCHAR* Shots[] = { TEXT("VUE DU DRONE"), TEXT("LA GRILLE"), TEXT("CONCENTRATION"), TEXT("PRÊT AU DÉPART"), TEXT("CAMÉRA DU DÉPART"), TEXT("EN PISTE") };
+		DrawText(Shots[FMath::Clamp(GM->CineShot(), 0, 5)], FLinearColor(1, 1, 1, 0.6f * (1.f - Cut)), 16 * Scale, Bar + 10 * Scale, Mid, Scale * 0.9f);
 	}
 	const bool bWin = GM->Cine == EC::Podium && GM->CineTitle.StartsWith(TEXT("VICTOIRE"));
 	const bool bCrown = GM->Cine == EC::Crown;
