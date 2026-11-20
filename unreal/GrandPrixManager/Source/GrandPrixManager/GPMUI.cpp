@@ -334,7 +334,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(GM->SoloIdx * 100 + GM->SoloLaps + (GM->bSoloQuali ? 7 : 0) + GM->SoloWeather * 100000));
 	H = HashCombine(H, GetTypeHash(SelTree * 100 + SelPart + (GM->bChampShown ? 50000 : 0)));
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
-	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
+	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0) + MercFilt * 1000000));
 	H = HashCombine(H, HashCombine(GetTypeHash(FMath::RoundToInt(ChSal * 10.f) + FMath::RoundToInt(ChSign * 10.f) * 1000 + ChYears * 100000 + ChPat * 1000000), GetTypeHash(ChFor + ChLine)));
 	H = HashCombine(H, GetTypeHash(UGPMCareerSubsystem::NegoLevel * 7 + UGPMCareerSubsystem::CareerLen * 31 + SeasonTab * 1000 + GM->GfxLevel * 100000));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));

@@ -333,6 +333,19 @@ void UGPMCareerSubsystem::CreateCareer()
 }
 
 // ---------- direction, sponsors, contrats ponctuels ----------
+// rang de ta voiture au plateau (1 = la plus rapide), d'après la performance de l'usine et le développement des rivaux
+int32 UGPMCareerSubsystem::CarRank() const
+{
+	const UGPMSaveGame* G = Save();
+	const UGPMFactorySubsystem* F = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	const UGPMDataSubsystem* Data = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>();
+	if (!G || !F || !Data) return 5;
+	const float Mine = F->PlayerPerf();
+	int32 Rk = 1;
+	for (int32 t = 1; t < Data->Teams.Num(); ++t) if (Data->Teams[t].Perf + G->RivalDev.FindRef(Data->Teams[t].Name) > Mine) ++Rk;
+	return Rk;
+}
+
 int32 UGPMCareerSubsystem::TeamPos() const
 {
 	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
@@ -610,7 +623,7 @@ TArray<FString> UGPMCareerSubsystem::AfterRace(const FGPMRaceCtx& R)
 		// mercato des IA à la mi-saison
 		if (Season->Round() == Season->NumRounds() / 2) AIMercato(1 + FMath::RandRange(0, 1));
 		// mi-saison : une écurie qui écrase le championnat voit la direction relever ses exigences tout de suite
-		if (Season->Round() == Season->NumRounds() / 2 && Ambition() < 3 && TeamPos() == 1)
+		if (Season->Round() == Season->NumRounds() / 2 && Ambition() < 3 && TeamPos() == 1 && CarRank() == 1 && G->Budget >= 80.f)
 		{
 			const TArray<FGPMStanding> Tms = Season->Teams();
 			if (Tms.Num() > 1 && Tms[0].bPlayer && Tms[0].Pts >= Tms[1].Pts * 3 / 2)
@@ -662,16 +675,22 @@ void UGPMCareerSubsystem::Intersaison()
 	if (!G || !G->bCreated) return;
 	// ambitions de la direction pour la saison qui vient : elles suivent le classement des écuries de la saison écoulée
 	{
-		// champion des écuries : la direction passe en mode « dynastie » (titre à conserver, une victoire tous les 3 GP)
-		const int32 Was = Ambition(), CPos = TeamPos(), Now = CPos == 1 ? 3 : CPos <= 2 ? 2 : CPos <= 6 ? 1 : 0;
+		// les ambitions suivent les moyens de l'écurie (rang de la voiture, budget), pas un résultat chanceux : une petite
+		// écurie qui gagne une course sur un coup de stratégie n'est pas jugée comme un top team ; la « dynastie » (titre
+		// à conserver) demande le titre des écuries ET la voiture la plus rapide ET un gros budget
+		const int32 CPos = TeamPos(), Rk = CarRank(), Was = Ambition();
+		int32 Means = Rk <= 2 ? 2 : Rk <= 5 ? 1 : 0;
+		if (G->Budget >= 90.f && Means < 2 && Rk <= 4) ++Means;
+		if (G->Budget < 35.f && Means > 0) --Means;
+		const int32 Now = (CPos == 1 && Rk == 1 && G->Budget >= 80.f) ? 3 : Means;
 		G->Ambition = Now;
 		if (Now != Was)
 		{
 			static const TCHAR* Goal[4] = { TEXT("le top 8 des écuries et 25 points"), TEXT("le top 5 des écuries et un podium"), TEXT("le top 2 des écuries et 3 victoires"),
 				TEXT("conserver le titre des écuries et gagner au moins une course sur trois") };
 			SendMail(TEXT("direction"), TEXT("Président de l'écurie"), Now > Was ? TEXT("Nos ambitions montent d'un cran") : TEXT("Des objectifs revus à la baisse"),
-				FString::Printf(TEXT("Après notre %s place au championnat des écuries, la direction %s ses ambitions. Objectifs de la nouvelle saison : %s. Chaque course sera jugée sur une %de place attendue."),
-					CPos == 1 ? TEXT("1re") : *FString::Printf(TEXT("%de"), CPos), Now > Was ? TEXT("relève") : TEXT("abaisse"), Goal[Now], Now == 0 ? 14 : Now == 3 ? 2 : Now == 2 ? 4 : 9));
+				FString::Printf(TEXT("Après notre %s place au championnat des écuries, et vu nos moyens (voiture n°%d du plateau, %.0f M€ de budget), la direction %s ses ambitions. Objectifs de la nouvelle saison : %s. Chaque course sera jugée sur une %de place attendue."),
+					CPos == 1 ? TEXT("1re") : *FString::Printf(TEXT("%de"), CPos), Rk, G->Budget, Now > Was ? TEXT("relève") : TEXT("abaisse"), Goal[Now], Now == 0 ? 14 : Now == 3 ? 2 : Now == 2 ? 4 : 9));
 		}
 	}
 	// bilan du mercato d'intersaison, envoyé par la presse (les nouvelles sont effacées par la nouvelle saison)

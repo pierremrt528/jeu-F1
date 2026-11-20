@@ -280,33 +280,87 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 		],
 		FLinearColor(Acc.R * 0.3f, Acc.G * 0.3f, Acc.B * 0.3f, 0.75f), 16.f);
 
+	// fiches façon « carte de joueur » : note dans un écusson or / argent / bronze, liseré aux couleurs de l'écurie,
+	// 4 jauges (vitesse, stratégie, pneus, potentiel), coût à droite ; filtres en onglets
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-	const TArray<FGPMMarketDriver> Drivers = C->MarketList();
+	const TArray<FGPMMarketDriver> AllDrivers = C->MarketList();
+	const UGPMDataSubsystem* Dt = DataSys();
+	auto TeamCol = [Dt](const FString& Team)
+	{
+		if (Dt) for (const FGPMTeam& Tm : Dt->Teams) if (Tm.Name == Team) return Tm.Color;
+		return FLinearColor(0.35f, 0.38f, 0.45f, 1.f);
+	};
+	auto Keep = [this, C, G](const FGPMMarketDriver& D)
+	{
+		switch (MercFilt)
+		{
+		case 1: return D.Seat < 0;
+		case 2: return D.Seat >= 0;
+		case 3: return D.Age <= 23 || D.Pot >= 85.f;
+		case 4: return D.Seat >= 0 && C->UntilOf(D.Name) <= G->Year;
+		default: return true;
+		}
+	};
+	TArray<FGPMMarketDriver> Drivers;
+	for (const FGPMMarketDriver& D : AllDrivers) if (Keep(D)) Drivers.Add(D);
+	Drivers.StableSort([](const FGPMMarketDriver& X, const FGPMMarketDriver& Y) { return X.Rating() > Y.Rating(); });
+	auto StatBar = [this](const TCHAR* Lbl, float V)
+	{
+		const FLinearColor BC = V >= 90.f ? CGold : V >= 80.f ? CGood : V >= 70.f ? FLinearColor(0.35f, 0.6f, 1.f, 1.f) : CDim;
+		return SNew(SBox).WidthOverride(92.f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(Lbl, 11, CDim, true) ]
+				+ SHorizontalBox::Slot().AutoWidth()[ Txt(FString::Printf(TEXT("%.0f"), V), 13, BC, true) ]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Bar(FMath::Clamp((V - 40.f) / 60.f, 0.f, 1.f), BC, 5.f) ]
+		];
+	};
 	for (const FGPMMarketDriver& D : Drivers)
 	{
 		const float Rating = D.Rating();
-		const FLinearColor RCol = Rating >= 80.f ? CGold : Rating >= 72.f ? CGood : CText;
+		// écusson : or ≥ 88, argent ≥ 78, bronze dessous
+		const FLinearColor Badge = Rating >= 88.f ? FLinearColor(0.85f, 0.62f, 0.12f, 1.f) : Rating >= 78.f ? FLinearColor(0.62f, 0.66f, 0.72f, 1.f) : FLinearColor(0.62f, 0.38f, 0.2f, 1.f);
+		const bool bEnd = D.Seat >= 0 && C->UntilOf(D.Name) <= G->Year;
+		const FLinearColor Stripe = D.Seat >= 0 ? TeamCol(D.Team) : FLinearColor(0.35f, 0.38f, 0.45f, 1.f);
+		const FString Where = D.Seat < 0 ? FString::Printf(TEXT("%s · libre"), *D.From) : bEnd ? FString::Printf(TEXT("%s · fin de contrat"), *D.Team)
+			: FString::Printf(TEXT("%s · sous contrat jusqu'en %d"), *D.Team, C->UntilOf(D.Name));
 		TSharedRef<SWidget> Content = SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(FMargin(0.f, 0.f, 12.f, 0.f))
+			[ SNew(SBox).WidthOverride(5.f)[ SNew(SBorder).BorderImage(GPMUIStyle::Rounded(2.f)).BorderBackgroundColor(FSlateColor(Stripe)) ] ]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 14.f, 0.f))
 			[
-				SNew(SBox).WidthOverride(52.f).HeightOverride(40.f)
+				SNew(SBox).WidthOverride(58.f).HeightOverride(58.f)
 				[
-					SNew(SBorder).BorderImage(GPMUIStyle::Rounded(6.f)).BorderBackgroundColor(FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.08f))).HAlign(HAlign_Center).VAlign(VAlign_Center)
-					[ Txt(FString::Printf(TEXT("%.0f"), Rating), 20, RCol, true) ]
+					SNew(SBorder).BorderImage(GPMUIStyle::Rounded(10.f)).BorderBackgroundColor(FSlateColor(Badge)).HAlign(HAlign_Center).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Txt(FString::Printf(TEXT("%.0f"), Rating), 24, InkOn(Badge), true) ]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Txt(TEXT("NOTE"), 9, InkOn(Badge), true) ]
+					]
 				]
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 			[
 				SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(D.Name, 18, CText, true) ]
-				+ SVerticalBox::Slot().AutoHeight()[ Txt(D.Seat < 0 ? FString::Printf(TEXT("%s · %d ans · libre"), *D.From, D.Age)
-					: C->UntilOf(D.Name) <= G->Year ? FString::Printf(TEXT("%s · %d ans · fin de contrat"), *D.Team, D.Age)
-					: FString::Printf(TEXT("%s · %d ans · contrat jusqu'en %d"), *D.Team, D.Age, C->UntilOf(D.Name)), 13, D.Seat >= 0 && C->UntilOf(D.Name) <= G->Year ? FLinearColor(1.f, 0.75f, 0.4f) : CDim) ]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Txt(D.Name, 19, CText, true) ]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f, 0.f, 0.f))
+					[ Chip(TEXT("Âge"), FString::FromInt(D.Age), D.Age <= 23 ? CGood : D.Age >= 33 ? FLinearColor(1.f, 0.75f, 0.4f) : CText) ]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Txt(Where, 13, bEnd ? FLinearColor(1.f, 0.75f, 0.4f) : CDim) ]
 			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f))
-			[ Txt(FString::Printf(TEXT("vit. %.0f · strat. %.0f · pneus %.0f · pot. %.0f"), D.Spd, D.Strat, D.Tyre, D.Pot), 14, CDim) ]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10.f, 0.f, 0.f, 0.f))
-			[ SNew(SBox).WidthOverride(200.f)[ Txt(C->Status(D), 14, FLinearColor(1.f, 0.75f, 0.4f), true, true) ] ];
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f))[ StatBar(TEXT("VITESSE"), D.Spd) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f))[ StatBar(TEXT("STRATÉGIE"), D.Strat) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f))[ StatBar(TEXT("PNEUS"), D.Tyre) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.f, 0.f, 16.f, 0.f))[ StatBar(TEXT("POTENTIEL"), D.Pot) ]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[ SNew(SBox).WidthOverride(190.f)[ Txt(C->Status(D), 14, FLinearColor(1.f, 0.78f, 0.45f), true, true) ] ];
 		const FGPMMarketDriver Copy = D;
 		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 6.f))
 		[
@@ -322,6 +376,16 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 			})
 		];
 	}
+	if (Drivers.Num() == 0) List->AddSlot().AutoHeight().Padding(FMargin(4.f, 20.f))[ Txt(TEXT("Aucun pilote dans cette catégorie pour le moment."), 15, CDim) ];
+	int32 NFree = 0, NSeat = 0, NYoung = 0, NEnd = 0;
+	for (const FGPMMarketDriver& D : AllDrivers)
+	{
+		NFree += D.Seat < 0; NSeat += D.Seat >= 0; NYoung += D.Age <= 23 || D.Pot >= 85.f;
+		NEnd += D.Seat >= 0 && C->UntilOf(D.Name) <= G->Year;
+	}
+	const TArray<FString> FiltNames = { FString::Printf(TEXT("TOUS (%d)"), AllDrivers.Num()), FString::Printf(TEXT("LIBRES (%d)"), NFree),
+		FString::Printf(TEXT("ÉCURIES RIVALES (%d)"), NSeat), FString::Printf(TEXT("JEUNES TALENTS (%d)"), NYoung), FString::Printf(TEXT("FIN DE CONTRAT (%d)"), NEnd) };
+	TSharedRef<SWidget> Filters = Tabs(FiltNames, FMath::Clamp(MercFilt, 0, 4), [this](int32 k) { MercFilt = k; Touch(); });
 
 	TSharedRef<SHorizontalBox> Right = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 16.f, 0.f))[ Chip(TEXT("Budget"), FString::Printf(TEXT("%.1f M€"), G->Budget), CGood) ]
@@ -331,8 +395,9 @@ TSharedRef<SWidget> FGPMUI::MercatoScreen(AGPMGameMode* GM)
 	TSharedRef<SWidget> Body = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 14.f))[ Title(TEXT("MERCATO"), TEXT("Marché des pilotes"), Right) ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Mate ]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ Filters ]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))
-		[ Txt(TEXT("Touche un pilote pour négocier avec son agent. L'indemnité dépend des années de contrat restantes (un pilote en fin de contrat coûte bien moins cher) et elle est multipliée par 2,5 pendant la saison. Une clause libératoire rend un pilote plus facile à signer, mais un rival pourra le racheter à ce prix."), 14, CDim, false, true) ]
+		[ Txt(TEXT("Touche un pilote pour négocier avec son agent. Indemnité : selon les années de contrat restantes (×2,5 en cours de saison). Une clause libératoire facilite la signature, mais un rival pourra le racheter à ce prix."), 13, CFaint, false, true) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)[ SNew(SScrollBox) + SScrollBox::Slot()[ List ] ];
 	return Page(Body, CRoomBg);
 }

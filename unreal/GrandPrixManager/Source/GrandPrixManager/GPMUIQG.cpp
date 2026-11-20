@@ -226,8 +226,24 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 		case ES::Busy: InfoTxt = TEXT("ateliers occupés"); NameCol = CDim; break;
 		default: InfoTxt = P.ReqAny.Num() ? TEXT("verrouillée · une branche suffit") : TEXT("verrouillée"); InfoCol = CFaint; NameCol = CFaint; break;
 		}
+		// effet principal de la pièce, et repère des dernières pièces du pôle (les plus longues et les plus risquées)
+		FString MainFx;
+		for (const TPair<FString, float>& E : P.Fx)
+		{
+			const bool bAbs = E.Key == TEXT("rel") || E.Key == TEXT("pit");
+			MainFx = FString::Printf(TEXT("%s %+.1f%s"), *GPMUIQGText::EffectName(E.Key), bAbs ? E.Value : E.Value * 100.f, E.Key == TEXT("pit") ? TEXT(" s") : bAbs ? TEXT("") : TEXT(" %"));
+			break;
+		}
+		const bool bFinal = F->DepthOf(P) >= 0.7f && St != ES::Owned;
 		TSharedRef<SVerticalBox> Tile = SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(P.Name)).Font(GPMUIStyle::Face(1, 14)).ColorAndOpacity(FSlateColor(NameCol)).AutoWrapText(true) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f)[ SNew(STextBlock).Text(FText::FromString(P.Name)).Font(GPMUIStyle::Face(1, 14)).ColorAndOpacity(FSlateColor(NameCol)).AutoWrapText(true) ]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(FMargin(6.f, 1.f, 0.f, 0.f))
+				[ bFinal ? Txt(TEXT("PALIER FINAL"), 9, FLinearColor(1.f, 0.55f, 0.3f, 1.f), true) : SNullWidget::NullWidget ]
+			]
+			+ SVerticalBox::Slot().AutoHeight()[ Txt(MainFx, 11, St == ES::Locked ? CFaint : GPMUIQGText::Dim(Tr.Color, 1.25f)) ]
 			+ SVerticalBox::Slot().AutoHeight()[ Txt(InfoTxt, 12, InfoCol) ];
 		if (St == ES::Running)
 			Tile->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 0.f))[ Bar(1.f - F->DaysLeft(P) / FMath::Max(1.f, F->DaysTotal(P)), CGold, 4.f) ];
@@ -240,7 +256,7 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 		Canvas->AddSlot()
 			.Anchors(FAnchors(A.X, A.Y))
 			.Alignment(FVector2D(0.5f, 0.5f))
-			.Offset(FMargin(0.f, 0.f, 260.f, 66.f))
+			.Offset(FMargin(0.f, 0.f, 260.f, 80.f))
 			[ Node ];
 	}
 	const FGPMChief Boss = F->ChiefOf(Tr.Id);
@@ -259,7 +275,7 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 6.f))[ Bar(Tr.Parts.Num() ? float(Have) / Tr.Parts.Num() : 0.f, Tr.Color, 4.f) ]
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
-			SNew(SBox).MinDesiredHeight(Rows * 86.f)
+			SNew(SBox).MinDesiredHeight(Rows * 98.f)
 			[
 				SNew(SOverlay)
 				+ SOverlay::Slot().Padding(FMargin(0.f, 6.f))[ Links ]
@@ -293,12 +309,42 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 	default: StateTxt = P.ReqAny.Num() ? TEXT("Il faut d'abord une des pièces juste au-dessus (une seule branche suffit).") : TEXT("Il faut d'abord les pièces juste au-dessus dans l'arbre."); break;
 	}
 	const float Base = UGPMFactorySubsystem::Price(P), Now = F->PriceOf(P);
-	FString CostTxt = FString::Printf(TEXT("%.1f M€%s · %d jours · échec %d %% · retard %d %%"), Now,
-		Now < Base - 0.05f ? *FString::Printf(TEXT(" (au lieu de %.1f)"), Base) : TEXT(""), F->DelayOf(P), F->FailOf(P), F->LateOf(P));
-	if (Boss.IsValid()) CostTxt += FString::Printf(TEXT("\nChef %s : prix -%d %%, délai -%d %%, risque -%d %%"), *Boss.Name, Boss.Cost, Boss.Time, Boss.Risk);
+	FString CostTxt = F->DepthOf(P) >= 0.7f ? FString(TEXT("Palier final du pôle : recherche longue, chère et risquée.")) : FString();
+	if (Boss.IsValid()) CostTxt += FString::Printf(TEXT("%sChef %s : prix -%d %%, délai -%d %%, risque -%d %%"), CostTxt.IsEmpty() ? TEXT("") : TEXT("\n"), *Boss.Name, Boss.Cost, Boss.Time, Boss.Risk);
 	const FString PartId = P.Id;
 	const FLinearColor TC = Tr.Color;
 	TSharedRef<SVerticalBox> Side = SNew(SVerticalBox);
+	// l'usine en un coup d'œil : recherches en cours, jours restants, ateliers libres
+	if (const UGPMSaveGame* SG = SeasonSys() ? SeasonSys()->State() : nullptr)
+	{
+		TSharedRef<SVerticalBox> Run = SNew(SVerticalBox);
+		Run->AddSlot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(TEXT("À L'USINE"), 12, CGold, true) ]
+			+ SHorizontalBox::Slot().AutoWidth()[ Txt(FString::Printf(TEXT("ateliers %d / %d"), F->Running(), F->Workshops()), 12, F->Running() < F->Workshops() ? CGood : CDim, true) ]
+		];
+		for (const TPair<FString, FString>& DP : SG->DevPart)
+			if (const FGPMPart* RP = F->Part(DP.Value))
+			{
+				FLinearColor RC = CGold;
+				for (const FGPMTree& T2 : F->Trees(RP->bFut)) if (T2.Id == RP->Tree) RC = T2.Color;
+				const float Lft = F->DaysLeft(*RP), Tot = FMath::Max(1.f, F->DaysTotal(*RP));
+				Run->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.f)[ Txt(RP->Name, 13, CText, true) ]
+						+ SHorizontalBox::Slot().AutoWidth()[ Txt(FString::Printf(TEXT("%.0f j"), FMath::Max(0.f, Lft)), 13, RC, true) ]
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Bar(FMath::Clamp(1.f - Lft / Tot, 0.f, 1.f), RC, 4.f) ]
+				];
+			}
+		if (SG->DevPart.Num() == 0) Run->AddSlot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(TEXT("Aucune recherche en cours : tes ateliers attendent."), 13, CBad, false, true) ];
+		Side->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 12.f))[ Card(Run, FLinearColor(0.03f, 0.035f, 0.06f, 0.85f), 14.f) ];
+	}
 	Side->AddSlot().AutoHeight()
 	[
 		Card(SNew(SVerticalBox)
@@ -306,7 +352,19 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 			+ SVerticalBox::Slot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(P.Name)).Font(GPMUIStyle::Face(0, 24)).ColorAndOpacity(FSlateColor(CText)).AutoWrapText(true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 8.f))[ Txt(P.Desc, 15, CDim, false, true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 8.f))[ Fx ]
-			+ SVerticalBox::Slot().AutoHeight()[ Txt(CostTxt, 13, CDim, false, true) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+				[ StatBlock(TEXT("Prix"), FString::Printf(TEXT("%.1f M€"), Now), Now < Base - 0.05f ? FString::Printf(TEXT("au lieu de %.1f"), Base) : FString(), CText) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+				[ StatBlock(TEXT("Durée"), FString::Printf(TEXT("%d j"), F->DelayOf(P)), FString(), CInfo, FMath::Clamp(F->DelayOf(P) / 140.f, 0.f, 1.f)) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+				[ StatBlock(TEXT("Échec"), FString::Printf(TEXT("%d %%"), F->FailOf(P)), FString(), F->FailOf(P) >= 25 ? CBad : F->FailOf(P) >= 15 ? CGold : CGood, F->FailOf(P) / 45.f) ]
+				+ SHorizontalBox::Slot().FillWidth(1.f)
+				[ StatBlock(TEXT("Retard"), FString::Printf(TEXT("%d %%"), F->LateOf(P)), FString(), F->LateOf(P) >= 35 ? CBad : CGold, F->LateOf(P) / 50.f) ]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))[ Txt(CostTxt, 12, CFaint, false, true) ]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 10.f))[ Txt(StateTxt, 14, St == ES::Available ? CGood : St == ES::Running ? CGold : CDim, true, true) ]
 			+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 			[ Button(TEXT("LANCER LA RECHERCHE"), Acc, [WF, PartId]() { if (WF.IsValid()) WF->Start(PartId); }, St == ES::Available, 260.f, 54.f, 16) ],

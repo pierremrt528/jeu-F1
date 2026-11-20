@@ -90,6 +90,7 @@ private:
 	// offre à la carte au chef choisi : salaire, durée, prime à la signature, patience, dernière réponse
 	float ChSal = 0.f, ChSign = 0.f; int32 ChYears = 2, ChPat = 3; FString ChFor, ChLine;
 	bool FutView() const;
+	int32 MercFilt = 0;   // mercato : 0 tous, 1 libres, 2 écuries rivales, 3 jeunes talents, 4 fin de contrat
 	int32 SelMail = -1, MailFilt = 0, MailN = 0;   // boîte mail : message ouvert, filtre (0 tous, 1 non lus, 2+ type)
 	int32 KeyPhase = -1;   // phase vue à l'image précédente : une touche qui change d'écran ne compte pas deux fois
 	FLinearColor Acc = FLinearColor(0.85f, 0.12f, 0.12f, 1.f);

@@ -58,6 +58,7 @@ public:
 	static int32 Delay(const FGPMPart& P) { return P.Cost <= 20 ? 20 : P.Cost <= 55 ? 36 : 56; }
 	static int32 FailPct(const FGPMPart& P) { return P.Cost <= 20 ? 6 : P.Cost <= 55 ? 10 : 16; }
 	/** Valeurs réelles : Centre de R&D, Soufflerie et chef du pôle. */
+	float DepthOf(const FGPMPart& P) const;   // 0 premières pièces de l'arbre … 1 dernières
 	float PriceOf(const FGPMPart& P) const;
 	int32 DelayOf(const FGPMPart& P) const;
 	int32 FailOf(const FGPMPart& P) const;

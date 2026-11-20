@@ -112,19 +112,45 @@ int32 UGPMFactorySubsystem::Workshops() const
 
 int32 UGPMFactorySubsystem::PerDept() const { return Level(TEXT("wind")) >= 3 ? 2 : 1; }
 
+// profondeur d'une pièce dans son arbre : 0 pour les premières, 1 pour les dernières (rangée la plus basse). Les dernières
+// pièces de chaque pôle coûtent plus, durent beaucoup plus longtemps et cassent plus souvent : la voiture n'atteint son
+// plein potentiel qu'en toute fin de saison
+float UGPMFactorySubsystem::DepthOf(const FGPMPart& P) const
+{
+	for (const FGPMTree& T : Trees(P.bFut))
+	{
+		if (T.Id != P.Tree) continue;
+		int32 Lo = P.Row, Hi = P.Row;
+		for (const FGPMPart& Q : T.Parts) { Lo = FMath::Min(Lo, Q.Row); Hi = FMath::Max(Hi, Q.Row); }
+		return Hi > Lo ? float(P.Row - Lo) / float(Hi - Lo) : 0.f;
+	}
+	return 0.f;
+}
+
 float UGPMFactorySubsystem::PriceOf(const FGPMPart& P) const
 {
-	return FMath::RoundToFloat(Price(P) * (1.f - 0.1f * Level(TEXT("rd"))) * ChiefMul(P.Tree, 0) * 10.f) / 10.f;
+	const float Dp = DepthOf(P);
+	return FMath::RoundToFloat(Price(P) * (1.f + 0.4f * Dp * Dp) * (1.f - 0.1f * Level(TEXT("rd"))) * ChiefMul(P.Tree, 0) * 10.f) / 10.f;
 }
 
 int32 UGPMFactorySubsystem::DelayOf(const FGPMPart& P) const
 {
 	static const float Wind[4] = { 1.f, 0.85f, 0.75f, 0.7f };
-	return FMath::Max(5, FMath::RoundToInt(Delay(P) * Wind[FMath::Clamp(Level(TEXT("wind")), 0, 3)] * ChiefMul(P.Tree, 1)));
+	const float Dp = DepthOf(P);
+	// ×1,3 en moyenne pour tout le monde, jusqu'à ×2,8 pour les toutes dernières pièces
+	return FMath::Max(7, FMath::RoundToInt(Delay(P) * (1.3f + 1.5f * Dp * Dp) * Wind[FMath::Clamp(Level(TEXT("wind")), 0, 3)] * ChiefMul(P.Tree, 1)));
 }
 
-int32 UGPMFactorySubsystem::FailOf(const FGPMPart& P) const { return FMath::RoundToInt(FailPct(P) * ChiefMul(P.Tree, 2)); }
-int32 UGPMFactorySubsystem::LateOf(const FGPMPart& P) const { return FMath::RoundToInt(22.f * ChiefMul(P.Tree, 2)); }
+int32 UGPMFactorySubsystem::FailOf(const FGPMPart& P) const
+{
+	const float Dp = DepthOf(P);
+	return FMath::Clamp(FMath::RoundToInt((FailPct(P) + 4.f) * (1.f + 1.6f * Dp * Dp) * ChiefMul(P.Tree, 2)), 3, 45);
+}
+int32 UGPMFactorySubsystem::LateOf(const FGPMPart& P) const
+{
+	const float Dp = DepthOf(P);
+	return FMath::Clamp(FMath::RoundToInt((22.f + 18.f * Dp) * ChiefMul(P.Tree, 2)), 5, 50);
+}
 
 float UGPMFactorySubsystem::Budget() const { const UGPMSaveGame* G = Save(); return G ? G->Budget : 0.f; }
 
@@ -186,7 +212,7 @@ void UGPMFactorySubsystem::Tick(int32 Days)
 		if (!G->Delayed.Contains(P->Id) && FMath::RandRange(0, 99) < LateOf(*P))
 		{
 			G->Delayed.Add(P->Id);
-			const int32 More = FMath::RandRange(7, 14);
+			const int32 More = FMath::RoundToInt(FMath::RandRange(7, 14) * (1.f + DepthOf(*P)));   // plus long sur les dernières pièces
 			Left += More;
 			G->DevTot.FindOrAdd(D.Key) += More;
 			G->News.Add(FString::Printf(TEXT("Retard : %s, %d jours de plus."), *P->Name, More));

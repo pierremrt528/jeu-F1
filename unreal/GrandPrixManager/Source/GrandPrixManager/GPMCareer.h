@@ -274,6 +274,7 @@ private:
 	TArray<FString> Rookies(int32 N);
 	FGPMMarketDriver MateAsDriver() const;
 	void MakeOffer(const FString& Team);
+	int32 CarRank() const;   // rang de la voiture au plateau (moyens de l'écurie)
 	int32 TeamPos() const;
 	void WriteSeats();
 	void News(const FString& Msg);
