@@ -336,7 +336,7 @@ uint32 FGPMUI::Signature(AGPMGameMode* GM) const
 	H = HashCombine(H, GetTypeHash(QGTab + SeasonTab * 4 + SelInfra * 16 + SelDept * 256 + SelCand * 4096));
 	H = HashCombine(H, GetTypeHash(SelMail * 64 + MailFilt + (bFutView ? 100000 : 0)));
 	H = HashCombine(H, HashCombine(GetTypeHash(FMath::RoundToInt(ChSal * 10.f) + FMath::RoundToInt(ChSign * 10.f) * 1000 + ChYears * 100000 + ChPat * 1000000), GetTypeHash(ChFor + ChLine)));
-	H = HashCombine(H, GetTypeHash(UGPMCareerSubsystem::NegoLevel * 7 + UGPMCareerSubsystem::CareerLen * 31 + SeasonTab * 1000));
+	H = HashCombine(H, GetTypeHash(UGPMCareerSubsystem::NegoLevel * 7 + UGPMCareerSubsystem::CareerLen * 31 + SeasonTab * 1000 + GM->GfxLevel * 100000));
 	H = HashCombine(H, GetTypeHash(GM->SetupK * 10 + (GM->bLongRace ? 1 : 0) + (GM->bGridReady ? 2 : 0) + GM->Plans.Num() * 1000));
 	H = HashCombine(H, HashCombine(GM->Setup.Hash(), GetTypeHash(GM->SetupRow)));
 	H = HashCombine(H, GetTypeHash((GM->bRainStart ? 1 : 0) + (GM->WxChangeAt >= 0.f ? 2 : 0)));
@@ -1194,6 +1194,21 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ Btns ],
 				CCardBg, 14.f);
 		};
+		{
+			TSharedRef<SHorizontalBox> GfxBtns = SNew(SHorizontalBox);
+			static const TCHAR* const GfxName[3] = { TEXT("Fluide"), TEXT("Normale"), TEXT("Ultra") };
+			static const TCHAR* const GfxHelp[3] = {
+				TEXT("Ombres courtes, image simple : pour garder 60 images par seconde partout."),
+				TEXT("L'équilibre : ombres nettes près de la voiture, image fluide."),
+				TEXT("Image la plus réaliste : ombres longues et fines, ombres de contact, occlusion, bords nets, rayons du soleil. Demande une machine puissante.") };
+			const int32 GQ = GM ? FMath::Clamp(GM->GfxLevel, 0, 2) : 1;
+			for (int32 k = 0; k < 3; ++k)
+				GfxBtns->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
+				[
+					Button(GfxName[k], GQ == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) { WGM->GfxLevel = k; WGM->SaveSettings(); } }, true, 100.f, 44.f, 14)
+				];
+			List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Graphismes"), GfxHelp[GQ], GfxBtns) ];
+		}
 		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Négociations (carrière)"), NegoHelp[FMath::Clamp(UGPMCareerSubsystem::NegoLevel, 0, 2)], NegoBtns) ];
 		List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Durée de la carrière"),
 			UGPMCareerSubsystem::CareerLen ? FString::Printf(TEXT("Bilan du conseil après %d saisons, puis tu peux continuer sans limite."), UGPMCareerSubsystem::CareerLen)

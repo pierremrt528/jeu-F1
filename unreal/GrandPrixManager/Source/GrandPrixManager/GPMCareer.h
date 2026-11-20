@@ -42,6 +42,10 @@ struct FGPMRaceCtx
 	bool bDnf = false, bFastest = false, bWet = false, bSC = false, bFlat = false;
 	float Pen = 0.f;
 	FString Circuit, Winner, Rival;
+	// faits de la course pour la presse : cause d'abandon, voisins à l'arrivée et écarts (s, −1 = inconnu), drapeau rouge
+	FString OutWhy, Ahead, Behind, WinGap;
+	float GapAhead = -1.f, GapBehind = -1.f;
+	bool bRed = false;
 };
 
 /** Pilote du marché des transferts. */
@@ -232,6 +236,7 @@ private:
 	FString FxText(const TSharedPtr<FJsonObject>& Fx) const;
 	FGPMChoice ReadChoice(const TSharedPtr<FJsonObject>& O) const;
 	void BuildPress(const FGPMRaceCtx& R);
+	TArray<FGPMDialog> RaceQuestions(const FGPMRaceCtx& R) const;   // questions écrites à partir des faits de la course
 	void PickEvents();
 	bool StoryDialog(const FString& Id, const FString& Step, int32 Ep);
 	void EventDialog(const TSharedPtr<FJsonObject>& E);

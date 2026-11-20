@@ -18,9 +18,42 @@
 
 namespace
 {
-	constexpr float WinterDays = 60.f;
 	FString Fmt(float T) { return FString::Printf(TEXT("%d:%06.3f"), int32(T) / 60, FMath::Fmod(T, 60.f)); }
 	const float Gain[3] = { 6.f, 6.f, 8.f };
+}
+
+// calendrier de l'hiver : 1er janvier, 20 janvier (présentation), 20 février (essais), premier GP (2e dimanche de mars)
+FDateTime AGPMGameMode::PreDate(int32 Stage, int32 Year)
+{
+	if (Stage <= 0) return FDateTime(Year, 1, 1);
+	if (Stage == 1) return FDateTime(Year, 1, 20);
+	if (Stage == 2) return FDateTime(Year, 2, 20);
+	const FDateTime D(Year, 3, 8);
+	const int32 JsDay = (int32(D.GetDayOfWeek()) + 1) % 7;
+	return D + FTimespan::FromDays(double((7 - JsDay) % 7));
+}
+
+// l'usine avance d'une étape de l'hiver à la suivante : recherches, chantier, chefs libres ; le bilan arrive par mail
+void AGPMGameMode::WinterAdvance(int32 From, int32 To)
+{
+	UGPMSeasonSubsystem* Season = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
+	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	UGPMSaveGame* G = Season ? Season->State() : nullptr;
+	if (!G || !Career || !Factory) return;
+	const int32 Days = FMath::Max(0, int32((PreDate(To, G->Year) - PreDate(From, G->Year)).GetTotalDays()));
+	if (Days <= 0) return;
+	G->News.Reset();
+	Factory->Tick(Days);
+	const FString Built = Factory->TickInfra(Days);
+	Factory->RotateStaff();
+	FString Body = FString::Printf(TEXT("%d jours sont passés à l'usine."), Days);
+	for (const FString& N : G->News) Body += TEXT("\n• ") + N;
+	if (!Built.IsEmpty()) Body += TEXT("\n• ") + Built;
+	if (G->News.Num() == 0 && Built.IsEmpty()) Body += TEXT("\nLes recherches en cours avancent : lance-en de nouvelles au QG si des ateliers sont libres.");
+	static const TCHAR* const Names[4] = { TEXT("1er janvier"), TEXT("20 janvier"), TEXT("20 février"), TEXT("premier Grand Prix") };
+	Career->SendMail(TEXT("usine"), TEXT("Bureau technique"), FString::Printf(TEXT("Usine : du %s au %s"), Names[FMath::Clamp(From, 0, 3)], Names[FMath::Clamp(To, 0, 3)]), Body);
+	LastLines = G->News;
 }
 
 int32 AGPMGameMode::PreStage() const
@@ -47,6 +80,7 @@ void AGPMGameMode::StartReveal()
 	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
 	UGPMSaveGame* G = Season ? Season->State() : nullptr;
 	if (!G || !Career || G->PreStage != 0) return;
+	WinterAdvance(0, 1);   // du 1er au 20 janvier
 	G->PreStage = 1;
 	Season->Save();
 	Career->PreEvents(true);   // la présentation devant la presse suit la scène
@@ -64,6 +98,7 @@ void AGPMGameMode::StartPreEvents()
 	UGPMCareerSubsystem* Career = GetGameInstance()->GetSubsystem<UGPMCareerSubsystem>();
 	UGPMSaveGame* G = Season ? Season->State() : nullptr;
 	if (!G || !Career || G->PreStage != 1) return;
+	WinterAdvance(1, 2);   // du 20 janvier au 20 février
 	G->PreStage = 2;
 	Career->PreEvents(false);
 	Season->Save();
@@ -218,9 +253,10 @@ void AGPMGameMode::FinishPreseason()
 	UGPMFactorySubsystem* Factory = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
 	UGPMSaveGame* G = Season ? Season->State() : nullptr;
 	if (!G || !Career || !Factory || G->PreStage >= 3) return;
+	const int32 From = G->PreStage;
+	WinterAdvance(From, 3);   // jusqu'au premier Grand Prix (tout l'hiver d'un coup si la pré-saison est passée)
 	G->PreStage = 3;
-	Factory->Tick(int32(WinterDays));   // les semaines d'hiver : les recherches avancent
-	FString Body = FString::Printf(TEXT("Les %d jours d'hiver ont fait avancer les recherches de l'usine.\n"), int32(WinterDays));
+	FString Body = FString::Printf(TEXT("L'hiver est terminé : la voiture a progressé depuis le 1er janvier (voir les rapports de l'usine).\n"));
 	if (G->TestReport.Num())
 	{
 		Body += TEXT("\nEssais hivernaux :");

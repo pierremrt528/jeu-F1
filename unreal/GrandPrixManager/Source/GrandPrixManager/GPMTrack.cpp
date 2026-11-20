@@ -121,7 +121,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	const bool bArt = RoadM && GreenM && FloorM && KerbM && WallM;
 	if (bArt)
 	{
-		KerbM->SetScalarParameterValue(TEXT("Rough"), 0.5f);
+		KerbM->SetScalarParameterValue(TEXT("Rough"), 0.65f);
 		WallM->SetScalarParameterValue(TEXT("Rough"), 0.8f);
 	}
 	RoadMID = bArt ? RoadM : nullptr;
@@ -425,10 +425,17 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 void AGPMTrack::SetWet(float Wet)
 {
 	const float K = FMath::Clamp(Wet, 0.f, 1.f);
-	if (RoadMID) RoadMID->SetScalarParameterValue(TEXT("Wet"), K);
+	if (RoadMID)
+	{
+		// piste sèche : asphalte mat et clair, aucune flaque (Wet un peu négatif repousse le seuil des flaques du matériau
+		// et éclaircit la photo) ; sous la pluie : sombre, brillant, flaques
+		RoadMID->SetScalarParameterValue(TEXT("Wet"), K - 0.18f * (1.f - K));
+		RoadMID->SetScalarParameterValue(TEXT("Rough"), FMath::Lerp(0.95f, 0.78f, K));
+		RoadMID->SetScalarParameterValue(TEXT("Spec"), FMath::Lerp(0.2f, 0.4f, K));
+	}
 	// herbe un peu plus sombre, vibreurs brillants
 	if (GreenMID) GreenMID->SetScalarParameterValue(TEXT("Wet"), K * 0.5f);
-	if (KerbMID) KerbMID->SetScalarParameterValue(TEXT("Rough"), 0.5f - 0.38f * K);
+	if (KerbMID) KerbMID->SetScalarParameterValue(TEXT("Rough"), 0.65f - 0.53f * K);
 }
 
 FTransform AGPMTrack::GetStartTransform() const

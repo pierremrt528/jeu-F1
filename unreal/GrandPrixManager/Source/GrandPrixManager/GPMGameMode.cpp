@@ -116,6 +116,7 @@ void AGPMGameMode::SetupWorld()
 	if (APostProcessVolume* PP = W->SpawnActor<APostProcessVolume>())
 	{
 		PP->bUnbound = true;
+		PPVol = PP;
 		FPostProcessSettings& S = PP->Settings;
 		S.bOverride_BloomIntensity = true; S.BloomIntensity = 0.35f;
 		S.bOverride_VignetteIntensity = true; S.VignetteIntensity = 0.32f;
@@ -142,13 +143,11 @@ void AGPMGameMode::SetupWorld()
 	};
 	SetCV(TEXT("r.AntiAliasingMethod"), TEXT("1"));
 	SetCV(TEXT("r.FXAA.Quality"), TEXT("4"));
-	SetCV(TEXT("r.Shadow.CSM.MaxCascades"), TEXT("2"));
-	SetCV(TEXT("r.Shadow.DistanceScale"), TEXT("0.8"));
-	SetCV(TEXT("r.AmbientOcclusionLevels"), TEXT("0"));
 	SetCV(TEXT("r.SSR.Quality"), TEXT("0"));
 	SetCV(TEXT("r.LensFlareQuality"), TEXT("0"));
 	SetCV(TEXT("r.ScreenPercentage"), TEXT("100"));
 	ScreenPct = 100;
+	ApplyGraphics();   // ombres, occlusion, lissage selon la qualité choisie dans les réglages
 }
 
 // Ambiance du circuit (thème de data.js) : direction du soleil, brouillard, puis le décor
@@ -339,6 +338,8 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("NegoLevel"), UGPMCareerSubsystem::NegoLevel, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("CareerLen"), UGPMCareerSubsystem::CareerLen, GGameUserSettingsIni);
+	GConfig->GetInt(TEXT("GPM"), TEXT("Gfx"), GfxLevel, GGameUserSettingsIni);
+	GfxLevel = FMath::Clamp(GfxLevel, 0, 2);
 	UGPMCareerSubsystem::NegoLevel = FMath::Clamp(UGPMCareerSubsystem::NegoLevel, 0, 2);
 	AGPMCar::LoadAIOptions();
 	AILevel = FMath::Clamp(AILevel, 0, 4);
@@ -403,8 +404,10 @@ void AGPMGameMode::SaveSettings()
 		GConfig->SetInt(TEXT("GPM"), TEXT("Fuel"), FuelK, GGameUserSettingsIni);
 		GConfig->SetInt(TEXT("GPM"), TEXT("NegoLevel"), UGPMCareerSubsystem::NegoLevel, GGameUserSettingsIni);
 		GConfig->SetInt(TEXT("GPM"), TEXT("CareerLen"), UGPMCareerSubsystem::CareerLen, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("GPM"), TEXT("Gfx"), GfxLevel, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
+	ApplyGraphics();
 	ApplySettings();
 }
 
@@ -1265,6 +1268,24 @@ void AGPMGameMode::RecordResult()
 		R.Circuit = CurTrack() ? CurTrack()->Name : FString();
 		RecordHonours(Pos);
 		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
+		R.OutWhy = Car->bOut ? Car->OutWhy : FString();
+		R.bRed = bRedUsed;
+		if (Pos >= 1 && !Car->bOut)
+		{
+			R.WinGap = Pos > 1 ? ResultGap(Car) : FString();
+			if (Order.IsValidIndex(Pos - 2) && !Order[Pos - 2]->bOut)
+			{
+				R.Ahead = Order[Pos - 2]->DriverName;
+				const float Gp = ResultTime(Car) - ResultTime(Order[Pos - 2]);
+				if (Gp > 0.f && Gp < 30.f) R.GapAhead = Gp;
+			}
+			if (Order.IsValidIndex(Pos) && !Order[Pos]->bOut)
+			{
+				R.Behind = Order[Pos]->DriverName;
+				const float Gp = ResultTime(Order[Pos]) - ResultTime(Car);
+				if (Gp > 0.f && Gp < 30.f) R.GapBehind = Gp;
+			}
+		}
 		const int32 RivalIdx = Pos >= 2 ? Pos - 2 : 1;
 		if (Order.IsValidIndex(RivalIdx)) R.Rival = Order[RivalIdx]->DriverName;
 		float Best = 1e9f;

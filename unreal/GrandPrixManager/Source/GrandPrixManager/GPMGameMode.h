@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/DateTime.h"
 #include "GameFramework/GameModeBase.h"
 #include "GPMTypes.h"
 #include "GPMSetup.h"
@@ -109,6 +110,9 @@ public:
 	// --- Pré-saison de janvier (GPMPreseason.cpp) : révélation de la monoplace, événements, trois journées d'essais jouables à missions ---
 	bool bTesting = false, bTestAuto = false, bReveal = false, bRevealDialog = false;
 	int32 PreStage() const;
+	/** Dates de l'hiver : 0 = 1er janvier, 1 = 20 janvier (présentation), 2 = 20 février (essais), 3 = premier Grand Prix (mars). */
+	static FDateTime PreDate(int32 Stage, int32 Year);
+	void WinterAdvance(int32 From, int32 To);
 	void StartReveal();
 	void StartPreEvents();
 	void StartTest();
@@ -221,6 +225,9 @@ public:
 	/** Images par seconde (moyenne glissante) et résolution adaptative en %. */
 	float Fps = 60.f;
 	int32 ScreenPct = 100;
+	/** Qualité graphique : 0 fluide, 1 normale, 2 ultra (ombres longues et fines, occlusion, lissage MSAA, filtrage 16x). */
+	int32 GfxLevel = 1;
+	void ApplyGraphics();
 	bool bPerfTest = false;                  // GPM.TestPerf : pas de résolution adaptative pendant la mesure
 
 	// --- Cinématiques (étape 16, cine.js) : seule la caméra bouge ---
@@ -251,6 +258,7 @@ private:
 	UPROPERTY() TObjectPtr<class ADirectionalLight> Sun;
 	UPROPERTY() TObjectPtr<class ASkyLight> SkyLight;
 	UPROPERTY() TObjectPtr<class AExponentialHeightFog> Fog;
+	UPROPERTY() TObjectPtr<class APostProcessVolume> PPVol;
 	UPROPERTY() TObjectPtr<class AGPMScenery> Scenery;
 	UPROPERTY() TObjectPtr<class UGPMEngineSound> EngineSound;
 	// sons de la course (GPMSound.cpp) : voiture la plus proche, chocs, feux, radio, foule
