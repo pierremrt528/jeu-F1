@@ -485,7 +485,7 @@ void AGPMGameMode::StartQuali()
 	for (int32 i = 0; i < N; ++i) QCum[i + 1] = QCum[i] + 2.f / FMath::Max(5.f, T->AISpeed.IsValidIndex(i) ? T->AISpeed[i] : 40.f);
 	if (QTimes.Num() == 0)
 		for (AGPMCar* C : Cars)
-			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
+			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill * C->CornerK, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
 	RadioT = 0.f;
 	Say(bRaining ? TEXT("Qualifications sous la pluie : un tour lancé, pneus pluie. Doucement sur les freins !") : TEXT("Qualifications : un tour lancé. Donne tout ! Tiens E dans les lignes droites pour vider la batterie."));
 }
@@ -1449,11 +1449,25 @@ void AGPMGameMode::ApplyCareer()
 		Car->UpSteer *= 1.f + Career->Boost(TEXT("steer"));
 		if (const UGPMSaveGame* G = Career->Save()) { Car->UpFuel *= G->Fuel; Car->Perf = Data->Teams[0].Perf * (1.f + (G->Moral - 60) / 4000.f); }
 	}
+	// vitesse en virage : les pièces du joueur (adhérence, appui) le rendent plus rapide en courbe ; le développement des rivaux
+	// leur donne le même gain (même rapport gain en virage / indice de performance que la voiture du joueur), l'équipier a la même voiture
+	const float Gp = PlayerCornerK();
+	const float Base0 = Data->Teams.Num() ? Data->Teams[0].Perf : 0.96f, Ip = Factory->PlayerPerf() / FMath::Max(0.5f, Base0);
+	const float Ratio = Ip > 1.01f && Gp > 1.005f ? FMath::Clamp((Gp - 1.f) / (Ip - 1.f), 0.5f, 2.f) : 1.2f;
 	for (AGPMCar* C : Cars)
 		if (C != Car && Data->Teams.IsValidIndex(C->TeamIdx))
+		{
 			// l'équipier roule avec la même voiture que le joueur : il profite aussi des pièces de l'usine et du moral
-			C->Perf = C->TeamIdx == Car->TeamIdx ? Factory->PlayerPerf() * (1.f + (Season->State()->Moral - 60) / 4000.f)
-				: Data->Teams[C->TeamIdx].Perf + Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
+			const float BaseT = Data->Teams[C->TeamIdx].Perf, Dev = Season->State()->RivalDev.FindRef(Data->Teams[C->TeamIdx].Name);
+			C->Perf = C->TeamIdx == Car->TeamIdx ? Factory->PlayerPerf() * (1.f + (Season->State()->Moral - 60) / 4000.f) : BaseT + Dev;
+			C->CornerK = C->TeamIdx == Car->TeamIdx ? Gp : FMath::Clamp(1.f + Ratio * Dev / FMath::Max(0.5f, BaseT), 0.9f, 1.3f);
+		}
+	UE_LOG(LogGPM, Log, TEXT("Virages : joueur ×%.3f (indice ×%.3f, rapport %.2f)"), Gp, Ip, Ratio);
+}
+
+float AGPMGameMode::PlayerCornerK() const
+{
+	return Car ? FMath::Clamp(FMath::Sqrt(FMath::Max(0.5f, float(Car->UpMu))) * FMath::Pow(FMath::Max(0.5f, float(Car->UpKd)), 0.25f), 0.9f, 1.4f) : 1.f;
 }
 
 void AGPMGameMode::Continue()

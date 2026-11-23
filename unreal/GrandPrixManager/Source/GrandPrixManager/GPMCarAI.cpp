@@ -207,7 +207,7 @@ void AGPMCar::DriveAI(float Dt)
 	// l'essence), appui perdu (aileron abîmé, air sale), et petites variations de rythme selon la régularité du pilote
 	const float GripNow = FMath::Max(0.2f, GripMul / (1.f + (Mass - 1.f) * 0.25f) * (0.4f + 0.6f * DmgKd));
 	const float Noise = 1.f + 0.06f * FMath::Max(0.f, 1.02f - Skill) * FMath::PerlinNoise1D(RaceTime * 0.07f + LaneBias * 37.f);
-	const float Sc = Skill * Noise * (bSCMode ? (Ahead ? 0.72f : 0.9f) : 1.f) * FMath::Sqrt(GripNow) * (1.f - 0.04f * Wake) * VMul * SlowMul;
+	const float Sc = Skill * CornerK * Noise * (bSCMode ? (Ahead ? 0.72f : 0.9f) : 1.f) * FMath::Sqrt(GripNow) * (1.f - 0.04f * Wake) * VMul * SlowMul;
 	float Vt = Prof(Idx) * Sc;
 	// freinage anticipé : on regarde assez loin pour s'arrêter avec les freins et l'adhérence qu'on a vraiment
 	const float GripDec = FMath::Min(1.f, GripNow) * DecK;

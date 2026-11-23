@@ -31,7 +31,7 @@ float AGPMGameMode::BaseLap() const
 	// toutes les pièces comptent (même pondération que la courbe de performance de l'usine), pas seulement la vitesse de pointe
 	const float Ups = 1.f + 0.6f * (Car->UpVTop - 1.f) + 0.15f * (Car->UpAcc - 1.f) + 0.08f * (Car->UpKd - 1.f) + 0.25f * (Car->UpMu - 1.f)
 		+ 0.04f * (Car->UpBrake - 1.f) + 0.04f * (Car->UpSteer - 1.f);
-	return LapTimeFor(T, 0.95f, Car->Perf * Ups);
+	return LapTimeFor(T, 0.95f * PlayerCornerK(), Car->Perf * Ups);   // adhérence et appui des pièces : plus vite en virage
 }
 
 // voiture sans réglage : pièces de l'usine et bonus en carrière, voiture de base en course solo
@@ -43,6 +43,7 @@ void AGPMGameMode::BaseUps()
 	if (bCareer) { ApplyCareer(); return; }
 	Car->UpVTop = Car->UpAcc = Car->UpMu = Car->UpBrake = Car->UpKd = Car->UpSteer = Car->UpFuel = 1.f;
 	Car->UpTyre = 1.f; Car->UpPit = 0.f;   // course solo : pas les pièces de la carrière (pneus, stands)
+	for (AGPMCar* C : Cars) if (C) C->CornerK = 1.f;
 }
 
 void AGPMGameMode::Restart()
@@ -80,7 +81,7 @@ void AGPMGameMode::SimQuali()
 	ResetWeather();   // qualifications : météo du départ
 	const float Mine = BaseLap() * (1.f + 0.006f * FMath::FRand()) * 0.985f * Ratio * WetLapK();
 	for (AGPMCar* C : Cars)
-		if (C != Car && !QTimes.Contains(C)) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
+		if (C != Car && !QTimes.Contains(C)) QTimes.Add(C, LapTimeFor(T, C->Skill * C->CornerK, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
 	if (float* Prev = QTimes.Find(Car)) *Prev = FMath::Min(*Prev, Mine);
 	else QTimes.Add(Car, Mine);
 	QTimes.GenerateKeyArray(QOrder);
@@ -142,7 +143,7 @@ void AGPMGameMode::SimRace()
 	for (int32 k = 0; k < Order.Num(); ++k)
 	{
 		AGPMCar* C = Order[k];
-		const float Lap = C == Car ? MyLap : LapTimeFor(T, C->Skill, C->Perf) * RaceWetK();
+		const float Lap = C == Car ? MyLap : LapTimeFor(T, C->Skill * C->CornerK, C->Perf) * RaceWetK();
 		TArray<TPair<TCHAR, int32>> St;
 		if (C == Car && Stints.Num()) St = Stints;
 		else if (AIPlans.Num()) St = AIPlans[FMath::RandRange(0, AIPlans.Num() - 1)].Stints;

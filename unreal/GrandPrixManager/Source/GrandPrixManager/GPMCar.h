@@ -111,7 +111,8 @@ public:
 	FString OutWhy;                        // « moteur », « accident »
 	/** Classée à l'arrivée : drapeau passé, ou temps calculé quand la course s'arrête juste après l'arrivée du joueur. */
 	bool Classified() const { return bFinished || (!bOut && FinProgress > 0.f); }
-	float Skill = 1.f;                     // niveau du pilote × difficulté
+	float Skill = 1.f;
+	float CornerK = 1.f;                   // IA : vitesse en virage gagnée par le développement de l'écurie (comme les pièces du joueur)                     // niveau du pilote × difficulté
 	float Lane = 0.f, LaneBias = 0.f, PassTimer = 0.f, PassSide = 1.f, YieldCd = 0.f, YieldRun = 0.f;
 	bool bYielding = false;
 	// IA : défense de la corde, erreurs de pilotage, temps de réaction au départ, drapeau bleu

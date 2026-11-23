@@ -137,6 +137,7 @@ public:
 	void GateTick();
 	void MisLap();           // fin d'un tour : usure, essence et portes du tour enregistrées
 	void MisReset();
+	float PlayerCornerK() const;   // gain de vitesse en virage des pièces du joueur (adhérence, appui)
 	void SetErsRules();      // batterie selon l'ère du règlement
 	int32 ErsEra = 0;
 	void PlayerLapLog();     // course : usure et essence du dernier tour du joueur, conseils du muret
