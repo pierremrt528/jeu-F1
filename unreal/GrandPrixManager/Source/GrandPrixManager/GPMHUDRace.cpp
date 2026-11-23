@@ -510,6 +510,7 @@ void AGPMHUD::DrawTyrePanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, fl
 	Ink(TyreName(Car->Tyre), X + 29.f * S, Y + 3.f * S, 1, 8.f, RaceText);
 	const int32 Laps = bRace ? FMath::Max(0, Car->Lap - StintLap0) : 0;
 	const FString Sub = Car->bFlat ? FString(TEXT("CREVAISON !"))
+		: bRace && GM->LapWearR > 0.f ? FString::Printf(TEXT("%d TOUR%s · USURE %d %% · %s %%/T"), Laps, Laps > 1 ? TEXT("S") : TEXT(""), FMath::RoundToInt(Car->Wear * 100.f), *Comma(FString::Printf(TEXT("%.1f"), GM->LapWearR * 100.f)))
 		: FString::Printf(TEXT("%d TOUR%s · USURE %d %%"), Laps, Laps > 1 ? TEXT("S") : TEXT(""), FMath::RoundToInt(Car->Wear * 100.f));
 	Ink(Sub, X + 29.f * S, Y + 15.f * S, 2, 5.5f, Car->bFlat ? RaceRed : RaceDim);
 	DrawRect(RaceLine, X + 9.f * S, Y + 27.f * S, 96.f * S, 1.f * S);
@@ -809,7 +810,7 @@ void AGPMHUD::DrawRace(AGPMGameMode* GM, AGPMCar* Car, float W, float H)
 		// en haut au centre, les uns sous les autres : radio, alerte (secteur, meilleur tour), voiture de sécurité
 		float TopY = M;
 		if (GM->RadioT > 0.f && !GM->Radio.IsEmpty()) TopY = DrawRadioMsg(GM->Radio, W, TopY) + 4.f * S;
-		if (GM->bTesting) TopY = DrawTestPanel(GM, W, TopY) + 4.f * S;
+		if (GM->bTesting || GM->bPractice) TopY = DrawTestPanel(GM, W, TopY) + 4.f * S;
 		if (AlertT > 0.f && !AlertTxt.IsEmpty())
 		{
 			const float A = FMath::Clamp(AlertT / 0.4f, 0.f, 1.f), AH = 14.f * S;

@@ -346,6 +346,13 @@ TArray<FGPMDialog> UGPMCareerSubsystem::RaceQuestions(const FGPMRaceCtx& R) cons
 	const int32 Gain = R.Grid - R.Pos;
 	auto S1 = [](float X) { return FString::Printf(TEXT("%.1f"), X).Replace(TEXT("."), TEXT(",")); };
 
+	// gestion des pneus (style de pilotage mesuré pendant la course)
+	if (!R.bDnf && R.Style > 8.f)
+		Q(9, FString::Printf(TEXT("Tes pneus se sont usés %s %% plus vite que ceux du plateau à %s. Ton pilotage est-il trop agressif ?"), *S1(R.Style), *Circ),
+			{ { FString(TEXT("Je freine tard, c'est ma force. Les pneus, c'est le prix à payer.")), 2, -1, -1, 0 }, { FString(TEXT("Je dois apprendre à les ménager, on y travaille avec l'ingénieur.")), 1, 2, 2, 0 }, { FString(TEXT("La voiture mange ses pneus, ce n'est pas que le pilote.")), -1, -1, -2, 0 } });
+	else if (!R.bDnf && R.Style < -8.f)
+		Q(9, FString::Printf(TEXT("Tes pneus ont tenu %s %% mieux que ceux du plateau à %s. Quel est ton secret ?"), *S1(-R.Style), *Circ),
+			{ { FString(TEXT("Anticiper les freinages et tourner en douceur. Tout simplement.")), 2, 2, 1, 0 }, { FString(TEXT("Les ingénieurs ont trouvé les bons réglages, merci à eux.")), 3, 1, 2, 0 }, { FString(TEXT("Aucun secret… et je le garde pour moi !")), 1, -1, 0, 0 } });
 	if (R.bDnf)
 	{
 		if (R.OutWhy == TEXT("moteur"))

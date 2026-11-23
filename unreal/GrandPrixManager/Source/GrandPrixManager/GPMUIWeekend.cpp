@@ -130,6 +130,8 @@ TSharedRef<SWidget> FGPMUI::TuningScreen(AGPMGameMode* GM)
 		}
 		Practice->AddSlot().AutoHeight()[ PBtns ];
 		if (bSame && !GM->PracReport.IsEmpty()) Practice->AddSlot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))[ Txt(GM->PracReport, 12, CGood, false, true) ];
+		else Practice->AddSlot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
+			[ Txt(TEXT("Trajectoire : passe dans les portes (adhérence). Pneus : un tour rapide sans user les gommes. Essence : lève le pied avant les freinages. Mieux tu réussis, plus le gain pour la course est grand."), 12, CDim, false, true) ];
 	}
 
 	UGPMSeasonSubsystem* Ss = SeasonSys();

@@ -491,6 +491,16 @@ void AGPMCar::Step(float Dt)
 		V -= Sign(V) * (FMath::Min(Want - Got, 40.f) * 0.1f * (RF > 1 ? 1.f : 0.f) + FMath::Abs(FMath::Sin(Beta)) * FMath::Abs(V) * 0.8f) * Dt;
 	}
 	Ax += ((V - V0) / Dt - Ax) * FMath::Min(1.f, Dt * 8.f);
+	// charge sur les pneus : un pilote qui freine tard et fort, freine en tournant et donne des coups de volant use davantage
+	{
+		const float Gl = FMath::Sqrt(Ax * Ax + Ay * Ay) / 40.f;
+		const float Late = FMath::Max(0.f, -Ax) / 40.f * FMath::Clamp(V / 70.f, 0.f, 1.3f);
+		const float Comb = FMath::Min(FMath::Max(0.f, -Ax), FMath::Abs(Ay)) / 25.f;
+		const float Jerk = FMath::Min(1.f, FMath::Abs(Steer - StressSteer) / FMath::Max(Dt, 0.001f) * 0.12f);
+		StressSteer = Steer;
+		const float Raw = Gl * Gl + 0.6f * Late * Late + 0.8f * Comb * Comb + 0.15f * Jerk * Jerk;
+		Stress += (Raw - Stress) * FMath::Min(1.f, Dt * 5.f);
+	}
 	Slip = FMath::Max(FMath::Max(Under, FMath::Abs(Beta) * 3.f), FMath::Max(bLock ? 0.6f : 0.f, FMath::Max(Spin, SpinT > 0 ? 0.8f : 0.f)));
 	Heading = Course + Beta;
 	X += FMath::Sin(Course) * V * Dt;

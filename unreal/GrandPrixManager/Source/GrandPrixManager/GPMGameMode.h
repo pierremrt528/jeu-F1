@@ -10,6 +10,7 @@
 class AGPMTrack;
 class AGPMCar;
 class APlayerController;
+class UInstancedStaticMeshComponent;
 
 /**
  * Mode de jeu de base. Étape 3 : charge un circuit (option ?circuit=<id>, comme le jeu web, ou commande GPM.Circuit <id>)
@@ -88,7 +89,7 @@ public:
 	FString PracReport;
 	void StartPractice(int32 Prog);
 	int32 WeekendKey() const;
-	static const TCHAR* PracticeName(int32 P) { return P == 0 ? TEXT("RÉGLAGES") : P == 1 ? TEXT("PNEUS") : TEXT("LONG RUN"); }
+	static const TCHAR* PracticeName(int32 P) { return P == 0 ? TEXT("TRAJECTOIRE") : P == 1 ? TEXT("PNEUS") : TEXT("ESSENCE"); }
 	void EndPractice();
 	void TestPenalty(uint8 Kind, float Sec);   // tests (GPM.TestSC)
 	/** Commissaires : dernier communiqué (HUD), pilote concerné, durée d'affichage ; enquête en cours. */
@@ -120,8 +121,35 @@ public:
 	void FinishPreseason();
 	/** Textes du panneau de mission affiché pendant les essais : titre, objectif, état. */
 	void TestLines(TArray<FString>& Out) const;
-	static FString TestName(int32 Day);
-	static FString TestGoal(int32 Day);
+	// missions des essais (GPMMissions.cpp) : 0 référence, 1 régularité, 2 attaque, 3 portes de trajectoire, 4 pneus, 5 essence
+	int32 TestType(int32 Day) const;
+	static FString MissionName(int32 Type);
+	static FString MissionGoal(int32 Type);
+	FString TestName(int32 Day) const { return MissionName(TestType(Day)); }
+	FString TestGoal(int32 Day) const { return MissionGoal(TestType(Day)); }
+	/** Usure des pneus (style de pilotage) et essence (accélérateur) d'une voiture pendant Dt. */
+	void WearAndFuel(AGPMCar* C, float Dt);
+	float NomWear() const;   // usure normale d'un tour pour la voiture du joueur (0-1)
+	float NomFuel() const;   // essence normale d'un tour (kg)
+	void BuildGates();
+	void ClearGates();
+	void RefreshGates();
+	void GateTick();
+	void MisLap();           // fin d'un tour : usure, essence et portes du tour enregistrées
+	void MisReset();
+	void PlayerLapLog();     // course : usure et essence du dernier tour du joueur, conseils du muret
+	int32 StintMsgStop = -1;
+	FString MisStatus(int32 Type) const;   // ligne d'état de la mission en cours (portes, usure, essence du tour)
+	int32 MisType = -1, MisLapSeen = 0, GateNext = 0, GateHit = 0;
+	TArray<int32> GateIdx;
+	TArray<uint8> GateSt;
+	TArray<float> LapWear, LapFuel, LapGate;
+	float MisW0 = 0.f, MisF0 = 0.f, PStyleSum = 0.f, PStyleDist = 0.f, LastStyle = 0.f;
+	TMap<const AGPMCar*, FVector2f> RaceStyle;   // style de pilotage de chaque voiture pendant la course (somme pondérée, distance)
+	float LapWearR = 0.f, LapFuelR = 0.f, RaceW0 = 0.f, RaceF0 = 0.f;   // usure et essence du dernier tour du joueur en course
+	int32 RaceLapSeen = 0, WearMsgLap = 0;
+	UPROPERTY() TObjectPtr<AActor> GateActor;
+	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> GateMesh;
 	/** Détruit les monoplaces et les recrée au prochain chargement de circuit (le plateau a changé : écurie rejointe, 11e écurie). */
 	void RespawnCars();
 	void ContinueCareer();

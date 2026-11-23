@@ -241,6 +241,7 @@ FString AGPMGameMode::RadioBrief() const
 	}
 	else Msg += TEXT(" · plus d'arrêt prévu");
 	if (Car->Dmg > 0.15f || Car->DmgR > 0.15f) Msg += Car->Dmg >= Car->DmgR ? TEXT(" · aileron avant abîmé") : TEXT(" · aileron arrière abîmé");
+	if (LapWearR > 0.f) Msg += FString::Printf(TEXT(" · dernier tour : usure %.1f %%, essence %.1f kg"), LapWearR * 100.f, LapFuelR);
 	if (Car->Mode != 1) Msg += FString::Printf(TEXT(" · mode %s"), *AGPMCar::ModeName(Car->Mode));
 	if (bRaining) Msg += TEXT(" · pluie");
 	else if (WxChangeAt >= 0.f && !bWxDone) Msg += bRainStart ? TEXT(" · éclaircie attendue") : TEXT(" · averse attendue");

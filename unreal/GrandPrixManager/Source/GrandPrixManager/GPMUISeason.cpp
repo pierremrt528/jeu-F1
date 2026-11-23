@@ -249,9 +249,9 @@ TSharedRef<SWidget> FGPMUI::HeroNext(AGPMGameMode* GM)
 		if (PreStage == 2)
 		{
 			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 10.f, 0.f, 0.f))
-			[ Txt(FString::Printf(TEXT("JOUR %d · %s"), Day + 1, *AGPMGameMode::TestName(Day).ToUpper()), 13, CGold, true) ];
+			[ Txt(FString::Printf(TEXT("JOUR %d · %s"), Day + 1, *GM->TestName(Day).ToUpper()), 13, CGold, true) ];
 			Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 4.f))
-			[ Txt(FString::Printf(TEXT("Objectif : %s. Réussi : recherches en avance de quelques jours et moral en hausse. Casse moteur ou accident : argent et jours perdus."), *AGPMGameMode::TestGoal(Day)), 13, CDim, false, true) ];
+			[ Txt(FString::Printf(TEXT("Objectif : %s. Réussi : recherches en avance de quelques jours et moral en hausse. Casse moteur ou accident : argent et jours perdus."), *GM->TestGoal(Day)), 13, CDim, false, true) ];
 		}
 		for (const FString& L : PreSv->TestReport) Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 1.f))[ Txt(L, 12, CFaint, false, true) ];
 		const TCHAR* Go[3] = { TEXT("ALLER AU 20 JANVIER : PRÉSENTATION"), TEXT("ALLER AU 20 FÉVRIER : ÉVÉNEMENTS"), TEXT("ROULER") };
@@ -955,6 +955,8 @@ TSharedRef<SWidget> FGPMUI::HonoursPanel()
 	Stat(TEXT("PILOTE DU JOUR"), FString::FromInt(R(TEXT("dotd"))), CText);
 	Stat(TEXT("DUEL ÉQUIPIER · GP"), R(TEXT("mateRaces")) ? FString::Printf(TEXT("%d / %d"), R(TEXT("mateBeat")), R(TEXT("mateRaces"))) : FString(TEXT("–")), CText);
 	Stat(TEXT("DUEL ÉQUIPIER · QUALIF"), R(TEXT("mateRaces")) ? FString::Printf(TEXT("%d / %d"), R(TEXT("mateQBeat")), R(TEXT("mateRaces"))) : FString(TEXT("–")), CText);
+	Stat(TEXT("GP ÉCONOMES EN PNEUS"), FString::FromInt(R(TEXT("saver"))), CText);
+	Stat(TEXT("STYLE (USURE)"), R(TEXT("styleN")) ? FString::Printf(TEXT("%+d %%"), FMath::RoundToInt(float(R(TEXT("styleSum"))) / R(TEXT("styleN")))) : FString(TEXT("–")), CText);
 	Stat(TEXT("TITRES PILOTES"), FString::FromInt(R(TEXT("dtitles"))), CGold);
 	Stat(TEXT("TITRES ÉCURIES"), FString::FromInt(R(TEXT("ttitles"))), CGold);
 	Stat(TEXT("MEILLEUR RÉSULTAT"), R(TEXT("best")) ? FString::Printf(TEXT("P%d"), R(TEXT("best"))) : FString(TEXT("–")), CText);

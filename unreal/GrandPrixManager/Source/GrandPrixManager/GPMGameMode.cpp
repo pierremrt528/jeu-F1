@@ -457,6 +457,7 @@ void AGPMGameMode::StartQuali()
 {
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
+	ClearGates(); MisReset();
 	Phase = EPhase::Quali;
 	BaseUps(); ApplySetup();
 	if (SC) { for (AGPMCar* C : Cars) C->Field.Remove(SC); SC->Destroy(); SC = nullptr; }
@@ -508,6 +509,10 @@ void AGPMGameMode::StartRace()
 {
 	const FGPMTrackData* T = CurTrack();
 	if (!T || !Car) return;
+	ClearGates();
+	PStyleSum = PStyleDist = 0.f;
+	RaceStyle.Reset();
+	RaceLapSeen = WearMsgLap = 0; StintMsgStop = -1; LapWearR = LapFuelR = 0.f;
 	for (AGPMCar* C : Cars) Park(C, false);
 	BaseUps(); ApplySetup();
 	Car->bPlayerControlled = !UGameplayStatics::HasOption(OptionsString, TEXT("demo"));   // ?demo : pilote automatique
@@ -585,6 +590,9 @@ void AGPMGameMode::StartRace()
 	FuelWarn = 0;
 	RollReliability();   // moteurs qui faibliront pendant cette course
 	bTyreWarn = false; if (RadioT < 4.f) RadioT = 0.f;   // garde le message de pénalité de grille
+	// conseil de l'ingénieur selon le style de pilotage de la dernière course
+	if (RadioT <= 0.f && LastStyle > 1.08f) Say(FString::Printf(TEXT("Muret : la dernière fois, tes pneus se sont usés %.0f %% plus vite que ceux du plateau. Freine en ligne droite, ou prévois des relais plus courts."), (LastStyle - 1.f) * 100.f));
+	else if (RadioT <= 0.f && LastStyle > 0.f && LastStyle < 0.94f) Say(FString::Printf(TEXT("Muret : la dernière fois, tes pneus ont tenu %.0f %% mieux que ceux du plateau : tu peux allonger les relais."), (1.f - LastStyle) * 100.f));
 	UE_LOG(LogGPM, Log, TEXT("Grille : %d voitures, joueur en P%d"), Grid.Num(), Slot + 1);
 	ApplySettings();
 	// survol du circuit avant les feux (une fois par Grand Prix, pas quand on recommence)
@@ -689,6 +697,7 @@ void AGPMGameMode::Tick(float DeltaSeconds)
 		TrackLimits(DeltaSeconds);
 		RadioT -= DeltaSeconds;
 		if (Phase == EPhase::Quali) UpdateSectors();
+		if (Phase == EPhase::Quali && bPractice && Car) { WearAndFuel(Car, DeltaSeconds); GateTick(); if (Car->Lap != MisLapSeen) MisLap(); }
 		if (Phase == EPhase::Quali && Car && Car->Lap >= (bPractice && PracticeProg == 2 ? 3 : 2)) { if (bPractice) EndPractice(); else EndQuali(); }
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
@@ -1018,15 +1027,10 @@ void AGPMGameMode::Strategy(float Dt)
 		{
 			C->Mode = FuelLapsLeft < LapsToRefuel(C) + 0.15f ? 2 : 1;
 		}
-		const float Len = NPts * 2.f, Dist = FMath::Abs(C->V) * Dt;
 		if (!C->PitPhase)
 		{
-			// usure : distance, glissades (fortement), sorties de piste, mode ; les pneus pluie fondent sur le sec
-			const float Slide = FMath::Abs(C->Beta) > 0.05f ? FMath::Min(1.f, FMath::Abs(C->Beta) * 4.f) : 0.f;
-			float K = (1.f + 3.5f * Slide + (C->bOffTrack ? 1.5f : 0.f)) * (C == Car ? 1.f : 0.92f) * AGPMCar::ModeWear(C->Mode) * C->UpTyre * C->SetupFx.Wear;
-			K *= AGPMCar::WetWear(C->Tyre, TrackWet);
-			C->Wear += Dist / Len * AGPMCar::TyreWpl(C->Tyre) * K;
-			if (!C->bFinished) C->Fuel = FMath::Max(0.f, C->Fuel - Dist / 1000.f * 1.7f * C->UpFuel * AGPMCar::ModeFuel(C->Mode));
+			WearAndFuel(C, Dt);   // usure selon le style de pilotage, essence selon l'accélérateur (GPMMissions.cpp)
+			if (C == Car && Phase == EPhase::Race) PlayerLapLog();
 			// pneu à 0 % : il peut éclater à tout moment, retour au stand au ralenti
 			if (!C->bFlat && C->Wear >= 1.f && FMath::FRand() < Dt * (0.03f + 0.4f * (C->Wear - 1.f)))
 			{
@@ -1048,7 +1052,9 @@ void AGPMGameMode::Strategy(float Dt)
 			else if (FuelWarn == 0 && C->Mode != 2 && C->Lap >= 1 && FuelLapsLeft < LapsToRefuel(C) - 0.05f)
 			{
 				FuelWarn = 1;
-				Say(TEXT("Muret : l'essence ne suffira pas, passe en économie (radio, touche 2)."));
+				const float NeedL = FMath::Max(0.5f, LapsToRefuel(C));
+				const float Short = FMath::Max(0.f, PerLapFuel * NeedL - C->Fuel);
+				Say(FString::Printf(TEXT("Muret : l'essence ne suffira pas, il manque %.1f kg : économise %.1f kg par tour. Passe en économie (touche 2) et lève le pied avant les freinages."), Short, Short / NeedL));
 			}
 		}
 		C->GripMul = AGPMCar::WetGrip(C->Tyre, TrackWet) * AGPMCar::LifeGrip(1.f - C->Wear) * (C->bFlat ? 0.55f : 1.f) * (1.f - 0.04f * C->Dmg - 0.03f * C->DmgR);
@@ -1291,6 +1297,7 @@ void AGPMGameMode::RecordResult()
 		R.Winner = Order.Num() ? (Order[0] == Car ? FString(TEXT("Toi")) : Order[0]->DriverName) : FString();
 		R.OutWhy = Car->bOut ? Car->OutWhy : FString();
 		R.bRed = bRedUsed;
+		R.Style = PStyleDist > 2000.f ? (PStyleSum / PStyleDist - 1.f) * 100.f : 0.f;
 		if (Pos >= 1 && !Car->bOut)
 		{
 			R.WinGap = Pos > 1 ? ResultGap(Car) : FString();
@@ -1322,6 +1329,38 @@ void AGPMGameMode::RecordResult()
 		if (Car->bOut && Car->OutWhy == TEXT("moteur")) LastLines.Add(TEXT("Casse moteur : abandon. Le pôle Fiabilité de l'usine et un motoriste plus fiable réduisent ce risque."));
 		else if (Car->bOut) LastLines.Add(TEXT("Accident : abandon, la voiture sera réparée pour le prochain Grand Prix."));
 		else if (EngineFailAt.Contains(Car.Get())) LastLines.Add(TEXT("Ennui moteur pendant la course : de la puissance perdue. Le pôle Fiabilité de l'usine réduit ce risque."));
+		if (PStyleDist > 2000.f)
+		{
+			const float St = PStyleSum / PStyleDist, Pc = (St - 1.f) * 100.f;
+			LastLines.Add(Pc > 4.f ? FString::Printf(TEXT("Pilotage : tes pneus se sont usés %.0f %% plus vite que la moyenne du plateau (freinages tardifs, virages attaqués)."), Pc)
+				: Pc < -4.f ? FString::Printf(TEXT("Pilotage : tes pneus se sont usés %.0f %% moins vite que la moyenne du plateau, belle gestion."), -Pc)
+				: FString(TEXT("Pilotage : usure des pneus dans la moyenne du plateau.")));
+			UE_LOG(LogGPM, Log, TEXT("Style de pilotage : %.2f (référence IA %.3f)"), St, AGPMCar::StressRef);
+			LastStyle = St;
+			// palmarès : courses bien gérées, style moyen de la carrière (en centièmes)
+			if (bCareer && G)
+			{
+				if (St <= 0.96f) G->Rec.FindOrAdd(TEXT("saver"))++;
+				G->Rec.FindOrAdd(TEXT("styleSum")) += FMath::RoundToInt((St - 1.f) * 100.f);
+				G->Rec.FindOrAdd(TEXT("styleN"))++;
+			}
+		}
+		// le plus doux et le plus dur avec ses pneus
+		{
+			const AGPMCar* Gentle = nullptr;
+			const AGPMCar* Rough = nullptr;
+			float GentleV = 99.f, RoughV = 0.f;
+			for (const TPair<const AGPMCar*, FVector2f>& Pr : RaceStyle)
+			{
+				if (!Pr.Key || Pr.Value.Y < 3000.f || Pr.Key->bOut) continue;
+				const float Sv = Pr.Value.X / Pr.Value.Y;
+				if (Sv < GentleV) { GentleV = Sv; Gentle = Pr.Key; }
+				if (Sv > RoughV) { RoughV = Sv; Rough = Pr.Key; }
+			}
+			auto Who = [this](const AGPMCar* Cx) { return Cx == Car.Get() ? FString(TEXT("toi")) : Cx->DriverName; };
+			if (Gentle && Rough && Gentle != Rough)
+				LastLines.Add(FString::Printf(TEXT("Gestion des pneus : le plus doux, %s ; le plus dur, %s."), *Who(Gentle), *Who(Rough)));
+		}
 		// règlement : rumeurs de refonte, règlement de l'an prochain
 		TArray<TPair<FString, FString>> RegMails;
 		Factory->EraAfterRace(G->Round, Season->NumRounds(), Season->IsOver(), RegMails, LastLines);

@@ -149,6 +149,10 @@ public:
 	/** Pneus et carburant (strategy.js) : gomme S/M/H, usure 0 (neuf) → 1 (à plat), masse du carburant. */
 	TCHAR Tyre = 'M';
 	float Wear = 0.f, Fuel = 0.f, GripMul = 1.f, Mass = 1.f;
+	// style de pilotage (GPMMissions.cpp) : charge sur les pneus lissée (gros freinages à haute vitesse, freiner en tournant,
+	// coups de volant), facteur propre à chaque pilote IA ; StressRef = moyenne du plateau, apprise en course sur les IA
+	float Stress = 0.f, StressSteer = 0.f, StyleK = 0.f;
+	static float StressRef;
 	int32 Stops = 0, TeamIdx = 0;
 	bool bBox = false;                     // rentrer au stand au prochain passage
 	TArray<TPair<TCHAR, int32>> Plan;      // stratégie d'une IA : gomme et tours de chaque relais

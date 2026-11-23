@@ -46,6 +46,7 @@ struct FGPMRaceCtx
 	FString OutWhy, Ahead, Behind, WinGap;
 	float GapAhead = -1.f, GapBehind = -1.f;
 	bool bRed = false;
+	float Style = 0.f;   // usure des pneus du joueur par rapport au plateau, en % (+ = pilotage dur)
 };
 
 /** Pilote du marché des transferts. */
