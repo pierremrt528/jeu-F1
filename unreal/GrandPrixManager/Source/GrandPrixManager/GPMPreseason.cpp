@@ -127,7 +127,13 @@ void AGPMGameMode::StartTest()
 	QTimes.Reset(); QOrder.Reset();
 	QCum.Reset();
 	TestLaps.Reset(); TestClean.Reset(); TestLapSeen = 0; TestDirty = false; TestHurt = 0.f;
-	TestRef = BaseLap();
+	// référence : le record de l'écurie sur ce circuit (+1 %), sinon le meilleur temps estimé des rivaux
+	{
+		float Pole = 0.f;
+		for (AGPMCar* C : Cars) if (C != Car) { const float Lt = LapTimeFor(T, C->Skill, C->Perf) * 0.985f; if (Pole <= 0.f || Lt < Pole) Pole = Lt; }
+		const float* Rec = G->LapRec.Find(T->Name);
+		TestRef = Rec && *Rec > 10.f ? *Rec * 1.01f : Pole > 0.f ? Pole : BaseLap();
+	}
 	MisReset();
 	if (MisType == 3) BuildGates();
 	// casse moteur possible (le risque du motoriste, un peu plus fort à l'entraînement)

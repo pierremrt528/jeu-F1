@@ -38,6 +38,7 @@ float AGPMGameMode::BaseLap() const
 void AGPMGameMode::BaseUps()
 {
 	if (!Car) return;
+	SetErsRules();
 	Car->SetupFx = FGPMSetupFx();
 	if (bCareer) { ApplyCareer(); return; }
 	Car->UpVTop = Car->UpAcc = Car->UpMu = Car->UpBrake = Car->UpKd = Car->UpSteer = Car->UpFuel = 1.f;

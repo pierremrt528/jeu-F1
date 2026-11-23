@@ -2,6 +2,7 @@
 // vent, pluie, rumeur des tribunes près de la ligne et acclamations, chocs, bips des feux et de la radio du muret.
 // Tout est fabriqué en temps réel par UGPMEngineSound (aucun fichier audio).
 #include "GPMGameMode.h"
+#include "Misc/App.h"
 #include "GPMCar.h"
 #include "GPMEngineSound.h"
 #include "GPMTypes.h"
@@ -37,6 +38,8 @@ namespace GPMSoundWatch
 			bDead = false; LastTicks = T; LastAlive = Now;
 			return;
 		}
+		// jeu en arrière-plan : le Mac coupe le son, c'est normal (pas de relance en boucle)
+		if (!FApp::HasFocus()) { LastAlive = Now; return; }
 		if (Now - LastAlive < 3.0 || Now - LastRevive < 6.0) return;
 		LastRevive = Now; bDead = true;
 		UE_LOG(LogGPM, Warning, TEXT("Son : plus de son depuis %.0f s, relance du flux audio"), Now - LastAlive);

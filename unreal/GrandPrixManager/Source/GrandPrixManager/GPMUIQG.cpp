@@ -377,7 +377,8 @@ TSharedRef<SWidget> FGPMUI::ResearchTab()
 		TSharedRef<SVerticalBox> EB = SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()[ Txt(bFut ? FString::Printf(TEXT("RÈGLEMENT %d"), At) : FString(TEXT("RÈGLEMENT EN VIGUEUR")), 12, CPurple, true) ]
 			+ SVerticalBox::Slot().AutoHeight()[ Ital(bFut ? F->NextEraName() : F->CurrentEraName(), 20, CText, 1) ]
-			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(E.Focus, 14, CGold, false, true) ];
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(E.Focus, 14, CGold, false, true) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 4.f))[ Txt(UGPMFactorySubsystem::ErsText(EI), 13, CInfo, false, true) ];
 		if (bFut)
 		{
 			EB->AddSlot().AutoHeight()[ Txt(E.Desc, 13, CDim, false, true) ];

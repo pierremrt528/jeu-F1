@@ -135,6 +135,10 @@ public:
 	struct FEra { const TCHAR* Id; const TCHAR* Name; const TCHAR* Key; const TCHAR* Focus; const TCHAR* Desc; };
 	static const FEra& EraDef(int32 I);
 	static int32 NumEras();
+	/** Batterie (ERS) selon l'ère : capacité (MJ), débit au déploiement (MJ/s), recharge (×), gain d'accélération et de vitesse. */
+	struct FErs { float Cap, Drain, Charge, Acc, Top; };
+	static FErs ErsRules(int32 Era);
+	static FString ErsText(int32 Era);
 	static FString EraName(int32 I, int32 Gen);
 	int32 EraIndex() const;
 	int32 NextEraIndex() const;

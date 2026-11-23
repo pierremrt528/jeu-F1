@@ -281,8 +281,8 @@ bool UGPMFactorySubsystem::Intersaison(int32 NextYear, FString& OutSubj, FString
 			Parts ? *FString::Printf(TEXT("%d pièce%s préparée%s l'an dernier équipe%s ta voiture"), Parts, Parts > 1 ? TEXT("s") : TEXT(""), Parts > 1 ? TEXT("s") : TEXT(""), Parts > 1 ? TEXT("nt") : TEXT(""))
 				: TEXT("aucune pièce préparée l'an dernier, tout est à construire"), G->EraAt - 1);
 		OutSubj = FString::Printf(TEXT("%s : le nouveau règlement entre en vigueur"), *Name);
-		OutBody = FString::Printf(TEXT("%s\n%s\n\nToutes les écuries repartent de zéro : %d pièce%s de l'ancienne voiture %s, %d pièce%s de la nouvelle voiture %s déjà prête%s.\n\nLa hiérarchie est rebattue : les écuries qui ont le mieux préparé cette saison partent devant."),
-			E.Focus, E.Desc, Lost, Lost > 1 ? TEXT("s") : TEXT(""), Lost > 1 ? TEXT("sont retirées") : TEXT("est retirée"), Parts, Parts > 1 ? TEXT("s") : TEXT(""), Parts > 1 ? TEXT("sont") : TEXT("est"), Parts > 1 ? TEXT("s") : TEXT(""));
+		OutBody = FString::Printf(TEXT("%s\n%s\n%s\n\nToutes les écuries repartent de zéro : %d pièce%s de l'ancienne voiture %s, %d pièce%s de la nouvelle voiture %s déjà prête%s.\n\nLa hiérarchie est rebattue : les écuries qui ont le mieux préparé cette saison partent devant."),
+			E.Focus, E.Desc, *ErsText(NewI), Lost, Lost > 1 ? TEXT("s") : TEXT(""), Lost > 1 ? TEXT("sont retirées") : TEXT("est retirée"), Parts, Parts > 1 ? TEXT("s") : TEXT(""), Parts > 1 ? TEXT("sont") : TEXT("est"), Parts > 1 ? TEXT("s") : TEXT(""));
 		EraKey = -1;
 		SyncEra();
 		Persist();
@@ -326,8 +326,8 @@ bool UGPMFactorySubsystem::EraPublished(FString& OutSubj, FString& OutBody) cons
 	if (!G || !G->bCreated || G->Year != G->EraAt - 1) return false;
 	const FEra& E = EraDef(G->EraNi);
 	OutSubj = FString::Printf(TEXT("Officiel : refonte totale du règlement en %d"), G->EraAt);
-	OutBody = FString::Printf(TEXT("Le règlement %d est publié : %s.\n%s\n%s\n\nAu 1er janvier %d, toutes les pièces de toutes les écuries repartent de zéro et les arbres de développement changent.\nTu peux développer la voiture %d dès aujourd'hui (QG, Recherche, onglet « Voiture %d »). Attention : les ateliers et le budget sont partagés avec la voiture %d."),
-		G->EraAt, *NextEraName(), E.Focus, E.Desc, G->EraAt, G->EraAt, G->EraAt, G->Year);
+	OutBody = FString::Printf(TEXT("Le règlement %d est publié : %s.\n%s\n%s\n%s\n\nAu 1er janvier %d, toutes les pièces de toutes les écuries repartent de zéro et les arbres de développement changent.\nTu peux développer la voiture %d dès aujourd'hui (QG, Recherche, onglet « Voiture %d »). Attention : les ateliers et le budget sont partagés avec la voiture %d."),
+		G->EraAt, *NextEraName(), E.Focus, E.Desc, *ErsText(G->EraNi), G->EraAt, G->EraAt, G->EraAt, G->Year);
 	return true;
 }
 
@@ -335,4 +335,25 @@ void UGPMFactorySubsystem::ForceReformSoon()
 {
 	EnsureEra();
 	if (UGPMSaveGame* G = Save()) { G->EraAt = G->Year + 1; Persist(); }
+}
+
+// batterie selon le règlement : l'ère Hybride a une grosse batterie puissante, l'Effet de sol une petite,
+// l'Aéro active une batterie qui se vide vite mais pousse fort, la Sécurité une batterie douce qui dure
+UGPMFactorySubsystem::FErs UGPMFactorySubsystem::ErsRules(int32 Era)
+{
+	static const FErs R[5] = {
+		{ 4.f, 0.5f, 1.f, 0.12f, 0.03f },     // Fondation : 8 s
+		{ 2.5f, 0.5f, 0.8f, 0.10f, 0.02f },   // Effet de sol : 5 s
+		{ 8.f, 0.6f, 1.4f, 0.18f, 0.045f },   // Hybride : 13 s
+		{ 4.f, 0.7f, 1.1f, 0.15f, 0.035f },   // Aéro active : 6 s
+		{ 5.f, 0.4f, 0.8f, 0.08f, 0.02f } };  // Sécurité : 12 s
+	return R[FMath::Clamp(Era, 0, 4)];
+}
+
+FString UGPMFactorySubsystem::ErsText(int32 Era)
+{
+	const FErs E = ErsRules(Era);
+	return FString::Printf(TEXT("Batterie : %s MJ, se vide en %.0f s (%s MJ/s), +%.0f %% d'accélération, recharge %s."),
+		*FString::Printf(TEXT("%.1f"), E.Cap).Replace(TEXT("."), TEXT(",")), E.Cap / E.Drain, *FString::Printf(TEXT("%.1f"), E.Drain).Replace(TEXT("."), TEXT(",")),
+		E.Acc * 100.f, E.Charge >= 1.3f ? TEXT("rapide") : E.Charge >= 1.f ? TEXT("normale") : TEXT("lente"));
 }

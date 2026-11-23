@@ -10,6 +10,7 @@
 #include "GrandPrixManager.h"
 #include "GPMCar.h"
 #include "GPMSeason.h"
+#include "GPMFactory.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
@@ -17,6 +18,7 @@
 #include "Engine/GameInstance.h"
 
 float AGPMCar::StressRef = 0.35f;
+float AGPMCar::ErsDrainK = 1.f / 8.f, AGPMCar::ErsChargeK = 1.f, AGPMCar::ErsAccK = 0.12f, AGPMCar::ErsTopK = 0.03f;
 
 namespace GPMMis
 {
@@ -280,4 +282,18 @@ void AGPMGameMode::PlayerLapLog()
 	}
 	RaceLapSeen = Car->Lap;
 	RaceW0 = Car->Wear; RaceF0 = Car->Fuel;
+}
+
+// ---------- batterie selon le règlement ----------
+void AGPMGameMode::SetErsRules()
+{
+	const UGPMFactorySubsystem* F = GetGameInstance()->GetSubsystem<UGPMFactorySubsystem>();
+	const UGPMSeasonSubsystem* S = GetGameInstance()->GetSubsystem<UGPMSeasonSubsystem>();
+	ErsEra = bCareer && F && S && S->State() && S->State()->bCreated ? F->EraIndex() : 0;
+	const UGPMFactorySubsystem::FErs E = UGPMFactorySubsystem::ErsRules(ErsEra);
+	// les fractions de la batterie : la recharge de référence (4 MJ) est celle de l'ère Fondation
+	AGPMCar::ErsDrainK = E.Drain / FMath::Max(0.5f, E.Cap);
+	AGPMCar::ErsChargeK = E.Charge * 4.f / FMath::Max(0.5f, E.Cap);
+	AGPMCar::ErsAccK = E.Acc;
+	AGPMCar::ErsTopK = E.Top;
 }

@@ -715,6 +715,7 @@ TSharedRef<SWidget> FGPMUI::EraCard(AGPMGameMode* GM)
 		Box->AddSlot().AutoHeight()[ SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("GRANDE REFONTE DU RÈGLEMENT %d"), At))).Font(GPMUIStyle::Face(2, 12)).ColorAndOpacity(FSlateColor(GPMUIStyle::Lift(Vio, 1.4f))) ];
 		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Ital(F->NextEraName(), 22, CText, 1) ];
 		Box->AddSlot().AutoHeight()[ Txt(E.Focus, 14, CGold, true, true) ];
+		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 2.f))[ Txt(UGPMFactorySubsystem::ErsText(F->NextEraIndex()), 13, CInfo, false, true) ];
 		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f))[ Txt(FString::Printf(TEXT("%s Au 1er janvier %d, toutes les pièces de toutes les écuries repartent de zéro et les arbres changent. Développe dès maintenant la voiture %d : mêmes ateliers et même budget que la voiture %d."), E.Desc, At, At, G->Year), 13, CDim, false, true) ];
 		Box->AddSlot().AutoHeight().Padding(FMargin(0.f, 4.f, 0.f, 10.f))[ Txt(FString::Printf(TEXT("%d pièce%s prête%s pour la voiture %d."), N, N > 1 ? TEXT("s") : TEXT(""), N > 1 ? TEXT("s") : TEXT(""), At), 14, CText, true) ];
 		TWeakObjectPtr<AGPMGameMode> WGM = GM;

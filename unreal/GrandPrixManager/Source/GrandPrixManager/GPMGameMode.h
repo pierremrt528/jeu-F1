@@ -137,6 +137,8 @@ public:
 	void GateTick();
 	void MisLap();           // fin d'un tour : usure, essence et portes du tour enregistrées
 	void MisReset();
+	void SetErsRules();      // batterie selon l'ère du règlement
+	int32 ErsEra = 0;
 	void PlayerLapLog();     // course : usure et essence du dernier tour du joueur, conseils du muret
 	int32 StintMsgStop = -1;
 	FString MisStatus(int32 Type) const;   // ligne d'état de la mission en cours (portes, usure, essence du tour)

@@ -156,6 +156,8 @@ public:
 	// batterie (ERS) : 0-1, déployée en tenant E (ou Maj gauche) pour plus de puissance, rechargée au freinage et pied levé
 	float Ers = 1.f;
 	bool bBoost = false, bBoostOn = false;
+	// règles de la batterie (ère du règlement, posées par le mode de jeu) : fraction vidée par seconde, recharge, gains
+	static float ErsDrainK, ErsChargeK, ErsAccK, ErsTopK;
 	int32 Stops = 0, TeamIdx = 0;
 	bool bBox = false;                     // rentrer au stand au prochain passage
 	TArray<TPair<TCHAR, int32>> Plan;      // stratégie d'une IA : gomme et tours de chaque relais
