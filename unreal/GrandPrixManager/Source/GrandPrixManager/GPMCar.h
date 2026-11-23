@@ -153,6 +153,9 @@ public:
 	// coups de volant), facteur propre à chaque pilote IA ; StressRef = moyenne du plateau, apprise en course sur les IA
 	float Stress = 0.f, StressSteer = 0.f, StyleK = 0.f;
 	static float StressRef;
+	// batterie (ERS) : 0-1, déployée en tenant E (ou Maj gauche) pour plus de puissance, rechargée au freinage et pied levé
+	float Ers = 1.f;
+	bool bBoost = false, bBoostOn = false;
 	int32 Stops = 0, TeamIdx = 0;
 	bool bBox = false;                     // rentrer au stand au prochain passage
 	TArray<TPair<TCHAR, int32>> Plan;      // stratégie d'une IA : gomme et tours de chaque relais

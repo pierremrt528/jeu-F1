@@ -487,7 +487,7 @@ void AGPMGameMode::StartQuali()
 		for (AGPMCar* C : Cars)
 			if (C != Car) QTimes.Add(C, LapTimeFor(T, C->Skill, C->Perf) * (1.f + 0.006f * (FMath::FRand() - 0.3f)) * 0.985f * WetLapK());
 	RadioT = 0.f;
-	Say(bRaining ? TEXT("Qualifications sous la pluie : un tour lancé, pneus pluie. Doucement sur les freins !") : TEXT("Qualifications : un tour lancé. Donne tout !"));
+	Say(bRaining ? TEXT("Qualifications sous la pluie : un tour lancé, pneus pluie. Doucement sur les freins !") : TEXT("Qualifications : un tour lancé. Donne tout ! Tiens E dans les lignes droites pour vider la batterie."));
 }
 
 void AGPMGameMode::EndQuali()

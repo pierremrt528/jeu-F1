@@ -222,6 +222,9 @@ void AGPMCar::DriveAI(float Dt)
 	if (bYielding) Vt *= 0.9f;
 	if (bOffTrack) Vt = FMath::Min(Vt, 25.f);
 
+	// batterie : déployée pour attaquer dans l'aspiration de la voiture de devant
+	bBoost = Ers > 0.25f && Slipstream > 0.35f && !bYielding && !bSCMode;
+	if (bBoost) Vt *= 1.02f;
 	// pédales dosées (plus de coups de gaz tout-ou-rien) : un peu d'avance au gaz, frein proportionnel à l'écart
 	const float Err = Vt - V;
 	if (Err > -0.6f) { Throttle = FMath::Clamp(0.6f + Err * 0.6f, 0.f, 1.f); Brake = 0.f; }

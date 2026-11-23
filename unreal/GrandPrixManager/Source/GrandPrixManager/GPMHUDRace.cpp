@@ -531,6 +531,13 @@ void AGPMHUD::DrawTyrePanel(AGPMGameMode* GM, AGPMCar* Car, float X, float Y, fl
 	DrawRect(RaceLine, X + 9.f * S, Y + 56.f * S, 96.f * S, 2.f * S);
 	DrawRect(FuelCol, X + 9.f * S, Y + 56.f * S, 96.f * S * Frac, 2.f * S);
 
+	// batterie (ERS) : jauge verticale entre le texte et la silhouette, violette pendant le déploiement (touche E)
+	{
+		const float Bx = X + 110.f * S, By = Y + 8.f * S, Bh = 48.f * S, Fill = FMath::Clamp(Car->Ers, 0.f, 1.f);
+		DrawRect(RaceLine, Bx, By, 4.f * S, Bh);
+		DrawRect(Car->bBoostOn ? FLinearColor(0.7f, 0.4f, 1.f, 1.f) : FLinearColor(0.25f, 0.75f, 1.f, 1.f), Bx, By + Bh * (1.f - Fill), 4.f * S, Bh * Fill);
+		Ink(TEXT("E"), Bx - 0.5f * S, Y + 1.f * S, 2, 5.f, RaceDim);
+	}
 	// silhouette vue de dessus : ailerons selon les dégâts, pneus selon l'usure
 	auto Wing = [](float D, bool bOff) { return bOff || D > 0.5f ? RaceRed : D > 0.15f ? RaceYellow : FLinearColor(0.55f, 0.58f, 0.64f, 1.f); };
 	const float Cx = X + PW - 24.f * S, Ty = Y + 7.f * S;

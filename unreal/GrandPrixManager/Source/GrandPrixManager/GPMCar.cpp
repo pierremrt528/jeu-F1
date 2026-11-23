@@ -250,6 +250,7 @@ void AGPMCar::PlaceOnTrack(const FGPMTrackData* InTrack, int32 Slot)
 	PitPhase = 0; Wear = 0.f; Stops = 0; bBox = false;
 	// nouvelle séance : voiture réparée, mode normal
 	Mode = 1; PowerMul = AccMul = 1.f;
+	Ers = 1.f; bBoost = bBoostOn = false;
 	Dmg = DmgR = DmgNew = DmgNewR = ContactT = 0.f; DmgKd = RwKd = 1.f;
 	bFlat = bAdvised = false;
 	RepairWings();
@@ -311,6 +312,7 @@ void AGPMCar::ReadKeyboard(float Dt)
 	Steer = SteerSmooth;
 	Throttle = FMath::Max(TouchGas, Down(EKeys::Up, EKeys::Z) || PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f);
 	Brake = FMath::Max(TouchBrake, Down(EKeys::Down, EKeys::S) || PC->IsInputKeyDown(EKeys::SpaceBar) ? 1.f : 0.f);
+	bBoost = PC->IsInputKeyDown(EKeys::E) || PC->IsInputKeyDown(EKeys::LeftShift);
 	if (PC->WasInputKeyJustPressed(EKeys::C)) ToggleCamera();
 	if (PC->WasInputKeyJustPressed(EKeys::R) && Track)   // remettre sur la piste, à l'arrêt, au milieu
 	{
@@ -395,7 +397,8 @@ void AGPMCar::Step(float Dt)
 	const FGPMSetupFx& Fx = SetupFx;
 	const float Bottoming = 1.f - 0.15f * Fx.Bottom * FMath::Abs(Bump) * FMath::Clamp((V - 55.f) / 25.f, 0.f, 1.f);
 	const float Grip = GroundGrip * (bKerb ? 0.9f * Fx.Kerb : 1.f) * (1.f + 0.03f * Fx.Bump * Bump * FMath::Min(1.f, V / 60.f)) * Bottoming;
-	const float VTopNow = VTop * Perf * UpVTop * Fx.VTop * PowerMul * (1.f - 0.02f * Dmg) * (bRwOff ? 1.03f : 1.f) * (Ground == 2 ? 0.4f : 1.f) * (1.f + 0.07f * Slipstream);
+	bBoostOn = bBoost && Ers > 0.f && Throttle > 0.5f && V > 5.f;
+	const float VTopNow = (bBoostOn ? 1.03f : 1.f) * VTop * Perf * UpVTop * Fx.VTop * PowerMul * (1.f - 0.02f * Dmg) * (bRwOff ? 1.03f : 1.f) * (Ground == 2 ? 0.4f : 1.f) * (1.f + 0.07f * Slipstream);
 
 	// adhérence par essieu : transfert de masse, appui aéro
 	const float Lt = FMath::Clamp(-Ax / 40.f, -0.35f, 0.35f);
@@ -417,7 +420,7 @@ void AGPMCar::Step(float Dt)
 	if (Throttle > 0 && V < -0.5f) A = 30.f * Throttle;
 	else if (Throttle > 0)
 	{
-		float Ad = Throttle * Acc * Perf * UpAcc * Fx.Acc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
+		float Ad = (bBoostOn ? 1.12f : 1.f) * Throttle * Acc * Perf * UpAcc * Fx.Acc * AccMul / Mass * (1 - FMath::Pow(FMath::Max(V, 0.f) / VTopNow, 2.2f));
 		const float Uy = FMath::Min(0.95f, FMath::Abs(Ay) / CapR);
 		// différentiel bloqué : meilleure motricité en sortie de virage lent
 		const float Room = FMath::Max(CapR * 0.2f, CapR * 0.65f * Fx.MuLong * (0.92f + 0.16f * Fx.Diff) * FMath::Sqrt(1 - Uy * Uy));
@@ -501,6 +504,9 @@ void AGPMCar::Step(float Dt)
 		const float Raw = Gl * Gl + 0.6f * Late * Late + 0.8f * Comb * Comb + 0.15f * Jerk * Jerk;
 		Stress += (Raw - Stress) * FMath::Min(1.f, Dt * 5.f);
 	}
+	// batterie : 8 s de déploiement à pleine charge ; recharge au freinage (selon la vitesse), un peu pied levé, très peu sinon
+	if (bBoostOn) Ers = FMath::Max(0.f, Ers - Dt / 8.f);
+	else Ers = FMath::Min(1.f, Ers + Dt * (0.05f * Brake * FMath::Clamp(V / 60.f, 0.f, 1.5f) + (Throttle < 0.05f ? 0.03f : 0.004f)));
 	Slip = FMath::Max(FMath::Max(Under, FMath::Abs(Beta) * 3.f), FMath::Max(bLock ? 0.6f : 0.f, FMath::Max(Spin, SpinT > 0 ? 0.8f : 0.f)));
 	Heading = Course + Beta;
 	X += FMath::Sin(Course) * V * Dt;
