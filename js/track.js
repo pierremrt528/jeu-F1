@@ -143,7 +143,7 @@ export function pitLane(track) {
   const sm = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
   // longueur de la voie selon le circuit (def.pit : 0,4 courte … 2 très longue) → temps perdu à chaque arrêt
   const sc = track.def?.pit ?? 1, e1 = -125 - Math.max(10, Math.round(15 + 60 * (sc - 1))), x0 = -8 + Math.max(28, Math.round(78 + 100 * (sc - 1)));
-  const P = { half, wall, lat, e0: e1 - 50, e1, x0, x1: x0 + 40 };
+  const P = { half, wall, lat, e0: e1 - 50, e1, x0, x1: x0 + 40, ...(track.def?.pitLane || {}) };   // pitLane : voie sur mesure (rue courte)
   // temps perdu : voie au limiteur (22 m/s) comparée à la vitesse de course sur le même tronçon, + arrêt
   let loss = 5.2;
   if (track.V) for (let k = P.e0; k <= P.x1; k++) {

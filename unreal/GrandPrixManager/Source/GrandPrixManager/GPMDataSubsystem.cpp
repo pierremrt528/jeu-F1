@@ -207,6 +207,12 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 		if ((*Pit)->TryGetNumberField(TEXT("x0"), D)) T.PitX0 = int32(D);
 		if ((*Pit)->TryGetNumberField(TEXT("x1"), D)) T.PitX1 = int32(D);
 	}
+	O->TryGetBoolField(TEXT("street"), T.bStreet);
+	if (const TArray<TSharedPtr<FJsonValue>>* Tun = nullptr; O->TryGetArrayField(TEXT("tunnel"), Tun) && Tun->Num() == 2)
+	{
+		T.TunK0 = int32((*Tun)[0]->AsNumber()); T.TunK1 = int32((*Tun)[1]->AsNumber());
+		if (T.TunK0 > T.TunK1) Swap(T.TunK0, T.TunK1);
+	}
 	{
 		// trajectoire : courbure brute lissée sur ±22 points, −260 × courbure, bornée (comme track.js)
 		const int32 N = X.Num();

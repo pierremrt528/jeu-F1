@@ -4,7 +4,7 @@ Jeu mobile (PWA) de **course de monoplaces en 3D** doublé d'une **gestion d'éc
 Jouable dans le navigateur du téléphone, installable sur l'écran d'accueil. Langue du jeu : français.
 
 ## Règles du projet
-- **Jeu original, univers 100 % fictif** : écuries, pilotes, circuits, logos et livrées inventés. Aucun nom, logo, tracé ou marque réels (F1, FIA, écuries, pilotes, circuits existants), et pas de reproduction d'un jeu existant.
+- **Jeu original, univers 100 % fictif** : écuries, pilotes, circuits, logos et livrées inventés. Aucun nom, logo, tracé ou marque réels (F1, FIA, écuries, pilotes, circuits existants), et pas de reproduction d'un jeu existant. Seule exception, demandée par le joueur : le « Circuit de Principauté » (`principaute`), tracé réel d'un circuit urbain en bord de mer, sous ce nom inventé et sans aucune marque.
 - **Mobile d'abord** : course en paysage (tester à 844×390), menus utilisables aussi en portrait (390×844). Commandes tactiles multi-touch, inclinaison du téléphone en option, clavier sur ordinateur.
 - **Performance** : viser 60 i/s sur un téléphone milieu de gamme. Low-poly, une géométrie par voiture, décor instancié, pas d'ombres temps réel, brouillard pour limiter la distance d'affichage, résolution adaptative.
 - **Simple** : JS vanilla en modules ES + Three.js (copie locale dans `lib/`, pas de CDN, pas d'étape de build, pas d'autre dépendance).

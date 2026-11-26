@@ -127,7 +127,8 @@ void AGPMScenery::PlaceDecor()
 		for (int32 K = -4 * 31 + 8 - 15; K <= 1 * 31 + 8 + 15; K += 10) { const int32 i = Wrap(K); Occupied.Add(FVector(PtX(i, PitOff), PtZ(i, PitOff), 30.f)); }
 	}
 
-	// panneaux publicitaires derrière le mur, alternés, plus nombreux à l'extérieur des virages
+	// panneaux publicitaires derrière le mur, alternés, plus nombreux à l'extérieur des virages (pas en ville sur mesure : façades)
+	if (!bDeco)
 	{
 		float Side = 1.f;
 		for (int32 i = 0; i < N; i += FMath::Max(1, FMath::RoundToInt((150.f + Rd() * 90.f) / 2.f)))
@@ -141,7 +142,7 @@ void AGPMScenery::PlaceDecor()
 		}
 	}
 	// postes de commissaires tous les ~300 m, côté extérieur du virage suivant
-	for (int32 i = 60; i < N; i += 150)
+	for (int32 i = 60; i < N && !bDeco; i += 150)
 	{
 		float S = 1.f;
 		for (int32 k = 0; k < 60; ++k) { const float C = Cw[Wrap(i + k)]; if (FMath::Abs(C) > 1.f / 250.f) { S = C > 0.f ? 1.f : -1.f; break; } }
@@ -166,6 +167,7 @@ void AGPMScenery::PlaceDecor()
 		}
 	}
 	// tours de télévision à l'extérieur des grands virages, 4 au plus, espacées
+	if (!bDeco)
 	{
 		TArray<int32> Big;
 		for (int32 i = 0; i < N; ++i) if (FMath::Abs(Cw[i]) > 1.f / 160.f) Big.Add(i);
@@ -186,6 +188,7 @@ void AGPMScenery::PlaceDecor()
 		}
 	}
 	// mâts d'éclairage : course au crépuscule, sinon quelques-uns le long de la ligne droite des stands
+	if (!bDeco)
 	{
 		const bool bNight = T.Theme.Sun.Z < 0.2f;
 		const int32 Step = bNight ? 35 : 9999;
@@ -229,6 +232,7 @@ void AGPMScenery::BuildDecorMeshes()
 {
 	for (UProceduralMeshComponent* M : DecorMeshes) if (M) M->DestroyComponent();
 	DecorMeshes.Reset();
+	DecoMeshNames.Reset();
 	if (DecorItems.Num() == 0) return;
 	UMaterialInstanceDynamic* Mat = GPMArt::Make(TEXT("M_GPM_Lit"), this);
 	if (Mat)
@@ -246,12 +250,19 @@ void AGPMScenery::BuildDecorMeshes()
 	{
 		const FDecorModel* M = DecorModels.Find(E.Key);
 		if (!M || E.Value.Num() == 0) continue;
+		// beaucoup d'instances (ville sur mesure) : un maillage par carré de 500 m, écarté hors du champ et des cascades d'ombre
+		TMap<int64, TArray<FDecorItem>> Groups;
+		const bool bSplit = E.Value.Num() > 40;
+		for (const FDecorItem& It : E.Value)
+			Groups.FindOrAdd(bSplit ? (int64(FMath::FloorToInt(It.X / 500.f)) << 32) ^ int64(uint32(FMath::FloorToInt(It.Z / 500.f))) : 0).Add(It);
+		for (const TPair<int64, TArray<FDecorItem>>& Grp : Groups)
+		{
 		TArray<FVector> V, Nrm; TArray<FLinearColor> Col; TArray<int32> Idx;
-		V.Reserve(M->P.Num() * E.Value.Num()); Nrm.Reserve(V.Max()); Col.Reserve(V.Max()); Idx.Reserve(M->I.Num() * E.Value.Num());
+		V.Reserve(M->P.Num() * Grp.Value.Num()); Nrm.Reserve(V.Max()); Col.Reserve(V.Max()); Idx.Reserve(M->I.Num() * Grp.Value.Num());
 		// sommets des faces publicitaires (triangles à partir de Ad) : couleur de la marque
 		TArray<bool> IsAd; IsAd.SetNumZeroed(M->P.Num());
 		if (M->Ad >= 0) for (int32 k = M->Ad; k < M->I.Num(); ++k) IsAd[M->I[k]] = true;
-		for (const FDecorItem& It : E.Value)
+		for (const FDecorItem& It : Grp.Value)
 		{
 			const int32 Base = V.Num();
 			const float C = FMath::Cos(It.Ry), S = FMath::Sin(It.Ry);
@@ -280,14 +291,30 @@ void AGPMScenery::BuildDecorMeshes()
 		UProceduralMeshComponent* PM = NewObject<UProceduralMeshComponent>(this);
 		PM->SetupAttachment(RootComponent);
 		PM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		PM->CastShadow = E.Key == TEXT("garage") || E.Key == TEXT("motorhome") || E.Key == TEXT("tablier");
+		PM->CastShadow = E.Key == TEXT("garage") || E.Key == TEXT("motorhome") || E.Key == TEXT("tablier") || (bBigShadows && bDeco && E.Key != TEXT("lampadaire"));
 		PM->bAffectDistanceFieldLighting = false;
 		PM->CreateMeshSection_LinearColor(0, V, Idx, Nrm, TArray<FVector2D>(), Col, TArray<FProcMeshTangent>(), false);
 		PM->SetMaterial(0, Mat ? static_cast<UMaterialInterface*>(Mat) : VertexMat.Get());
 		PM->SetCullDistance(E.Key.StartsWith(TEXT("imm-")) ? 0.f : 180000.f);
 		PM->RegisterComponent();
 		DecorMeshes.Add(PM);
-		Total += E.Value.Num();
+		DecoMeshNames.Add(E.Key);
+		Total += Grp.Value.Num();
+		}
 	}
 	UE_LOG(LogGPM, Log, TEXT("Décors Blender : %d objets en %d maillages"), Total, DecorMeshes.Num());
+}
+
+// Ombres portées des grands décors de la ville sur mesure (immeubles, casino, palais, yachts) : qualité Ultra et Maximale
+void AGPMScenery::SetBigShadows(bool bOn)
+{
+	bBigShadows = bOn;
+	if (!bDeco) return;
+	for (int32 k = 0; k < DecorMeshes.Num(); ++k)
+		if (UProceduralMeshComponent* PM = DecorMeshes[k])
+		{
+			const FString& Nm = DecoMeshNames.IsValidIndex(k) ? DecoMeshNames[k] : FString();
+			if (Nm == TEXT("garage") || Nm == TEXT("motorhome") || Nm == TEXT("tablier") || Nm == TEXT("lampadaire")) continue;
+			PM->SetCastShadow(bOn);
+		}
 }

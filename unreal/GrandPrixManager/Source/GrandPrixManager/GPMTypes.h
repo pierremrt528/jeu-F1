@@ -81,6 +81,10 @@ struct FGPMTrackData
 	// Voie des stands (pitLane de track.js) : indices signés par rapport à la ligne (entrée e0→e1, sortie x0→x1), côté droit
 	float PitHalf = 7.f, PitLat = 22.f, PitLoss = 22.f;
 	int32 PitE0 = -190, PitE1 = -140, PitX0 = 70, PitX1 = 110;
+	// circuit urbain (rails de sécurité, décor sur mesure tracks/<id>_deco.json) et tunnel couvert (échantillons TunK0 à TunK1)
+	bool bStreet = false;
+	int32 TunK0 = -1, TunK1 = -1;
+	bool InTunnel(int32 i, int32 Margin = 0) const { return TunK0 >= 0 && i >= TunK0 - Margin && i <= TunK1 + Margin; }
 	int32 PitK(int32 i) const { const int32 N = WX.Num(); return i > N / 2 ? i - N : i; }
 	float PitLatAt(float K) const
 	{

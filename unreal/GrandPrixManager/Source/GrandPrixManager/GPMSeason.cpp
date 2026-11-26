@@ -57,6 +57,11 @@ void UGPMSeasonSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	else if (S && S->Calendar.Num() > 0) CopySlot(SaveSlot, SaveSlot + TEXT("-secours"));   // la partie est saine : copie de secours du lancement
 	if (!S || S->Calendar.Num() == 0) NewSeason();
+	// Circuit de Principauté (à la place de Castelmare) : les manches pas encore courues d'une partie en cours le reçoivent
+	if (UGPMDataSubsystem* Cd = GetGameInstance()->GetSubsystem<UGPMDataSubsystem>())
+		if (Cd->Calendar.Contains(TEXT("principaute")) && !S->Calendar.Contains(TEXT("principaute")))
+			for (int32 r = FMath::Max(0, S->Round); r < S->Calendar.Num(); ++r)
+				if (S->Calendar[r] == TEXT("castelmare")) { S->Calendar[r] = TEXT("principaute"); break; }
 	if (S->Version > SaveVersion) UE_LOG(LogGPM, Warning, TEXT("Sauvegarde écrite par une version plus récente du jeu (%d > %d)"), S->Version, SaveVersion);
 	UE_LOG(LogGPM, Log, TEXT("Saison %d : manche %d / %d"), S->Year, S->Round + 1, S->Calendar.Num());
 }

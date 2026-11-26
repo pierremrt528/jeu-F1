@@ -6,7 +6,7 @@ import { SPEC } from './car.js';
 import { DS } from './track.js';
 
 // Calendrier : 22 Grands Prix de mars à début décembre ; la saison va du 1er janvier au 31 décembre.
-export const CALENDAR = ['qaltara', 'sahrane', 'coralia', 'neokyara', 'miravel', 'castelmare', 'valmont', 'sorrane', 'brumenval', 'rocheval', 'veldmar',
+export const CALENDAR = ['qaltara', 'sahrane', 'coralia', 'neokyara', 'miravel', 'principaute', 'valmont', 'sorrane', 'brumenval', 'rocheval', 'veldmar',
   'oberthal', 'sierra', 'varenne', 'kerlan', 'nordfjell', 'solenza', 'aurelia', 'kasbara', 'portazur', 'tessaline', 'brekka'];
 // jours entre deux GP : week-ends consécutifs (7), 2 ou 3 semaines, pause d'été de 5 semaines (mercato)
 export const GAPS = [14, 21, 7, 14, 14, 7, 14, 7, 14, 7, 35, 7, 14, 7, 21, 14, 7, 14, 7, 14, 7];

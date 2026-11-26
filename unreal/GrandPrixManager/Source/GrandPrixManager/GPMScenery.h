@@ -7,6 +7,8 @@
 class UProceduralMeshComponent;
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UPointLightComponent;
+class FJsonValue;
 struct FGPMTrackData;
 
 /**
@@ -31,6 +33,8 @@ public:
 	/** Mécaniciens du carré du joueur (GPMPitCrew.cpp) : 0 devant le garage, 1 prêts (voiture qui arrive, ou stop-and-go :
 	 *  personne ne touche la voiture), 2 au travail autour de la voiture arrêtée. */
 	void SetCrew(int32 State, const FVector& CarPos, const FVector& CarFwd, const FLinearColor& Team, float Dt);
+	/** Ombres portées des immeubles, du casino, du palais et des yachts (qualité Ultra et Maximale). */
+	void SetBigShadows(bool bOn);
 
 private:
 	void BuildTerrain();
@@ -92,4 +96,32 @@ private:
 	bool bSeaSide = false;
 	float SeaY = 0.f;
 	bool InSea(float Y) const { return bSeaSide && Y < SeaY + 4500.f; }
+
+	// Décor sur mesure (GPMCity.cpp, tracks/<id>_deco.json) : port et mer, coteau, rocher, immeubles le long des rues,
+	// yachts, monuments, tribunes, piscine, palmiers, lampadaires et tunnel couvert éclairé
+	void LoadDeco();
+	void BuildDeco();
+	void BuildTunnel();
+	TArray<TSharedPtr<FJsonValue>> DecoArr(const TCHAR* Key) const;
+	/** Relief ajouté (cm) : coteau qui monte vers l'intérieur des terres, plateaux (rocher). */
+	float DecoLift(float X, float Y) const;
+	/** Dans l'eau (port ou mer) ? (cm) */
+	bool InWater(float X, float Y) const;
+	bool bDeco = false;
+	FString DecoFile;
+	TArray<FVector2D> WaterPoly;     // cm
+	FBox2D WaterBox = FBox2D(ForceInit);
+	float WaterZ = 0.f;              // cm
+	FVector2D HillP0 = FVector2D::ZeroVector, HillN = FVector2D::ZeroVector;
+	float HillStart = 0.f, HillGrad = 0.f, HillMax = 0.f;   // m, m/m, m
+	TArray<FVector4f> Plateaus;      // centre x, y, demi-axes (cm)
+	TArray<float> PlateauH;          // hauteur (cm)
+	TArray<FVector4f> DecoTrees;     // x, y (cm), espèce (0 palmier, 1 feuillu, 2 pin), taille
+	UPROPERTY() TObjectPtr<UProceduralMeshComponent> DecoMesh;
+	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> TunnelLights;
+	TArray<FVector> TunnelV, TunnelN;   // coque du tunnel (BuildTunnel), fusionnée avec la pierre des quais
+	TArray<FLinearColor> TunnelC;
+	TArray<int32> TunnelI;
+	TArray<FString> DecoMeshNames;   // modèle de chaque maillage fusionné (DecorMeshes)
+	bool bBigShadows = false;
 };

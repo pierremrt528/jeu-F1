@@ -234,11 +234,13 @@ void AGPMScenery::Build(const FGPMTrackData* InTrack)
 	}
 	BaseZ -= 60.f;
 	LoadDecor();
+	LoadDeco();
 	BuildTerrain();
 	BuildTrees();
-	BuildCity();
+	if (!bDeco) BuildCity();   // décor sur mesure : immeubles placés rue par rue (BuildDeco)
 	BuildStands();
 	PlaceDecor();
+	BuildDeco();
 	BuildDecorMeshes();
 	TintInstances();
 	UE_LOG(LogGPM, Log, TEXT("Décor : terrain %d × %d, %d calques instanciés"), GX, GY, Instances.Num());
@@ -294,7 +296,8 @@ void AGPMScenery::BuildTerrain()
 	const FBox B(Track->Points);
 	const float Margin = 80000.f;   // 800 m
 	const FVector2D Size(B.GetSize().X + 2 * Margin, B.GetSize().Y + 2 * Margin);
-	Cell = FMath::Max(2000.f, FMath::Sqrt(Size.X * Size.Y / 60000.f));
+	// décor sur mesure : maille de 10 m (quais, coteau) au lieu de 20 m
+	Cell = FMath::Max(bDeco ? 1000.f : 2000.f, FMath::Sqrt(Size.X * Size.Y / (bDeco ? 240000.f : 60000.f)));
 	GX = FMath::CeilToInt(Size.X / Cell) + 1; GY = FMath::CeilToInt(Size.Y / Cell) + 1;
 	Origin = FVector2D(B.Min.X - Margin, B.Min.Y - Margin);
 	Heights.SetNum(GX * GY);
@@ -319,12 +322,18 @@ void AGPMScenery::BuildTerrain()
 						}
 			float Hh = SW > 0 ? float(SA / SW) - 60.f : BaseZ;
 			Hh = FMath::Lerp(Hh, BaseZ, FMath::Clamp((DMin - 6000.f) / 30000.f, 0.f, 1.f));
+			if (bDeco)
+			{
+				// coteau et rocher (pas sous la piste), fond du port et de la mer sous l'eau
+				Hh += DecoLift(X, Y) * FMath::Clamp((DMin - 3500.f) / 9000.f, 0.f, 1.f);
+				if (InWater(X, Y)) Hh = FMath::Min(Hh, WaterZ - 450.f);
+			}
 			Heights[j * GX + i] = FMath::Min(Hh, Cap);
 		}
 
 	const FGPMTheme& Th = Track->Theme;
 	// mer au sud du circuit (seaZ = minZ − 140 m du jeu web) : plage plate au bord, puis le sol plonge sous l'eau
-	bSeaSide = Th.bSea;
+	bSeaSide = Th.bSea && !bDeco;   // décor sur mesure : port et mer dessinés par BuildDeco
 	SeaY = float(B.Min.Y) - 14000.f;
 	if (bSeaSide)
 		for (int32 j = 0; j < GY; ++j)
@@ -339,7 +348,9 @@ void AGPMScenery::BuildTerrain()
 			}
 		}
 	// sol photo (herbe ou sable, comme les bas-côtés) : les sommets ne gardent que les nuances
-	UMaterialInstanceDynamic* TerrainArt = GPMArt::Surface(Th.Surface == TEXT("sand") ? FString(TEXT("sand")) : FString(TEXT("grass")), 30.f, this);
+	// ville sur mesure : sol pavé (places, rues) ; au-delà de la grille, collines vertes (anneau)
+	UMaterialInstanceDynamic* TerrainArt = GPMArt::Surface(bDeco ? FString(TEXT("concrete")) : Th.Surface == TEXT("sand") ? FString(TEXT("sand")) : FString(TEXT("grass")), bDeco ? 8.f : 30.f, this);
+	UMaterialInstanceDynamic* RingArt = bDeco ? GPMArt::Surface(TEXT("grass"), 30.f, this) : TerrainArt;
 	const FLinearColor Base = TerrainArt ? FLinearColor(0.85f, 0.85f, 0.85f) : Th.Surface == TEXT("sand") ? FLinearColor(0.42f, 0.32f, 0.17f)
 		: Th.Surface == TEXT("concrete") ? FLinearColor(0.16f, 0.2f, 0.1f) : FLinearColor(0.14f, 0.3f, 0.08f);
 	Terrain->ClearAllMeshSections();
@@ -382,7 +393,14 @@ void AGPMScenery::BuildTerrain()
 			const FVector2D D(FMath::Cos(A), FMath::Sin(A));
 			const float Reach = FMath::Min(Ext.X / FMath::Max(1e-4f, FMath::Abs(float(D.X))), Ext.Y / FMath::Max(1e-4f, FMath::Abs(float(D.Y))));
 			const FVector2D InP = Mid2 + D * Reach, OutP = Mid2 + D * ROut;
-			SV.Add(FVector(InP.X, InP.Y, BaseZ - 30.f)); SV.Add(FVector(OutP.X, OutP.Y, BaseZ - 30.f));
+			if (bDeco)
+			{
+				// décor sur mesure : l'anneau prolonge le bord de la grille, monte avec le coteau, plonge sous la mer
+				const FVector2D InQ = InP - D * 200.f;
+				SV.Add(FVector(InP.X, InP.Y, InWater(InQ.X, InQ.Y) ? WaterZ - 450.f : GroundZ(InQ.X, InQ.Y) - 30.f));
+				SV.Add(FVector(OutP.X, OutP.Y, InWater(OutP.X, OutP.Y) ? WaterZ - 900.f : BaseZ + DecoLift(OutP.X, OutP.Y)));
+			}
+			else { SV.Add(FVector(InP.X, InP.Y, BaseZ - 30.f)); SV.Add(FVector(OutP.X, OutP.Y, BaseZ - 30.f)); }
 			SN.Add(FVector::UpVector); SN.Add(FVector::UpVector);
 			SC.Add(Base * 0.92f); SC.Add(Base * 0.92f);
 		}
@@ -394,7 +412,7 @@ void AGPMScenery::BuildTerrain()
 		for (int32 k = 0; k + 2 < SI.Num(); k += 3)
 			if (FVector::CrossProduct(SV[SI[k + 1]] - SV[SI[k]], SV[SI[k + 2]] - SV[SI[k]]).Z > 0.f) Swap(SI[k + 1], SI[k + 2]);
 		Terrain->CreateMeshSection_LinearColor(1, SV, SI, SN, TArray<FVector2D>(), SC, TArray<FProcMeshTangent>(), false);
-		Terrain->SetMaterial(1, TerrainArt ? static_cast<UMaterialInterface*>(TerrainArt) : VertexMat.Get());
+		Terrain->SetMaterial(1, RingArt ? static_cast<UMaterialInterface*>(RingArt) : VertexMat.Get());
 	}
 
 	// mer d'un seul côté (au sud, comme le jeu web) jusqu'au bout du sol, avec une plage de sable de 50 m
@@ -464,8 +482,64 @@ void AGPMScenery::BuildTrees()
 			return FLinearColor(FMath::Frac(Th.TreeHue + Rnd.FRandRange(-1.f, 1.f) * FMath::Max(0.02f, Th.TreeHueSpan)) * 360.f, Rnd.FRandRange(0.6f, 0.85f), Rnd.FRandRange(0.15f, 0.28f)).HSVToLinearRGB();
 		return FLinearColor(Rnd.FRandRange(78.f, 115.f), Rnd.FRandRange(0.55f, 0.8f), Rnd.FRandRange(0.11f, 0.22f)).HSVToLinearRGB();
 	};
+	// plante un arbre (pied At au sol, cm) : c feuillu, p sapin, sinon palmier
+	auto Plant = [&](const FVector& At, const FString& Kd, float Sz, float Ya)
+	{
+		GPMTreeGeo::FBuf& Buf = Chunks.FindOrAdd(CellKey(FMath::FloorToInt(At.X / 60000.f), FMath::FloorToInt(At.Y / 60000.f)));
+		if (Kd == TEXT("c"))
+		{
+			// feuillu : tronc court, grosse couronne bosselée (parfois une seconde boule décalée)
+			const FVector Pts[2] = { At, At + FVector(0, 0, 360.f * Sz) };
+			const float Rad[2] = { 40.f * Sz, 24.f * Sz };
+			GPMTreeGeo::Tube(Buf, Pts, Rad, 2, FLinearColor(0.085f, 0.055f, 0.03f));
+			const FLinearColor Col = Leaf();
+			GPMTreeGeo::Crown(Buf, At + FVector(0, 0, 650.f * Sz), FVector(420.f, 420.f, 440.f) * Sz, Rnd.FRand() * 10.f, Col);
+			if (Rnd.FRand() < 0.5f)
+			{
+				const FVector Off = FVector(FMath::Cos(Ya), FMath::Sin(Ya), 0.f) * (260.f * Sz);
+				GPMTreeGeo::Crown(Buf, At + Off + FVector(0, 0, 820.f * Sz), FVector(270.f, 270.f, 280.f) * Sz, Rnd.FRand() * 10.f, Col * 1.12f);
+			}
+		}
+		else if (Kd == TEXT("p"))
+		{
+			// sapin : 4 étages de plus en plus étroits sur un tronc sombre (13 m × taille)
+			const FVector Pts[2] = { At, At + FVector(0, 0, 220.f * Sz) };
+			const float Rad[2] = { 32.f * Sz, 22.f * Sz };
+			GPMTreeGeo::Tube(Buf, Pts, Rad, 2, FLinearColor(0.06f, 0.035f, 0.02f));
+			const FLinearColor Col = FLinearColor(Rnd.FRandRange(100.f, 140.f), Rnd.FRandRange(0.5f, 0.72f), Rnd.FRandRange(0.06f, 0.12f)).HSVToLinearRGB();
+			const float H = 1300.f * Sz;
+			for (int32 Lv = 0; Lv < 4; ++Lv)
+				GPMTreeGeo::Tier(Buf, At + FVector(0, 0, 150.f * Sz + H * 0.22f * Lv), 300.f * Sz * (1.f - 0.2f * Lv), H * 0.36f, Ya + Lv * 0.7f, Col * (1.f + 0.08f * Lv));
+		}
+		else
+		{
+			// palmier : tronc qui penche en s'incurvant, 8 palmes arquées et un cœur sombre
+			const FVector Lean = FVector(FMath::Cos(Ya), FMath::Sin(Ya), 0.f) * (Rnd.FRandRange(0.4f, 1.6f) * 100.f * Sz);
+			const float Ht = 1050.f * Sz;
+			FVector Pts[4]; float Rad[4];
+			for (int32 j = 0; j < 4; ++j)
+			{
+				const float t = j / 3.f;
+				Pts[j] = At + Lean * (t * t) + FVector(0, 0, Ht * t);
+				Rad[j] = (24.f - 8.f * t) * Sz;
+			}
+			GPMTreeGeo::Tube(Buf, Pts, Rad, 4, FLinearColor(0.2f, 0.15f, 0.1f));
+			const FLinearColor Col = FLinearColor(Rnd.FRandRange(72.f, 98.f), Rnd.FRandRange(0.6f, 0.8f), Rnd.FRandRange(0.12f, 0.22f)).HSVToLinearRGB();
+			const FVector Top = Pts[3] + FVector(0, 0, 30.f * Sz);
+			for (int32 f = 0; f < 8; ++f)
+				GPMTreeGeo::Frond(Buf, Top, Ya + f / 8.f * 2.f * PI + (f % 2) * 0.2f, 420.f * Sz, 260.f * Sz, f % 2 ? 0.35f : 0.15f, Col);
+			GPMTreeGeo::Crown(Buf, Top, FVector(45.f, 45.f, 55.f) * Sz, 1.f, FLinearColor(0.09f, 0.08f, 0.04f));
+		}
+	};
 	int32 Placed = 0;
-	for (int32 Try = 0; Try < Want * 3 && Placed < Want; ++Try)
+	// décor sur mesure : arbres posés un par un (jardins, quais, coteau, rocher)
+	for (const FVector4f& Tr : DecoTrees)
+	{
+		const TCHAR* Kn = Tr.Z < 0.5f ? TEXT("l") : Tr.Z < 1.5f ? TEXT("c") : TEXT("p");
+		Plant(FVector(Tr.X, Tr.Y, GroundZ(Tr.X, Tr.Y) - 20.f), Kn, Tr.W, Noise(Tr.X * 0.013f, Tr.Y * 0.017f) * 2.f * PI);
+		++Placed;
+	}
+	for (int32 Try = 0; DecoTrees.Num() == 0 && Try < Want * 3 && Placed < Want; ++Try)
 	{
 		// bosquet de 1 à 7 arbres de la même espèce (ou presque), avec des clairières entre les bosquets
 		const int32 i = Rnd.RandRange(0, N - 1);
@@ -499,52 +573,7 @@ void AGPMScenery::BuildTrees()
 			const float Yaw = Rnd.FRand() * 2.f * PI;
 			FString K = Kind;
 			if (Rnd.FRand() < 0.2f && K != TEXT("l")) K = K == TEXT("c") ? TEXT("p") : TEXT("c");
-			GPMTreeGeo::FBuf& Buf = Chunks.FindOrAdd(CellKey(FMath::FloorToInt(P.X / 60000.f), FMath::FloorToInt(P.Y / 60000.f)));
-			const FVector G(P.X, P.Y, Z - 20.f);
-			if (K == TEXT("c"))
-			{
-				// feuillu : tronc court, grosse couronne bosselée (parfois une seconde boule décalée)
-				const FVector Pts[2] = { G, G + FVector(0, 0, 360.f * Sc) };
-				const float Rad[2] = { 40.f * Sc, 24.f * Sc };
-				GPMTreeGeo::Tube(Buf, Pts, Rad, 2, FLinearColor(0.085f, 0.055f, 0.03f));
-				const FLinearColor Col = Leaf();
-				GPMTreeGeo::Crown(Buf, G + FVector(0, 0, 650.f * Sc), FVector(420.f, 420.f, 440.f) * Sc, Rnd.FRand() * 10.f, Col);
-				if (Rnd.FRand() < 0.5f)
-				{
-					const FVector Off = FVector(FMath::Cos(Yaw), FMath::Sin(Yaw), 0.f) * (260.f * Sc);
-					GPMTreeGeo::Crown(Buf, G + Off + FVector(0, 0, 820.f * Sc), FVector(270.f, 270.f, 280.f) * Sc, Rnd.FRand() * 10.f, Col * 1.12f);
-				}
-			}
-			else if (K == TEXT("p"))
-			{
-				// sapin : 4 étages de plus en plus étroits sur un tronc sombre (13 m × taille)
-				const FVector Pts[2] = { G, G + FVector(0, 0, 220.f * Sc) };
-				const float Rad[2] = { 32.f * Sc, 22.f * Sc };
-				GPMTreeGeo::Tube(Buf, Pts, Rad, 2, FLinearColor(0.06f, 0.035f, 0.02f));
-				const FLinearColor Col = FLinearColor(Rnd.FRandRange(100.f, 140.f), Rnd.FRandRange(0.5f, 0.72f), Rnd.FRandRange(0.06f, 0.12f)).HSVToLinearRGB();
-				const float H = 1300.f * Sc;
-				for (int32 Lv = 0; Lv < 4; ++Lv)
-					GPMTreeGeo::Tier(Buf, G + FVector(0, 0, 150.f * Sc + H * 0.22f * Lv), 300.f * Sc * (1.f - 0.2f * Lv), H * 0.36f, Yaw + Lv * 0.7f, Col * (1.f + 0.08f * Lv));
-			}
-			else
-			{
-				// palmier : tronc qui penche en s'incurvant, 8 palmes arquées et un cœur sombre
-				const FVector Lean = FVector(FMath::Cos(Yaw), FMath::Sin(Yaw), 0.f) * (Rnd.FRandRange(0.4f, 1.6f) * 100.f * Sc);
-				const float Ht = 1050.f * Sc;
-				FVector Pts[4]; float Rad[4];
-				for (int32 j = 0; j < 4; ++j)
-				{
-					const float t = j / 3.f;
-					Pts[j] = G + Lean * (t * t) + FVector(0, 0, Ht * t);
-					Rad[j] = (24.f - 8.f * t) * Sc;
-				}
-				GPMTreeGeo::Tube(Buf, Pts, Rad, 4, FLinearColor(0.2f, 0.15f, 0.1f));
-				const FLinearColor Col = FLinearColor(Rnd.FRandRange(72.f, 98.f), Rnd.FRandRange(0.6f, 0.8f), Rnd.FRandRange(0.12f, 0.22f)).HSVToLinearRGB();
-				const FVector Top = Pts[3] + FVector(0, 0, 30.f * Sc);
-				for (int32 f = 0; f < 8; ++f)
-					GPMTreeGeo::Frond(Buf, Top, Yaw + f / 8.f * 2.f * PI + (f % 2) * 0.2f, 420.f * Sc, 260.f * Sc, f % 2 ? 0.35f : 0.15f, Col);
-				GPMTreeGeo::Crown(Buf, Top, FVector(45.f, 45.f, 55.f) * Sc, 1.f, FLinearColor(0.09f, 0.08f, 0.04f));
-			}
+			Plant(FVector(P.X, P.Y, Z - 20.f), K, Sc, Yaw);
 			++Placed;
 		}
 	}

@@ -131,6 +131,13 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 	const FLinearColor GroundC = bArt ? FLinearColor::White : Ground;
 	float MinZ = TNumericLimits<float>::Max();
 	float Dist = 0.f;
+	// sous le tunnel : asphalte et trottoirs assombris (le ciel n'éclaire plus), fondu sur 12 m à chaque bout
+	auto TunShade = [&](int32 j)
+	{
+		if (Track->TunK0 < 0) return 1.f;
+		const int32 D = FMath::Min(j - Track->TunK0, Track->TunK1 - j);
+		return D < -1 ? 1.f : FMath::Lerp(1.f, 0.3f, FMath::Clamp((D + 2) / 7.f, 0.f, 1.f));
+	};
 
 	for (int32 i = 0; i <= N; ++i)
 	{
@@ -150,7 +157,8 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 			const float Cv = Track->Curvature.IsValidIndex(j) ? FMath::Abs(Track->Curvature[j]) : 0.f;
 			const float Rub = 0.8f - 0.12f * FMath::Clamp(Cv * 40.f, 0.f, 1.f);
 			const float Off[7] = { -Half, -Half + 70.f, Rc - Bw, Rc, Rc + Bw, Half - 70.f, Half };
-			const float Shade[7] = { 1.07f, 1.f, 1.f, Rub, 1.f, 1.f, 1.07f };
+			const float Ts = TunShade(j);
+			const float Shade[7] = { 1.07f * Ts, Ts, Ts, Rub * Ts, Ts, Ts, 1.07f * Ts };
 			for (int32 k = 0; k < 7; ++k)
 				Road.Add(P + R * Off[k], Up, FVector2D(k / 6.f, U), FLinearColor(RoadC.R * Shade[k], RoadC.G * Shade[k], RoadC.B * Shade[k], 1.f));
 			if (i > 0) { const int32 b = Road.V.Num() - 14; for (int32 k = 0; k < 6; ++k) Road.Quad(b + k, b + k + 1, b + 7 + k, b + 8 + k); }
@@ -161,10 +169,11 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 		const FVector Low = -Up * 3.f;
 		const FLinearColor GrassC = bArt ? ((i / 5) % 2 ? FLinearColor(0.8f, 0.8f, 0.8f) : FLinearColor::White)
 			: ((i / 5) % 2 ? Grass : Grass * 1.18f);
-		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), GrassC);
-		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), GrassC);
-		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), GrassC);
-		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), GrassC);
+		const FLinearColor VergeC = GrassC * TunShade(j);
+		Green.Add(P - R * DL + Low, Up, FVector2D(0, U), VergeC);
+		Green.Add(P - R * Half + Low, Up, FVector2D(1, U), VergeC);
+		Green.Add(P + R * Half + Low, Up, FVector2D(0, U), VergeC);
+		Green.Add(P + R * DR + Low, Up, FVector2D(1, U), VergeC);
 		if (i > 0) { const int32 b = Green.V.Num() - 8; Green.Quad(b, b + 1, b + 4, b + 5); Green.Quad(b + 2, b + 3, b + 6, b + 7); }
 		for (int32 Sd = 0; Sd < 2; ++Sd)
 		{
@@ -210,11 +219,25 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 				S.Add(Oj + Up * Z1, Nf, FVector2D(U1, Z1 / 100.f), Col);
 				S.Quad(a, a + 1, a + 2, a + 3);
 			};
-			Band(Walls, 0.f, 16.f, GPMTrackLook::Dirty, 0.f, 0.f, 1.f);
-			Band(Walls, 16.f, 38.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
-			Band(Walls, 38.f, 66.f, bLogo ? GPMTrackLook::AdInk[Brand] : GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
-			Band(Walls, 66.f, 88.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
-			Band(Walls, 88.f, WallH, GPMTrackLook::Cap, 0.f, 0.f, 1.f);
+			if (Track->bStreet && (i / 12 + Sd) % 3 != 0)
+			{
+				// rail de sécurité galvanisé à deux lisses sur une bordure de trottoir (une bâche publicitaire une fois sur trois)
+				const float Ts = Track->InTunnel(i, 3) ? 0.45f : 1.f;
+				const FLinearColor Rail = FLinearColor(0.5f, 0.52f, 0.54f) * Ts, RailDk = FLinearColor(0.2f, 0.21f, 0.22f) * Ts;
+				Band(Walls, 0.f, 20.f, GPMTrackLook::Dirty * Ts, 0.f, 0.f, 1.f);
+				Band(Walls, 20.f, 34.f, RailDk, 0.f, 0.f, 1.f);
+				Band(Walls, 34.f, 62.f, Rail, 14.f, 0.f, 1.f);
+				Band(Walls, 62.f, 72.f, RailDk, 5.f, 0.f, 1.f);
+				Band(Walls, 72.f, WallH, Rail, 14.f, 0.f, 1.f);
+			}
+			else
+			{
+				Band(Walls, 0.f, 16.f, GPMTrackLook::Dirty, 0.f, 0.f, 1.f);
+				Band(Walls, 16.f, 38.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+				Band(Walls, 38.f, 66.f, bLogo ? GPMTrackLook::AdInk[Brand] : GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+				Band(Walls, 66.f, 88.f, GPMTrackLook::AdBg[Brand], 0.f, 0.f, 1.f);
+				Band(Walls, 88.f, WallH, GPMTrackLook::Cap, 0.f, 0.f, 1.f);
+			}
 			// chaperon : dessus de la barrière (30 cm de large)
 			{
 				const FVector Ti = Wi + Up * WallH, Tj = Wj + Up * WallH;
@@ -224,7 +247,7 @@ bool AGPMTrack::BuildCircuit(const FString& Id)
 				Walls.Add(Tj - Nf * 30.f, Up, FVector2D(1, 1), GPMTrackLook::Cap);
 				Walls.Quad(a, a + 1, a + 2, a + 3);
 			}
-			if (!FenceM) continue;
+			if (!FenceM || Track->InTunnel(i, 2)) continue;
 			// grillage (mailles calculées par le matériau, UV en mètres) et sa lisse du haut
 			Band(Fence, WallH, FenceH, FLinearColor::White, -10.f, i * 2.f, (i + 1) * 2.f);
 			Band(Walls, FenceH - 6.f, FenceH, GPMTrackLook::Post, -8.f, 0.f, 1.f);

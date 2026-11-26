@@ -1196,16 +1196,17 @@ TSharedRef<SWidget> FGPMUI::SettingsScreen(AGPMGameMode* GM)
 		};
 		{
 			TSharedRef<SHorizontalBox> GfxBtns = SNew(SHorizontalBox);
-			static const TCHAR* const GfxName[3] = { TEXT("Fluide"), TEXT("Normale"), TEXT("Ultra") };
-			static const TCHAR* const GfxHelp[3] = {
+			static const TCHAR* const GfxName[4] = { TEXT("Fluide"), TEXT("Normale"), TEXT("Ultra"), TEXT("Maximale") };
+			static const TCHAR* const GfxHelp[4] = {
 				TEXT("Ombres courtes, image simple : pour garder 60 images par seconde partout."),
 				TEXT("L'équilibre : ombres nettes près de la voiture, image fluide."),
-				TEXT("Image la plus réaliste : ombres longues et fines, ombres de contact, occlusion, bords nets, rayons du soleil. Demande une machine puissante.") };
-			const int32 GQ = GM ? FMath::Clamp(GM->GfxLevel, 0, 2) : 1;
-			for (int32 k = 0; k < 3; ++k)
+				TEXT("Image la plus réaliste : ombres longues et fines, ombres de contact, occlusion, bords nets, rayons du soleil. Demande une machine puissante."),
+				TEXT("Tout au maximum : image calculée plus fine que l'écran puis réduite, ombres des immeubles jusqu'à l'horizon, vue deux fois plus lointaine. Pour un Mac puissant.") };
+			const int32 GQ = GM ? FMath::Clamp(GM->GfxLevel, 0, 3) : 1;
+			for (int32 k = 0; k < 4; ++k)
 				GfxBtns->AddSlot().AutoWidth().Padding(FMargin(k ? 6.f : 0.f, 0.f, 0.f, 0.f))
 				[
-					Button(GfxName[k], GQ == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) { WGM->GfxLevel = k; WGM->SaveSettings(); } }, true, 100.f, 44.f, 14)
+					Button(GfxName[k], GQ == k ? Acc : CNeutral, [WGM, k]() { if (WGM.IsValid()) { WGM->GfxLevel = k; WGM->SaveSettings(); } }, true, 88.f, 44.f, 14)
 				];
 			List->AddSlot().AutoHeight().Padding(FMargin(0.f, 0.f, 0.f, 10.f))[ OptRow(TEXT("Graphismes"), GfxHelp[GQ], GfxBtns) ];
 		}

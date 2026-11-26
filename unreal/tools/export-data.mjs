@@ -59,7 +59,9 @@ try {
   for (const c of CIRCUITS) {
     const t = buildTrack(c);
     let pit; try { const p = pitLane(t); pit = clean({ ...p, X: r(p.X), Z: r(p.Z) }); } catch {}
-    const o = { id: c.id, name: c.name, N: t.N, DS: 2, length: t.L ?? t.N * 2, width: c.width,
+    // tunnel couvert : points [x, z] de data.js → indices des échantillons
+    const near = ([x, z]) => { let b = 0, bd = Infinity; for (let i = 0; i < t.N; i++) { const d = (t.X[i] - x) ** 2 + (t.Z[i] - z) ** 2; if (d < bd) { bd = d; b = i; } } return b; };
+    const o = { id: c.id, name: c.name, N: t.N, DS: 2, length: t.L ?? t.N * 2, width: c.width, street: c.street || undefined, tunnel: c.tunnel ? c.tunnel.map(near) : undefined,
       X: r(t.X), Y: r(t.Y), Z: r(t.Z), WL: r(t.WL), WR: r(t.WR), C: r(t.C, 5), V: r(t.V ?? t.vmax, 1),
       LX: r(t.LX), LZ: r(t.LZ), pit };
     writeFileSync(join(out, 'tracks', c.id + '.json'), JSON.stringify(clean(o)));

@@ -175,7 +175,7 @@ void AGPMGameMode::ApplyTheme(const FGPMTrackData* T)
 	if (!SkyDome) SkyDome = GetWorld()->SpawnActor<AGPMSky>();
 	if (SkyDome) SkyDome->Build(T);
 	if (!Scenery) Scenery = GetWorld()->SpawnActor<AGPMScenery>();
-	if (Scenery) Scenery->Build(T);
+	if (Scenery) { Scenery->Build(T); Scenery->SetBigShadows(FMath::Clamp(GfxLevel, 0, 3) >= 2); }
 }
 
 void AGPMGameMode::PlaceCar()
@@ -307,7 +307,7 @@ void AGPMGameMode::UpdatePerf(float Dt)
 		if (Fps < 50.f && bGpuBound) Want -= 10;
 		else if (Fps < 56.f && bGpuBound) Want -= 5;
 		else if (Fps > 58.f || (bGpuKnown && GpuMs < 11.f)) Want += 5;
-		Want = FMath::Clamp(Want, 75, 100);   // sous 75 %, l'image devient trop floue
+		Want = FMath::Clamp(Want, 75, GfxLevel >= 3 ? 140 : 100);   // sous 75 %, l'image devient trop floue ; Maximale : suréchantillonnage
 		if (Want != ScreenPct)
 		{
 			ScreenPct = Want;
@@ -339,7 +339,7 @@ void AGPMGameMode::LoadSettings()
 	GConfig->GetInt(TEXT("GPM"), TEXT("NegoLevel"), UGPMCareerSubsystem::NegoLevel, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("CareerLen"), UGPMCareerSubsystem::CareerLen, GGameUserSettingsIni);
 	GConfig->GetInt(TEXT("GPM"), TEXT("Gfx"), GfxLevel, GGameUserSettingsIni);
-	GfxLevel = FMath::Clamp(GfxLevel, 0, 2);
+	GfxLevel = FMath::Clamp(GfxLevel, 0, 3);
 	UGPMCareerSubsystem::NegoLevel = FMath::Clamp(UGPMCareerSubsystem::NegoLevel, 0, 2);
 	AGPMCar::LoadAIOptions();
 	AILevel = FMath::Clamp(AILevel, 0, 4);
