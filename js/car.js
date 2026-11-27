@@ -10,6 +10,13 @@ export const SPEC = {
   wb: 3.6, steerMax: 0.34, slip: 0.07,
 };
 
+// Angle de braquage des roues avant (rad) selon la vitesse : il diminue quand on va vite, mais la crémaillère donne plus
+// de braquage à l'arrêt et à basse vitesse (épingles, voie des stands) : rayon minimal ~ 10 m à 12 m/s au lieu de 17 m.
+export function steerAngle(v) {
+  v = Math.abs(v);
+  return SPEC.steerMax * (1 + 0.5 * Math.exp(-v / 10)) / (1 + v / 20);
+}
+
 export class Car {
   constructor(team, driver, perf) {
     this.team = team; this.name = driver.name; this.player = !!driver.player;
@@ -116,7 +123,7 @@ export function stepCar(car, track, dt) {
     car.spinT -= dt; beta += car.spinDir * 5.5 * dt; v *= Math.exp(-1.8 * dt);
     if (car.spinT <= 0) { course += beta; beta = 0; }
   } else {
-    const delta = SPEC.steerMax * u.steer * car.steer / (1 + Math.abs(v) / 20) * (lock ? 0.25 : 1);
+    const delta = steerAngle(v) * u.steer * car.steer * (lock ? 0.25 : 1);
     let yaw = v * Math.tan(delta) / SPEC.wb;
     // avant : sous-virage progressif (le nez élargit quand on dépasse l'adhérence)
     const want = Math.abs(v * yaw), rF = want / (capF * 1.06);

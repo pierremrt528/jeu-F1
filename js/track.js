@@ -1,7 +1,7 @@
 // Construction d'un circuit à partir de ses données : ligne centrale échantillonnée,
 // profil de vitesse pour l'IA, trajectoire. Les maillages 3D sont dans scenery.js.
 import * as THREE from '../lib/three.module.min.js';
-import { SPEC } from './car.js';
+import { SPEC, steerAngle } from './car.js';
 
 export const DS = 2;        // pas d'échantillonnage (m)
 
@@ -72,13 +72,47 @@ export function buildTrack(def) {
   const lim = w / 2 - 2.2;
   for (let i = 0; i < N; i++) RL[i] = Math.max(-lim, Math.min(lim, -Cwide[i] * 260));
 
-  // profil de vitesse (IA) : limite d'adhérence en virage puis freinage en arrière
+  // trajectoire suivie par l'IA (et par l'aide à la trajectoire) : la corde (RL), sauf sur un circuit urbain aux murs proches
+  // (def.street) dans les virages serrés (rayon < 45 m, les 50 m qui précèdent compris) où la voiture ne peut pas braquer assez
+  // pour couper à l'intérieur : elle reste au milieu. Ailleurs, la ligne est inchangée (une voiture qui déborde y a de la place).
+  const tight = !!def.street;
+  const LN = new Float32Array(N);
+  if (!tight) LN.set(RL);
+  else {
+    const w0 = new Float32Array(N), w1 = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      let c = 0; for (let k = -4; k <= 4; k++) c = Math.max(c, Math.abs(C[(i + k + N) % N]));
+      w0[i] = Math.max(0, Math.min(1, (c - 1 / 45) / (1 / 22 - 1 / 45)));   // rayon 45 m : 0, rayon 22 m ou moins : 1
+    }
+    for (let i = 0; i < N; i++) { let m = 0; for (let k = -6; k <= 25; k++) m = Math.max(m, w0[(i + k + N) % N]); w1[i] = m; }
+    const ws = smooth(w1, 6);
+    for (let i = 0; i < N; i++) LN[i] = RL[i] * (1 - ws[i]);
+  }
+
+  // profil de vitesse (IA) : limite d'adhérence en virage, puis limite de braquage, puis freinage en arrière
   const mu = SPEC.mu * 0.94, g = 9.81;
   const V = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     let c = 0; for (let k = -3; k <= 3; k++) c = Math.max(c, Math.abs(C[(i + k + N) % N]));
     const den = c - mu * SPEC.kd;
     V[i] = den > 0 ? Math.min(SPEC.vtop, Math.sqrt(mu * g / den)) : SPEC.vtop;
+  }
+  // limite de braquage (circuits urbains) : à courbure k, la vitesse pour laquelle steerAngle(v) suffit encore (courbure de la
+  // trajectoire suivie, décalée de LN par rapport à l'axe), avec 8 % de marge ; jamais moins de 4 m/s
+  const vKin = k => {
+    const need = Math.atan(SPEC.wb * k);
+    if (need >= steerAngle(0)) return 0;
+    let lo = 0, hi = 60;
+    for (let n = 0; n < 20; n++) { const m = (lo + hi) / 2; if (steerAngle(m) > need) lo = m; else hi = m; }
+    return lo;
+  };
+  if (tight) for (let i = 0; i < N; i++) {
+    let k = 0;
+    for (let d = -3; d <= 3; d++) {
+      const j = (i + d + N) % N;
+      k = Math.max(k, Math.abs(C[j]) / Math.max(0.3, 1 + C[j] * LN[j] * 0.85));
+    }
+    if (k > 1 / 120) V[i] = Math.min(V[i], Math.max(4, 0.92 * vKin(k)));
   }
   for (let pass = 0; pass < 2; pass++) {
     for (let i = N - 1; i >= 0; i--) {
@@ -88,7 +122,7 @@ export function buildTrack(def) {
     }
   }
   let minY = Infinity; for (let i = 0; i < N; i++) minY = Math.min(minY, Y[i]);
-  const t = { def, N, length: N * DS, width: w, runoff: def.runoff ?? 9, X, Y, Z, TX, TZ, H, C, RL, V, ground: minY - 0.6 };
+  const t = { def, N, length: N * DS, width: w, runoff: def.runoff ?? 9, X, Y, Z, TX, TZ, H, C, RL, LN, V, ground: minY - 0.6 };
   t.WL = new Float32Array(N).fill(w / 2 + t.runoff); t.WR = new Float32Array(N).fill(w / 2 + t.runoff);
   // murs à distance variable : points [x, z, alt, mur gauche, mur droit] (m depuis l'axe)
   const M = def.points.length;

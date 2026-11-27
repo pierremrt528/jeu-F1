@@ -75,7 +75,8 @@ struct FGPMTrackData
 
 	// Repère du jeu web (m), pour la physique portée de js/car.js : x, z au sol, y altitude ; tangente (TX, TZ), cap H = atan2(TX, TZ)
 	TArray<float> WX, WY, WZ, TX, TZ, H;
-	TArray<float> RL;
+	TArray<float> RL;     // trajectoire idéale (corde), décalage latéral en m
+	TArray<float> Line;   // trajectoire suivie par l'IA : la corde, sauf dans les virages serrés (js/track.js, LN)
 	FGPMTheme Theme;
 	FString Type;   // « Campagne vallonnée »…
 	// Voie des stands (pitLane de track.js) : indices signés par rapport à la ligne (entrée e0→e1, sortie x0→x1), côté droit

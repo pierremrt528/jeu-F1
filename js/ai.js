@@ -1,10 +1,10 @@
 // Pilotes IA : suivent la trajectoire (poursuite pure), respectent le profil de vitesse,
 // et se décalent pour dépasser quand une voiture plus lente est devant.
-import { SPEC } from './car.js';
+import { SPEC, steerAngle } from './car.js';
 import { DS } from './track.js';
 
 export function aiDrive(car, track, cars, dt) {
-  const { N, X, Z, TZ, TX, V, RL, width } = track;
+  const { N, X, Z, TZ, TX, V, LN, width } = track;
   const v = Math.max(car.v, 1);
 
   // voiture devant sur la même portion de piste ?
@@ -16,7 +16,7 @@ export function aiDrive(car, track, cars, dt) {
   }
   car.passTimer -= dt;
   const lim = width / 2 - 1.4;
-  let laneTarget = RL[car.idx] * 0.85 + car.laneBias;
+  let laneTarget = LN[car.idx] * 0.85 + car.laneBias;
   let vCap = Infinity;
   if (car.scMode) {
     // voiture de sécurité : file indienne, pas de dépassement
@@ -69,14 +69,14 @@ export function pursuit(car, track, lane) {
   const lx = dx * -fz + dz * fx, lz = dx * fx + dz * fz;  // repère voiture : x vers la droite
   const alpha = Math.atan2(lx, lz);
   const kWant = 2 * Math.sin(alpha) / Math.hypot(dx, dz);
-  const kMax = Math.tan(SPEC.steerMax / (1 + v / 20)) / SPEC.wb;
+  const kMax = Math.tan(steerAngle(v)) / SPEC.wb;
   return Math.max(-1, Math.min(1, kWant / kMax));
 }
 
 // Aide à la trajectoire du joueur : 1 = freine avant les virages trop rapides,
 // 2 = en plus, garde la voiture sur sa ligne quand on ne braque pas (la ligne suit le joueur quand il braque)
 export function driveAssist(car, track, dt) {
-  const { N, V, RL, width } = track;
+  const { N, V, LN, width } = track;
   if (car.pit || car.spinT > 0) return;
   let vt = V[car.idx];
   for (let k = 1; k <= 6; k++) vt = Math.min(vt, V[(car.idx + k) % N]);
@@ -86,7 +86,7 @@ export function driveAssist(car, track, dt) {
   const lim = width / 2 - 1.2;
   if (car.aLane == null) car.aLane = car.lat;
   if (Math.abs(car.steer) > 0.15) car.aLane = car.lat;
-  else car.aLane += (RL[car.idx] * 0.85 - car.aLane) * Math.min(1, dt * 0.6);
+  else car.aLane += (LN[car.idx] * 0.85 - car.aLane) * Math.min(1, dt * 0.6);
   car.aLane = Math.max(-lim, Math.min(lim, car.aLane));
   const pp = pursuit(car, track, car.aLane);
   car.steer = Math.abs(car.steer) > 0.15 ? car.steer * 0.8 + pp * 0.2 : pp;

@@ -223,6 +223,9 @@ public:
 
 	// Constantes (SPEC du jeu web) : vtop ≈ 335 km/h
 	static constexpr float VTop = 93.f, Acc = 12.5f, Brake0 = 17.f, BrakeK = 0.0032f, Mu = 1.65f, Kd = 0.0034f, WB = 3.6f, SteerMax = 0.34f;
+	/** Angle de braquage des roues avant (rad) à la vitesse V (m/s) : diminue quand on va vite, mais la crémaillère braque plus
+	 *  à l'arrêt et à basse vitesse (épingles, voie des stands) : rayon minimal ≈ 10 m à 20 km/h au lieu de 13 m (js/car.js, steerAngle). */
+	static float SteerAngle(float Spd) { Spd = FMath::Abs(Spd); return SteerMax * (1.f + 0.5f * FMath::Exp(-Spd / 10.f)) / (1.f + Spd / 20.f); }
 
 protected:
 	virtual void BeginPlay() override;

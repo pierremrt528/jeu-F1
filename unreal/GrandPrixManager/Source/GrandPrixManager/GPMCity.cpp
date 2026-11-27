@@ -336,7 +336,7 @@ void AGPMScenery::BuildDeco()
 		UHierarchicalInstancedStaticMeshComponent* FanA = AddLayer(TEXT("Cube"), FLinearColor(0.75f, 0.08f, 0.06f), FLinearColor(0.95f, 0.95f, 0.95f), 0.8f);
 		UHierarchicalInstancedStaticMeshComponent* FanB = AddLayer(TEXT("Cube"), FLinearColor(0.1f, 0.2f, 0.6f), FLinearColor(0.9f, 0.75f, 0.15f), 0.8f);
 		FanA->SetCullDistances(0, 60000); FanB->SetCullDistances(0, 60000);
-		int32 Sn = 0;
+		int32 Sn = 0, StandsSkipped = 0;
 		for (const TSharedPtr<FJsonValue>& Sv : DecoArr(TEXT("stands")))
 		{
 			const FVector C(Nv(Sv, 0) * 100.f, Nv(Sv, 1) * 100.f, 0.f);
@@ -346,6 +346,21 @@ void AGPMScenery::BuildDeco()
 			if (Ni < 0) continue;
 			const FVector Along(FMath::Sin(Nv(Sv, 2)), FMath::Cos(Nv(Sv, 2)), 0.f);
 			FVector Away = C - Track->Points[Ni]; Away.Z = 0.f; Away = Away.GetSafeNormal();
+			// garde-fou : toute l'emprise (rangs de -6 m à +8 m du centre, sur toute la longueur) reste à plus de 0,5 m des murs,
+			// même dans un virage ou une épingle (une tribune ne doit jamais mordre sur la piste)
+			bool bStandClose = false;
+			for (int32 Qa = -5; Qa <= 5 && !bStandClose; ++Qa)
+				for (int32 Qb = 0; Qb < 3 && !bStandClose; ++Qb)
+				{
+					const FVector Qp = C + Along * (Qa * Len * 10.f) + Away * ((Qb == 0 ? -6.f : Qb == 1 ? 0.f : 8.f) * 100.f);
+					int32 Qi = -1;
+					const float Qd = NearTrack(Qp.X, Qp.Y, nullptr, &Qi);
+					if (Qi < 0) continue;
+					const float Qwl = Track->WallLeft.IsValidIndex(Qi) ? Track->WallLeft[Qi] : Track->Width * 0.5f;
+					const float Qwr = Track->WallRight.IsValidIndex(Qi) ? Track->WallRight[Qi] : Track->Width * 0.5f;
+					if (Qd < FMath::Min(Qwl, Qwr) + 0.5f) bStandClose = true;
+				}
+			if (bStandClose) { ++StandsSkipped; continue; }
 			const FRotator Rot(0.f, FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X)), 0.f);
 			const float Z0 = Alt - 30.f;
 			for (int32 Tread = 0; Tread < 3; ++Tread)
@@ -372,6 +387,7 @@ void AGPMScenery::BuildDeco()
 			}
 			++Sn;
 		}
+		UE_LOG(LogGPM, Log, TEXT("Décor : %d tribunes (%d écartées : trop près de la piste)"), Sn, StandsSkipped);
 	}
 
 	// --- piscine (bassin turquoise, lignes d'eau, plage en dalles), jardin du casino avec fontaine
@@ -418,7 +434,15 @@ void AGPMScenery::BuildDeco()
 		FDecorItem It;
 		It.X = Nv(Lv, 0); It.Z = Nv(Lv, 1); It.Ry = Nv(Lv, 2);
 		float Alt = BaseZ;
-		const float Dm = NearTrack(It.X * 100.f, It.Z * 100.f, &Alt);
+		int32 Lmi = -1;
+		const float Dm = NearTrack(It.X * 100.f, It.Z * 100.f, &Alt, &Lmi);
+		// garde-fou : jamais de lampadaire sur l'asphalte ni entre l'axe et les murs (épingle : l'autre branche passe tout près)
+		if (Lmi >= 0)
+		{
+			const float Lwl = Track->WallLeft.IsValidIndex(Lmi) ? Track->WallLeft[Lmi] : Track->Width * 0.5f;
+			const float Lwr = Track->WallRight.IsValidIndex(Lmi) ? Track->WallRight[Lmi] : Track->Width * 0.5f;
+			if (Dm < FMath::Min(Lwl, Lwr) + 0.3f) continue;
+		}
 		It.Y = (Dm < 15.f ? Alt : GroundZ(It.X * 100.f, It.Z * 100.f)) / 100.f - 0.05f;
 		DecorItems.FindOrAdd(TEXT("lampadaire")).Add(It);
 	}

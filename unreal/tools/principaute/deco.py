@@ -12,10 +12,37 @@ def left_off(chain, D):
         tx,tz=b[0]-a[0],b[1]-a[1]; l=math.hypot(tx,tz) or 1; tx/=l; tz/=l
         d=D(k); out.append((x+tz*d, z-tx*d))
     return out
-def D_of(k):
+def D_base(k):
     if k<MK['Chicane']-5: return WL[k]+17
     if k<MK['Tabac']: return WL[k]+15
     return WL[k]+11
+# tribunes : emplacements choisis ici, avant l'eau, pour que le quai s'écarte derrière elles (elles ne pendent pas au-dessus du bassin)
+def stand_pts(x,z,yaw,s,length=38):
+    """emprise des tribunes d'Unreal : rangs de -6 m (côté piste) à +8 m (toit) autour du centre, sur toute la longueur"""
+    fx,fz=math.sin(yaw),math.cos(yaw); ax,az=-s*fz,s*fx     # ax,az : s'éloigne de la piste (latéral positif = à droite = (-fz, fx))
+    return [(x+fx*a+ax*b, z+fz*a+az*b) for a in range(-int(length/2)-2,int(length/2)+3,3) for b in (-6,-3,0,4,8)]
+PLAN=[]
+def plan_stand(k0,k1,side):
+    k=k0
+    while k+18<=k1:
+        i=(k+10)%N; s=-1 if side<0 else 1; yaw=math.atan2(TX[i],TZ[i])
+        for extra in (8,9.5):
+            x,z=lat(i,s*((WL[i] if s<0 else WR[i])+extra))
+            # chaque point de l'emprise reste à plus de 1,5 m des murs de TOUS les échantillons (virages, épingles)
+            if all(clear_of_track(px,pz,1.5) for px,pz in stand_pts(x,z,yaw,s)): PLAN.append((i,x,z,yaw,s)); break
+        k+=22
+plan_stand(MK['Quai']+6,MK['Tabac']-4,-1)
+# (pas de tribune dans le virage du Tabac : à l'intérieur d'un virage, elle mord sur la piste)
+plan_stand(MK['Piscine']+4,MK['Piscine 2']-6,-1)
+plan_stand(MK['Sainte-Dévote']-6,MK['Sainte-Dévote']+14,-1)
+plan_stand(MK['Rascasse']-6,MK['Rascasse']+12,-1)
+def D_of(k):
+    d=D_base(k); w=0.0
+    for (i,x,z,yaw,s) in PLAN:
+        if s<0:
+            t=abs(k-i); w=max(w,1.0 if t<=18 else max(0.0,1-(t-18)/14))
+    if w>0: d+=(max(d,WL[k]+19.5)-d)*(0.5-0.5*math.cos(math.pi*w))
+    return d
 cA=smooth_line(MK['Portier']+12, MK['Chicane']-5)
 cB=smooth_line(MK['Chicane']+8, MK['Tabac']+10)
 cC=smooth_line(MK['Tabac']+10, MK['Piscine 2']+24)
@@ -81,20 +108,10 @@ px,pz=EN(330,-430); LM.append(['palais',round(px,1),round(pz,1),round(math.atan2
 OUT['landmarks']=LM; OUT['gardens']=GARD
 # --- tribunes (le long du port) : réservent la place
 ST=[]
-def stand(k0,k1,side):
-    k=k0
-    while k+18<=k1:
-        i=wrap(k+10); s=-1 if side<0 else 1
-        x,z=lat(i,s*((WL[i] if s<0 else WR[i])+8))
-        yaw=math.atan2(TX[i],TZ[i])
-        if not inside(x,z):
-            ST.append([round(x,1),round(z,1),round(yaw,3),36]); occ.add(rect(x,z,yaw,14,38))
-        k+=22
-stand(k_of('Quai')+6,k_of('Tabac')-4,-1)
-stand(k_of('Tabac')+6,k_of('Tabac')+40,-1)
-stand(k_of('Piscine')+4,k_of('Piscine 2')-6,-1)
-stand(k_of('Sainte-Dévote')-6,k_of('Sainte-Dévote')+14,-1)
-stand(k_of('Rascasse')-6,k_of('Rascasse')+12,-1)
+for (i,x,z,yaw,sd) in PLAN:
+    if any(inside(px,pz) for px,pz in stand_pts(x,z,yaw,sd)): continue
+    if not occ.free(rect(x,z,yaw,14,38)): continue
+    ST.append([round(x,1),round(z,1),round(yaw,3),36]); occ.add(rect(x,z,yaw,14,38))
 OUT['stands']=ST
 # tribunes du départ (BuildStands, à gauche de K -60 à +12) : place prise
 for K in range(-62,16,6):
@@ -266,6 +283,7 @@ for k in range(0,N,16):
         if s>0 and (i>N-160 or i<60): continue
         wall=(WR[i] if s>0 else WL[i]); x,z=lat(i,s*(wall+1.4))
         if inside(x,z) or not occ.free(rect(x,z,0,1,1)): continue
+        if min(math.hypot(X[q]-x,Z[q]-z) for q in range(N))<6.5: continue   # pas sur l'asphalte (épingle : l'autre branche passe tout près)
         yaw=math.atan2(TZ[i],-TX[i]) if s>0 else math.atan2(-TZ[i],TX[i])
         LP.append([round(x,1),round(z,1),round(yaw,3)])
 OUT['lamps']=LP

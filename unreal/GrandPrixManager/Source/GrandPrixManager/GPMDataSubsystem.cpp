@@ -229,6 +229,9 @@ const FGPMTrackData* UGPMDataSubsystem::GetTrack(const FString& Id)
 			for (int32 k = -22; k <= 22; ++k) Sum += Raw[((i + k) % N + N) % N];
 			T.RL[i] = FMath::Clamp(-Sum / 45.f * 260.f, -Lim, Lim);
 		}
+		// trajectoire suivie : exportée par le jeu web (virages serrés : milieu de piste), sinon la corde
+		ReadFloats(O, TEXT("LN"), T.Line);
+		if (T.Line.Num() != N) T.Line = T.RL;
 	}
 
 	T.BuildRunoff();

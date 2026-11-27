@@ -36,7 +36,7 @@ float AGPMCar::Pursuit(float InLane) const
 	const float Lx = Dx * -Fz + Dz * Fx, Lz = Dx * Fx + Dz * Fz;   // repère voiture : x vers la droite
 	const float Alpha = FMath::Atan2(Lx, Lz);
 	const float KWant = 2.f * FMath::Sin(Alpha) / FMath::Max(0.1f, FMath::Sqrt(Dx * Dx + Dz * Dz));
-	const float KMax = FMath::Tan(SteerMax / (1.f + Vv / 20.f)) / WB;
+	const float KMax = FMath::Tan(SteerAngle(Vv)) / WB;
 	return FMath::Clamp(KWant / KMax, -1.f, 1.f);
 }
 
@@ -89,7 +89,7 @@ void AGPMCar::DriveAI(float Dt)
 	DefendCd = FMath::Max(0.f, DefendCd - Dt);
 	DefendT = FMath::Max(0.f, DefendT - Dt);
 	MistakeT = FMath::Max(0.f, MistakeT - Dt);
-	float LaneTarget = T.RL[Idx] * 0.85f + LaneBias;
+	float LaneTarget = (T.Line.Num() == N ? T.Line[Idx] : T.RL[Idx]) * 0.85f + LaneBias;   // Line : milieu de piste dans les virages serrés
 	float VCap = 1e9f, DecK = 1.f, VMul = 1.f;
 	bool bPassing = false;
 	if (bSCMode)

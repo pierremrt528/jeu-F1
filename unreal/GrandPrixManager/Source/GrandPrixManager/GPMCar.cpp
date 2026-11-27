@@ -468,7 +468,7 @@ void AGPMCar::Step(float Dt)
 	}
 	else
 	{
-		const float Delta = SteerMax * UpSteer * Steer / (1 + FMath::Abs(V) / 20.f) * (bLock ? 0.25f : 1.f);
+		const float Delta = SteerAngle(V) * UpSteer * Steer * (bLock ? 0.25f : 1.f);
 		float Yaw = V * FMath::Tan(Delta) / WB;
 		// avant en virage : le différentiel bloqué pousse tout droit à la remise des gaz, la répartition de freinage
 		// change le comportement à l'entrée du virage
@@ -561,6 +561,6 @@ void AGPMCar::UpdateTransform()
 	// assiette visible : plongée au freinage, roulis en virage
 	Body->SetRelativeRotation(FRotator(FMath::RadiansToDegrees(-Dive), 0.f, FMath::RadiansToDegrees(Roll)));
 	// roues avant braquées
-	const float SteerDeg = FMath::RadiansToDegrees(SteerMax * Steer / (1 + FMath::Abs(V) / 20.f));
+	const float SteerDeg = FMath::RadiansToDegrees(SteerAngle(V) * Steer);
 	for (int32 k = 0; k < 2 && k < Wheels.Num(); ++k) Wheels[k]->SetRelativeRotation(FRotator(0, SteerDeg, 90));
 }
